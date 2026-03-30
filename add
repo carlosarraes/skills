@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+TARGETS=("$HOME/.claude/skills" "$HOME/.agents/skills")
+
+is_linked() {
+  local name="$1"
+  local src="$REPO_DIR/$name"
+  for target_dir in "${TARGETS[@]}"; do
+    local link="$target_dir/$name"
+    [[ -L "$link" ]] && [[ "$(readlink "$link")" == "$src" ]] || return 1
+  done
+  return 0
+}
+
+link_skill() {
+  local name="$1"
+  local src="$REPO_DIR/$name"
+
+  if [[ ! -d "$src" ]] || [[ ! -f "$src/SKILL.md" ]]; then
+    echo "skip: '$name' is not a valid skill (missing SKILL.md)"
+    return 1
+  fi
+
+  if is_linked "$name"; then
+    echo "  already linked: $name"
+    return 0
+  fi
+
+  for target_dir in "${TARGETS[@]}"; do
+    mkdir -p "$target_dir"
+    ln -sfn "$src" "$target_dir/$name"
+    echo "  linked: $target_dir/$name -> $src"
+  done
+}
+
+if [[ $# -eq 0 ]] || [[ "$1" == "all" ]]; then
+  echo "Adding all skills..."
+  for dir in "$REPO_DIR"/*/; do
+    name="$(basename "$dir")"
+    [[ -f "$dir/SKILL.md" ]] || continue
+    link_skill "$name"
+  done
+else
+  for name in "$@"; do
+    echo "Adding skill: $name"
+    link_skill "$name" || exit 1
+  done
+fi
+
+echo "done."
