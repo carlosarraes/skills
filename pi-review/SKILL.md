@@ -1,6 +1,6 @@
 ---
 name: pi-review
-description: "Handle code review findings from Pi (another AI agent) received via tmux. Triggers when you see text with [P0]-[P3] priority tags and a verdict line, or text prefixed with '[pi-review findings]'. Also use when the user says 'handle pi findings', 'fix pi review', or 'respond to pi'. If you see prioritized code findings pasted into your prompt that look like they came from another agent's review, this skill applies."
+description: "Handle code review findings from Pi (another AI agent) received via tmux. For each valid finding, apply a minimal fix and make one focused commit explaining WHY, then reply to Pi via tmux. Triggers when you see text with [P0]-[P3] priority tags and a verdict line, or text prefixed with '[pi-review findings]'. Also use when the user says 'handle pi findings', 'fix pi review', 'fix and commit pi findings', 'address pi review', or 'respond to pi'. If you see prioritized code findings pasted into your prompt that look like they came from another agent's review, this skill applies."
 ---
 
 # Pi Review Findings Handler
@@ -21,13 +21,30 @@ If verdict is **"correct"** — nothing to fix. Tell the user Pi found no issues
 For each finding:
 1. Read the referenced file and line
 2. Decide if the issue is valid — think critically, don't blindly accept
-3. If valid: fix it. If you disagree: skip it and note why.
+3. If valid: apply a minimal fix. If you disagree: skip it and note why.
+4. If you fixed it: commit immediately (see *Commit rules* below). `git status` must be clean before the next finding.
 
 Priority handling:
 - **[P0] and [P1]**: Always fix if valid
 - **[P2] and [P3]**: Fix if straightforward, skip if it would be a large refactor
 
 Keep fixes minimal and focused. Do NOT add tests, docstrings, or refactor surrounding code unless the finding specifically requires it.
+
+## Commit rules
+
+One commit per finding — this lets Pi (and humans) re-review commit-by-commit instead of diffing everything at once.
+
+- Stage by explicit path, never `git add -A` or `git add .`
+- Conventional commits, one line, no scopes, lowercase after the colon, under 72 chars
+- Explain **WHY** — the finding is the "why", your message should capture its intent:
+  - Good: `fix: guard null session to prevent 500 on logout`
+  - Good: `refactor: rename uid to userId for API consistency`
+  - Bad: `fix: address P1` (empty description)
+  - Bad: `fix: update auth` (what? why?)
+- Follow the project's `CLAUDE.md` commit rules if present — they override these defaults
+- Skipped findings get no commit — they're reported in the tmux reply instead
+
+If a commit fails (hook, test, lint): STOP, report the error, ask the user how to proceed. Do not continue to the next finding with a dirty tree.
 
 ## Respond to Pi via tmux
 
@@ -67,4 +84,4 @@ The message should:
 
 If you skipped findings, mention them: "Skipped P3: style preference, disagree."
 
-That's it. No loops, no commits, no extra orchestration. Fix, respond, done.
+That's it. No extra orchestration. Fix → commit → (next finding) → reply. Done.
