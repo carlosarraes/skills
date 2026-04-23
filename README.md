@@ -10,7 +10,6 @@ Claude Code skills for development workflows.
 | `prep-ticket` | Prepares a developer for a Linear/Jira ticket — fetches context, checks blockers, scans codebase |
 | `qa-ticket` | Automates QA testing for the current branch against localhost using ticket context |
 | `pi-review` | Handles code review findings from [Pi](https://github.com/carlosarraes/pi-review) received via tmux |
-| `fix-review` | Applies PR review comments as atomic, one-commit-per-comment fixes (paste / `gh` / `bt`) |
 
 ## Install
 
