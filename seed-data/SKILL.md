@@ -1,6 +1,6 @@
 ---
 name: seed-data
-description: "Reads the data-readiness plan written by `/check-data` and inserts the planned rows into the local database. Auto-detects the project's preferred insertion mechanism (existing seed scripts, ORM management commands, raw SQL, or HTTP POST) and picks the highest-fidelity one available. Use this skill whenever the user says 'seed data', 'seed the db', 'load test data', '/seed-data', 'seed-data', 'run the data plan', 'load fixtures from plan', 'insert test rows', 'load the plan', 'apply the plan', or wants to populate the local DB with the rows /check-data planned. Also trigger right after `/check-data` finishes and the user says something like 'load it', 'now seed', or 'apply it'. Requires `/check-data` to have run first — reads `ai_docs/<branch>/data-plan.md` or `.notes/<branch>/data-plan.md`. Does NOT generate test cases (use `/qa-ticket`) and does NOT plan data (use `/check-data`)."
+description: "Inserts the rows from `/check-data`'s plan (`ai_docs/<branch>/data-plan.md` or `.notes/<branch>/data-plan.md`) into the local DB. Auto-picks the mechanism: project seed script, ORM shell, raw SQL, or HTTP POST. Trigger on 'seed data', 'seed the db', 'load test data', 'run the data plan', or '/seed-data'. Requires `/check-data` to have run first. Does NOT plan data (use `/check-data`) or generate test cases (use `/qa-ticket`)."
 ---
 
 # Seed Data
