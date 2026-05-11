@@ -1,11 +1,11 @@
 ---
 name: qa-ticket
-description: "Automates QA testing for the current branch by extracting the Linear ticket ID (e.g., ABC-123, XYZ-456) from the git branch, fetching ticket details and code diff, generating a targeted test plan, and executing backend (curl) and frontend (agent-browser) tests. Fixes bugs found during testing and retries. Use this skill whenever the user asks to 'QA this branch', 'test this ticket', 'run QA', 'qa-ticket', 'test my changes', 'verify this works', 'smoke test this', 'run acceptance tests', or wants automated testing of their current feature branch against localhost. Also trigger when the user mentions 'acceptance testing', 'manual QA', 'end-to-end test my changes', or 'does this work'. Supports Linear (default) and Jira — pass 'jira' as argument to use Jira (e.g., '/qa-ticket jira')."
+description: "Automates QA testing for the current branch by extracting the ticket ID (e.g., ABC-123, XYZ-456) from the git branch, fetching ticket details and code diff, generating a targeted test plan, and executing backend (curl) and frontend (agent-browser) tests. Fixes bugs found during testing and retries. Use this skill whenever the user asks to 'QA this branch', 'test this ticket', 'run QA', 'qa-ticket', 'test my changes', 'verify this works', 'smoke test this', 'run acceptance tests', or wants automated testing of their current feature branch against localhost. Also trigger when the user mentions 'acceptance testing', 'manual QA', 'end-to-end test my changes', or 'does this work'. Supports Linear (default) and Jira — pass 'jira' as argument to use Jira (e.g., '/qa-ticket jira')."
 ---
 
 # QA Ticket
 
-Automatically QA-test the current branch by analyzing the Linear ticket and code changes, then executing targeted backend and frontend tests against the local dev environment.
+Automatically QA-test the current branch by analyzing the ticket (Linear or Jira) and code changes, then executing targeted backend and frontend tests against the local dev environment.
 
 ## Prerequisites
 
@@ -23,6 +23,8 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:<FRONTEND_PORT>
 ```
 
 If backend returns non-200, skip backend tests and note in report. Same for frontend.
+
+> **Data readiness**: this skill tests behavior, not data setup. If your local DB may lack the data needed to exercise the feature, run `/check-data` then `/seed-data` first — they plan and load realistic test rows (happy / edge / error / stupid paths). qa-ticket assumes data is in place.
 
 ---
 
@@ -74,87 +76,7 @@ Parse the diff to understand:
 
 ---
 
-## Step 2: Data readiness check
-
-Testing against empty tables produces misleading results — false 404s, empty lists, filters with nothing to filter. Before creating a test plan, verify the database has enough data for the feature under test.
-
-### 2a. Identify relevant tables
-
-From the code diff (Step 1d), identify which tables the feature touches:
-- Model definitions, migrations, or ORM calls in the diff
-- Table names in raw queries or route handlers
-- Foreign key dependencies — if the feature creates `orders`, it probably needs `users` to exist
-
-### 2b. Discover database access
-
-Read the repository to figure out how to reach the database. Check in this order:
-
-1. **`docker-compose.yml` / `docker-compose.*.yml`** — look for database service names, ports, credentials, and volume mounts
-2. **`docker ps`** — find running DB containers (postgres, mysql, mongo, redis, etc.)
-3. **Environment files** (`.env`, `.env.local`, `.env.development`) — connection strings, `DATABASE_URL`, host/port/user/password
-4. **Framework config** — `settings.py` (Django), `config/database.yml` (Rails), `prisma/schema.prisma`, `knexfile.js`, `ormconfig.ts`, etc.
-
-Once you know the DB engine and how it's running, use the most direct path to query it:
-
-```bash
-# Postgres in Docker
-docker exec <container> psql -U <user> -d <db> -c "SELECT count(*) FROM <table>"
-
-# MySQL in Docker
-docker exec <container> mysql -u <user> -p<pass> <db> -e "SELECT count(*) FROM <table>"
-
-# SQLite (local file found in config)
-sqlite3 <path/to/db.sqlite3> "SELECT count(*) FROM <table>;"
-
-# Mongo in Docker
-docker exec <container> mongosh <db> --eval "db.<collection>.countDocuments()"
-```
-
-If the project uses a CLI or management command for DB access (e.g., `python manage.py dbshell`, `rails dbconsole`), prefer that — it already has the right credentials.
-
-### 2c. Check row counts
-
-Query counts for all relevant tables in a single call where possible:
-
-```sql
--- Postgres/MySQL example
-SELECT 'users' as tbl, count(*) FROM users
-UNION ALL SELECT 'orders', count(*) FROM orders
-UNION ALL SELECT 'products', count(*) FROM products;
-```
-
-### 2d. Evaluate and act
-
-| Table role | Minimum rows | Action if insufficient |
-|------------|-------------|----------------------|
-| Feature directly CRUDs | 0 OK | Tests will create data, but list/filter tests need pre-existing rows |
-| Feature reads/displays (lists, dashboards) | 3-5 | Seed or warn |
-| Lookup/reference table (FK targets, dropdowns) | 1 | Seed or warn — feature breaks without it |
-| Filtering/search target | 5-10 with varied values | Seed or warn |
-
-When tables are too sparse:
-
-1. **Look for seed scripts in the project** — search for `seed`, `fixtures`, `factories`, `sample_data` in scripts, Makefile, package.json, or management commands
-2. **If a seed mechanism exists**, run it
-3. **If not**, create minimal test data via the project's own API (POST endpoints discovered from routes)
-4. **If seeding isn't feasible**, warn the user and ask whether to proceed
-
-### 2e. Include data summary in the test plan
-
-Add a data readiness table at the top of the test plan so the report shows what data state testing ran against:
-
-```
-### Data Readiness
-| Table | Rows | Status |
-|-------|------|--------|
-| users | 12 | OK |
-| orders | 0 | Seeded 3 via API |
-| products | 0 | WARNING — empty, no seed available |
-```
-
----
-
-## Step 3: Analyze and create test plan
+## Step 2: Analyze and create test plan
 
 Based on the ticket description + code diff, create a **targeted** test checklist. Only test what the changes actually affect.
 
@@ -238,7 +160,7 @@ Group by category so coverage gaps are visible:
 
 ---
 
-## Step 4: Execute backend tests
+## Step 3: Execute backend tests
 
 Use `curl` against the backend URL discovered in Prerequisites. If the project runs in a test/dev mode that bypasses auth, no Authorization header is needed. Otherwise, include the appropriate auth header.
 
@@ -298,7 +220,7 @@ Discover available routes from the project. Try these approaches in order:
 
 ---
 
-## Step 5: Execute frontend tests
+## Step 4: Execute frontend tests
 
 When the test plan includes frontend tests, **load the agent-browser skill first** using the Skill tool:
 
@@ -402,7 +324,7 @@ agent-browser snapshot -i
 
 ---
 
-## Step 6: Fix-and-retry loop
+## Step 5: Fix-and-retry loop
 
 When a test fails, don't immediately mark it as failed. Attempt to diagnose and fix.
 
@@ -430,7 +352,7 @@ When a test fails, don't immediately mark it as failed. Attempt to diagnose and 
 
 ---
 
-## Step 7: Generate report
+## Step 6: Generate report
 
 After all tests complete (or fail after 3 attempts), output the report directly in the conversation.
 
