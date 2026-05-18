@@ -11,6 +11,7 @@ Claude Code skills for development workflows.
 | `check-data` | Audits the local DB and plans the data needed to QA the current branch — happy / edge / error / stupid paths; writes a markdown plan |
 | `seed-data` | Reads the plan from `check-data` and inserts the rows via the project's preferred mechanism (seed script, ORM shell, raw SQL, or API) |
 | `qa-ticket` | Automates QA testing for the current branch against localhost using ticket context |
+| `chaos-engineering` | Stress-tests the current branch by injecting application-level chaos — input / auth / state / dependency / resource / frontend / time — and auto-fixes resilience violations test-first |
 | `pi-review` | Handles code review findings from [Pi](https://github.com/carlosarraes/pi-review) received via tmux |
 
 ## Install
