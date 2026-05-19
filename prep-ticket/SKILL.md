@@ -5,7 +5,9 @@ description: "Prepares a developer to work on a Linear ticket by fetching all co
 
 # Prep Ticket
 
-Gather all context for a Linear ticket, check if it's unblocked, identify missing information, scan the codebase for related code, and produce a readiness report with a suggested implementation approach.
+Gather all context for a Linear ticket, check if it's unblocked, identify missing information, scan the codebase for related code, and produce a structured readiness summary in chat with a suggested implementation approach.
+
+> Plan-mode compatible. The Step 5 output is a chat reply, not a file. Do not call Write/Edit. If dispatched as a subagent, return the summary as your final message, not as a file write.
 
 ## Step 1: Extract ticket ID and platform
 
@@ -112,7 +114,9 @@ Flag if any of these are true:
 
 Scan comments for unanswered questions — messages ending with `?` that have no follow-up response. Note any unresolved design decisions.
 
-## Step 5: Output report
+## Step 5: Reply to the user
+
+Send the following directly as your chat message. Do not create a file. Do not call Write/Edit. The fenced block below is the *shape of the reply*, not a document to save.
 
 ```markdown
 # Prep Report: <TICKET-ID> — <title>
