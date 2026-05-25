@@ -1,9 +1,9 @@
 ---
-name: pr-skill-fix
-description: "Handle HUMAN reviewer feedback on the user's open non-draft PRs — the human-comments counterpart to `pr-sweep` (bots). Per PR: APPROVED + non-blocking → score each finding (trivial=fix-here, scope-creep=follow-up ticket), confirm batch once (pushing invalidates approval); CHANGES_REQUESTED + overall body → fix silently, one commit per finding, no reply; CHANGES_REQUESTED + inline threads → one commit per thread, reply with SHA, resolve. After fixes, `ScheduleWakeup` 10 min, rechecks CI, punts new bot activity to `/pr-sweep`, then re-requests review from humans who blocked and posts one summary comment. Linear default, `jira` arg for Jira follow-ups. Trigger on 'fix user comments on PRs', 'address review feedback', 'handle changes requested', 'reply to my reviewer', 'respond to PR review', 'fix and re-request review', '/pr-skill-fix', 'fix reviewer nits', 'turn around review comments', or when the user just got a CHANGES_REQUESTED review."
+name: pr-sweep-fix
+description: "Handle HUMAN reviewer feedback on the user's open non-draft PRs — the human-comments counterpart to `pr-sweep` (bots). Per PR: APPROVED + non-blocking → score each finding (trivial=fix-here, scope-creep=follow-up ticket), confirm batch once (pushing invalidates approval); CHANGES_REQUESTED + overall body → fix silently, one commit per finding, no reply; CHANGES_REQUESTED + inline threads → one commit per thread, reply with SHA, resolve. After fixes, `ScheduleWakeup` 10 min, rechecks CI, punts new bot activity to `/pr-sweep`, then re-requests review from humans who blocked and posts one summary comment. Linear default, `jira` arg for Jira follow-ups. Trigger on 'fix user comments on PRs', 'address review feedback', 'handle changes requested', 'reply to my reviewer', 'respond to PR review', 'fix and re-request review', '/pr-sweep-fix', 'fix reviewer nits', 'turn around review comments', or when the user just got a CHANGES_REQUESTED review."
 ---
 
-# PR Skill Fix
+# PR Sweep Fix
 
 Drive a batch of open PRs through their **human** reviewer feedback to the point where each PR is either (a) re-requested from the reviewer who blocked it, or (b) intentionally untouched because the comments were filed as follow-up tickets. The loop is self-pacing on ~10 minutes via `ScheduleWakeup`, so it can sit and watch CI + bot follow-up after each push without blocking the user's terminal.
 
@@ -31,7 +31,7 @@ gh pr list --author @me --state open --json number,title,headRefName,baseRefName
 
 For each result with `isDraft=false`, fetch reviews + threads + issue-comments (see step 1 of the loop) and **keep only the PRs where at least one human has left a review or comment that requires action.** PRs with zero human activity are silently dropped — they're not in scope.
 
-The user can narrow scope with an explicit PR list (e.g., `/pr-skill-fix #820 #822`); when they do, use exactly that list. The user can also pass `jira` as an argument (e.g., `/pr-skill-fix jira` or `/pr-skill-fix #820 jira`) to switch the follow-up tracker from Linear (default) to Jira.
+The user can narrow scope with an explicit PR list (e.g., `/pr-sweep-fix #820 #822`); when they do, use exactly that list. The user can also pass `jira` as an argument (e.g., `/pr-sweep-fix jira` or `/pr-sweep-fix #820 jira`) to switch the follow-up tracker from Linear (default) to Jira.
 
 A **worktree-path map** is also accepted (same shape as `pr-sweep`):
 

@@ -14,7 +14,7 @@ Claude Code skills for development workflows.
 | `chaos-engineering` | Stress-tests the current branch by injecting application-level chaos — input / auth / state / dependency / resource / frontend / time — and auto-fixes resilience violations test-first |
 | `pi-review` | Handles code review findings from [Pi](https://github.com/carlosarraes/pi-review) received via tmux |
 | `pr-sweep` | Monitors open PRs on a 10-min self-pacing loop and auto-fixes CI failures, merge conflicts, and bot review comments (Greptile, Cursor BugBot) |
-| `pr-skill-fix` | Handles HUMAN reviewer feedback on open PRs — fix-here vs follow-up triage for APPROVED nits, silent fixes for CHANGES_REQUESTED overall bodies, threaded fix+reply+resolve for inline comments, then re-requests review |
+| `pr-sweep-fix` | Handles HUMAN reviewer feedback on open PRs — fix-here vs follow-up triage for APPROVED nits, silent fixes for CHANGES_REQUESTED overall bodies, threaded fix+reply+resolve for inline comments, then re-requests review |
 
 ## Install
 
