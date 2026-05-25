@@ -35,7 +35,28 @@ link_skill() {
   done
 }
 
+# Remove symlinks in TARGETS that point into this repo but whose source no
+# longer exists (i.e. the skill was renamed or deleted). Leaves untouched
+# any symlinks pointing outside this repo and any regular files/dirs.
+prune_stale() {
+  for target_dir in "${TARGETS[@]}"; do
+    [[ -d "$target_dir" ]] || continue
+    for link in "$target_dir"/*; do
+      [[ -L "$link" ]] || continue
+      local dest
+      dest="$(readlink "$link")"
+      [[ "$dest" == "$REPO_DIR/"* ]] || continue
+      if [[ ! -d "$dest" ]] || [[ ! -f "$dest/SKILL.md" ]]; then
+        rm -f "$link"
+        echo "  pruned stale: $link -> $dest"
+      fi
+    done
+  done
+}
+
 if [[ $# -eq 0 ]] || [[ "$1" == "all" ]]; then
+  echo "Pruning stale symlinks..."
+  prune_stale
   echo "Adding all skills..."
   for dir in "$REPO_DIR"/*/; do
     name="$(basename "$dir")"
@@ -43,6 +64,7 @@ if [[ $# -eq 0 ]] || [[ "$1" == "all" ]]; then
     link_skill "$name"
   done
 else
+  prune_stale
   for name in "$@"; do
     echo "Adding skill: $name"
     link_skill "$name" || exit 1
