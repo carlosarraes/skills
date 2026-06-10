@@ -1,6 +1,6 @@
 ---
 name: prep-ticket
-description: "Prepares a developer to work on a Linear ticket by fetching all context, checking blockers, scanning the codebase, and producing a structured readiness report with implementation guidelines. Use this skill whenever the user says 'prep ticket', 'prep-ticket', 'prepare ticket', 'get ready for ABC-123', 'prep XYZ-456', 'analyze ticket', 'ticket prep', 'break down this ticket', 'ticket readiness', 'is DBZ-789 ready', 'what's blocking DEV-42', 'what do I need to know about QA-1024', or wants to understand a Linear ticket before starting work on it. Also trigger when the user mentions checking if a ticket is unblocked, gathering ticket context, or preparing to implement a specific ticket. Supports Linear (default) and Jira — pass platform as second argument (e.g., '/prep-ticket ABC-123 jira')."
+description: "Prepares a developer to work on a Linear ticket by fetching all context, checking blockers, scanning the codebase, and producing a structured readiness report, ending with a pointer to /grill-me to stress-test the suggested approach. Use this skill whenever the user says 'prep ticket', 'prep-ticket', 'prepare ticket', 'get ready for ABC-123', 'prep XYZ-456', 'analyze ticket', 'ticket prep', 'break down this ticket', 'ticket readiness', 'is DBZ-789 ready', 'what's blocking DEV-42', 'what do I need to know about QA-1024', or wants to understand a Linear ticket before starting work on it. Also trigger when the user mentions checking if a ticket is unblocked, gathering ticket context, or preparing to implement a specific ticket. Supports Linear (default) and Jira — pass platform as second argument (e.g., '/prep-ticket ABC-123 jira')."
 ---
 
 # Prep Ticket
@@ -71,9 +71,14 @@ Replace `<ticket-id>` / `<TICKET-ID>` with the actual ticket ID (lowercase for b
 
 ## Step 3: Codebase scan
 
-### 3a. Project rules
+### 3a. Project rules & coding standards
 
-Read CLAUDE.md and README.md at the repo root (if they exist). Summarize rules relevant to this ticket's area.
+Read the standards this repo documents — the same places `/review` looks — but **scoped to this ticket's area**, not the whole repo:
+- **Root `CLAUDE.md` / `AGENTS.md` / `README.md`**, plus any **architecture / standards anchor** they point to as the source of truth for review (e.g. `docs/architecture.md`, `CONTRIBUTING.md`, a `STANDARDS.md`). If a doc calls itself the "constitution" for PR review, treat it as the primary source.
+- The **`CLAUDE.md` for this ticket's module/area**, discovered from the related files in 3b (e.g. `backend/src/<module>/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`). Module guides usually carry the concrete typing / structure / testing rules.
+- Relevant **ADRs** (`docs/adr/`) and the **type/lint configs** for the ticket's stack (pyright/mypy/ruff; tsconfig/biome/eslint) — only the ones touching the ticket's files.
+
+Summarize the rules relevant to this ticket's area; you'll turn them into concrete, per-lens guidance in the **Code-Review Readiness** section of the report (Step 5).
 
 ### 3b. Related files
 
@@ -81,6 +86,8 @@ Based on the ticket description, labels, and any module/route/component names me
 - Implementation files matching keywords from the ticket
 - Test files adjacent to likely implementation files
 - Similar past implementations that could serve as reference patterns
+
+**Honor the repo's exemplar guidance:** if a CLAUDE.md flags a module as deprecated or "do not pattern-match" (e.g. a WIP prototype scheduled for rewrite), don't recommend it as a reference — point at the canonical module it names instead.
 
 ### 3c. Ticket references in code
 
@@ -146,7 +153,7 @@ Send the following directly as your chat message. Do not create a file. Do not c
 <3-10 relevant files with brief explanation of each>
 
 ## Project Rules
-<relevant rules from CLAUDE.md / README.md, or "No project rules files found">
+<relevant rules from the repo's standards docs — root + module CLAUDE.md, the architecture/standards anchor, ADRs — or "No project rules files found">
 
 ## Missing Information
 <list of gaps, or "All information present">
@@ -154,19 +161,21 @@ Send the following directly as your chat message. Do not create a file. Do not c
 ## Open Questions
 <unresolved questions from comments, or "None identified">
 
+## Code-Review Readiness
+<What review will check — satisfy these up front. For each lens give 1-3 ticket-specific, actionable points sourced from the docs read in Step 3a (cite the doc); tailor to this ticket or mark "N/A for this ticket". Don't dump generic boilerplate.>
+- **API-first** — <from the architecture/standards anchor; e.g. design typed entities + typed actions before the UI, a breaking versioned-API change is a review veto, no business rules in the frontend — they belong server-side. For a FE-only ticket: consume the typed contract, don't reimplement rules.>
+- **Strong typing** — <from the module CLAUDE.md + type/lint configs; name the actual checkers/settings the repo uses (e.g. strict type-check + typed request/response schemas on the backend; strict TS + no `any` on the frontend).>
+- **Modularity** — <from the module CLAUDE.md + ADR import boundaries; e.g. thin routers / logic in services, the repo's layering (component→hook→service), respect import boundaries, reuse the helpers found above, follow the canonical module exemplar — not a deprecated one.>
+- **Functional programming** — pure functions, immutability, isolate side-effects/I/O at the edges, prefer composition. *(Not yet a documented standard in this repo — treat as a general guideline.)*
+
 ## Suggested Approach
-<2-5 bullet points on how to implement, based on ticket content and codebase patterns>
+<2-3 seed bullets — a starting hypothesis to be stress-tested, not a final plan>
 
 ### Getting Started
 1. **Create a feature branch** from `develop`: `git checkout develop && git pull && git checkout -b feature/<ticket-id>-<short-desc>`
-2. Follow the approach above
 
-### Implementation Guidelines
-- **Leverage existing code** — find similar implementations and follow established patterns
-- **KISS** — keep it simple, avoid over-engineering
-- **Follow project rules** — CLAUDE.md and README.md conventions apply
-- **TDD** — where applicable, write tests first: <list 2-4 specific testable areas, or note "this ticket type (e.g., dependency upgrade) benefits more from smoke testing than unit tests">
-- **Ask before assuming** — flag anything unclear before starting implementation
+### Next step
+Run `/grill-me` on the Suggested Approach above — it will interrogate the open questions and design decisions one at a time. (Use `/grill-with-docs` if you also want CONTEXT.md/ADRs updated as decisions land.)
 ```
 
 ## Edge cases
@@ -178,4 +187,6 @@ Send the following directly as your chat message. Do not create a file. Do not c
 - **Not in a git repo**: Skip branch extraction and codebase scan; fetch ticket from the platform only
 - **Ticket already Done/Canceled**: Note prominently — user may be prepping the wrong ticket
 - **No CLAUDE.md or README.md**: Skip project rules section, note "No project rules files found"
+- **Repo documents none of the standards** (no CLAUDE.md / architecture anchor): emit the four Code-Review Readiness lenses with their generic defaults + a one-line nudge to document standards; don't invent repo-specific rules
+- **Non-code or trivial ticket** (dependency bump, docs, config): condense the Code-Review Readiness lenses or mark them "N/A for this ticket" — keep the report scannable, don't force all four
 - **gh CLI unavailable**: Skip PR search, note in Related Work section
