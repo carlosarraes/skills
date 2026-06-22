@@ -9,20 +9,14 @@ Gather all context for a Linear ticket, check if it's unblocked, identify missin
 
 > Plan-mode compatible. The Step 5 output is a chat reply, not a file. Do not call Write/Edit. If dispatched as a subagent, return the summary as your final message, not as a file write.
 
-## Guiding principle — lazy senior dev (light)
+## Guiding principle — recommend the laziest thing that works
 
-The best code is the code never written. This skill is a **light port of [ponytail](https://github.com/DietrichGebert/ponytail)** (lazy-senior-dev mode): it doesn't write code, so it bakes the lazy bias into what it *recommends*. Carry this into the **Suggested Approach** and **Code-Review Readiness** sections (Step 5) — default to the simplest thing that works, then let `/grill-me` stress-test it.
+The best code is the code never written (YAGNI). This skill doesn't write code, so it bakes that bias into what it *recommends*. Carry it into the **Suggested Approach** and **Code-Review Readiness** sections (Step 5): recommend **exactly one** approach — the laziest that fully satisfies the ticket — then let `/grill-me` stress-test it.
 
-**The laziness ladder — stop at the first rung that holds:**
+**Laziest-first priority — take the first that fully satisfies the ticket:**
+reuse an existing helper/module from the 3b scan → a native / stdlib / platform feature → an already-installed dependency (never add one for what a few lines do) → a few lines of new code → only then new structure.
 
-1. Does this need building at all? Speculative need → skip it, say so in one line. (YAGNI)
-2. Does an existing helper/module (from the 3b scan) already do it? Reuse it.
-3. Native / stdlib / platform feature covers it? Use it.
-4. Already-installed dependency solves it? Use it — never add one for what a few lines do.
-5. Can it be a few lines? Keep it a few lines.
-6. Only then: the minimum new code that works.
-
-No unrequested abstractions (no interface with one implementation, no config for a constant, no scaffolding "for later"). Shortest workable diff wins — fewest files, deletion over addition, boring over clever. **Never lazy about:** input validation at trust boundaries, error handling that prevents data loss, security, accessibility, or anything the ticket explicitly requires — lazy means writing less code, not picking the flimsier solution.
+**Recommend one approach, not a menu.** No "option A vs B", no fallbacks, no "flag the heavier design as opt-in", no scaffolding for a speculative future need — those alternatives are the bloat this skill exists to prevent; `/grill-me` is where heavier designs get surfaced if the simple one cracks. **Never lazy about:** validation at trust boundaries, error handling that prevents data loss, security, accessibility, or anything the ticket explicitly requires — lazy means less code, not a flimsier solution.
 
 ## Step 1: Extract ticket ID and platform
 
@@ -182,10 +176,10 @@ Send the following directly as your chat message. Do not create a file. Do not c
 - **Strong typing** — <from the module CLAUDE.md + type/lint configs; name the actual checkers/settings the repo uses (e.g. strict type-check + typed request/response schemas on the backend; strict TS + no `any` on the frontend).>
 - **Modularity** — <from the module CLAUDE.md + ADR import boundaries; e.g. thin routers / logic in services, the repo's layering (component→hook→service), respect import boundaries, reuse the helpers found above, follow the canonical module exemplar — not a deprecated one.>
 - **Functional programming** — pure functions, immutability, isolate side-effects/I/O at the edges, prefer composition. *(Not yet a documented standard in this repo — treat as a general guideline.)*
-- **Simplicity / YAGNI** — the simplest workable solution that satisfies the ticket: no abstraction with one caller, no config for a constant, no new dependency for what a few lines do, no code for a speculative need. Shortest diff, fewest files, reuse the helpers from 3b before adding new ones. *(General lazy-senior-dev guideline — see the Guiding principle; not a repo-documented standard.)*
+- **Simplicity / YAGNI** — the simplest workable solution that satisfies the ticket: no abstraction with one caller, no config for a constant, no new dependency for what a few lines do, no code for a speculative need. Shortest diff, fewest files, reuse the helpers from 3b before adding new ones. *(General YAGNI guideline — see the Guiding principle; not a repo-documented standard.)*
 
 ## Suggested Approach
-<The **laziest version that fully satisfies the ticket** — 2-3 seed bullets, a starting hypothesis to be stress-tested, not a final plan. Apply the laziness ladder from the Guiding principle: reuse a helper/module from 3b before writing new code, native/stdlib before a dependency, the shortest workable change before a framework. No abstraction with one caller, no scaffolding "for later", fewest files. If a heavier design tempts you, make the simple version the default and flag the heavier one as opt-in — "Do X simply; reach for Y only if Z proves it's needed." Don't simplify away validation, error handling, security, or anything the ticket explicitly requires.>
+<**Exactly one** approach — the laziest that fully satisfies the ticket — as 3-5 concrete bullets: a starting hypothesis for `/grill-me` to stress-test, not a final plan. Apply the laziest-first priority from the Guiding principle: reuse a helper/module from 3b → native/stdlib → an already-installed dependency → a few lines → only then new structure. Don't present alternatives, fallbacks, or "for later" options. Keep whatever the ticket requires — validation, error handling, security.>
 
 ### Getting Started
 1. **Create a feature branch** from `develop`: `git checkout develop && git pull && git checkout -b feature/<ticket-id>-<short-desc>`
