@@ -1,6 +1,6 @@
 ---
 name: pr-sweep
-description: "Use when the user wants their open non-draft PRs driven to a clean, mergeable state: CI/pipeline green, merge conflicts resolved, size gate satisfied, and every review thread (bot AND human) resolved or turned around. Covers Greptile / Cursor BugBot findings, CI failures and flakes, the Mondrio PR size gate, inline review threads, and top-level 'changes requested' review bodies (one big comment listing fixes). Triggers: 'sweep my PRs', 'monitor my PRs', 'watch CI + bots', 'fix bot/review comments', 'handle Greptile/Cursor findings', 'resolve PR conflicts', 'address review feedback', 'handle changes requested', 'reply to my reviewer', 'fix and re-request review', 'babysit my PRs', '/pr-sweep', or just flipped PRs Draft to Ready. Sweeps all the user's open PRs (gh pr list --author @me); explicit list narrows scope; pass 'jira' for Jira follow-ups (Linear default)."
+description: "Use when the user wants their open non-draft PRs driven to a clean, mergeable state: CI/pipeline green, merge conflicts resolved, size gate satisfied, and every review thread (bot AND human) resolved or turned around. Covers Greptile findings (inline threads + the summary comment's confidence score and T-Rex runtime logs) / Cursor BugBot, CI failures and flakes, the Mondrio PR size gate, inline review threads, and top-level 'changes requested' review bodies (one big comment listing fixes). Triggers: 'sweep my PRs', 'monitor my PRs', 'watch CI + bots', 'fix bot/review comments', 'handle Greptile/Cursor findings', 'resolve PR conflicts', 'address review feedback', 'handle changes requested', 'reply to my reviewer', 'fix and re-request review', 'babysit my PRs', '/pr-sweep', or just flipped PRs Draft to Ready. Sweeps all the user's open PRs (gh pr list --author @me); explicit list narrows scope; pass 'jira' for Jira follow-ups (Linear default)."
 ---
 
 # PR Sweep
@@ -70,6 +70,7 @@ Every finding is classified along two axes. This matrix is the heart of the skil
 | **L2** | Inline thread — **bot** | — | smallest fix, OR pushback | reply SHA + resolve | no |
 | **L2** | Inline thread — **human** | PR `CHANGES_REQUESTED` (blocking) | fix | reply SHA + resolve | no |
 | **L2** | Inline thread — **human** | PR `APPROVED`/`COMMENTED` (non-blocking) | triage → fix-here or follow-up | SHA+resolve, or "filed"+resolve | **YES (batch)** |
+| **L3** | Greptile summary comment — **bot** | `Confidence Score` + `T-Rex Logs` | cross-check vs L2 threads → fix **summary-only** findings | **NO reply** | no |
 | **L3** | Overall review body — **human** | `CHANGES_REQUESTED` | fix, one commit per item | **NO reply** | no |
 | **L3** | Overall review body — **human** | `APPROVED`/`COMMENTED` | triage → fix-here or follow-up | none (fix) / one PR comment (follow-up) | **YES (batch)** |
 
@@ -78,6 +79,16 @@ Every finding is classified along two axes. This matrix is the heart of the skil
 Two things fall out of the matrix and are the whole reason the human/bot distinction still matters at all:
 - **Approval is fragile, so protect it.** Pushing **any** commit to an `APPROVED` PR invalidates that human's approval and forces re-review. So the gate is keyed on the *approval*, not on who wrote the finding: any **avoidable** push to an approved PR (a nit, a bot suggestion, even a bot bug-fix — anything not strictly required to make the PR mergeable) waits behind a single batch confirmation (Step 3). Only a **merge-required** fix (a real CI failure, a conflict) pushes to an approved PR without asking, and only when it's the *only* work on that PR — and even then, surface it in the report, since it costs the approval. *This overrides the per-row "Confirm first?" column above:* on an approved PR even a bot-thread code-fix waits; on a non-approved PR nothing waits.
 - **Top-level review bodies aren't threadable.** A `CHANGES_REQUESTED` overall body gets **no reply** — the cleanest acknowledgment is the new commits plus the eventual re-request. Inline threads, by contrast, always get a reply + resolve.
+
+## The Greptile summary comment (confidence score + T-Rex logs)
+
+Greptile's first post on every PR is a **top-level issue comment** (not a review body — that's empty), with three parts:
+
+- **Greptile Summary** — what the PR does. Context, not action.
+- **Confidence Score: N/5** + reasoning — Greptile's merge-readiness verdict, often naming the one blocking concern and its file ("…should be corrected before merging — `backend/src/shared/config.py`"). The score is a **triage signal**, not a gate: a low score means scrutinize harder, but it never *by itself* blocks DONE — resolving the underlying findings does.
+- **🦖 T-Rex Logs** ("What T-Rex did") — Greptile *ran* the code in a harness and reports runtime observations. Some are pass-confirmations (no action); some are real findings (a value over a documented cap, a non-zero exit, an override that didn't take effect).
+
+**The one rule: cross-check, don't double-fix.** The score reasoning and T-Rex logs are a *rollup*. A concern Greptile could pin to a line **also** appears as an inline thread (L2) — handle it there, once. A **summary-only** concern (named in the score reasoning or T-Rex logs with no matching inline thread — typically runtime or cross-file) is a fresh bot finding: smallest correct fix (or push back per **Pushback-worthy findings**), one commit, **no reply** — the summary isn't threadable, so the fix commit is the acknowledgment. Never reply to or "resolve" the summary comment, and never make a second commit for what an inline thread already covers. The "View all artifacts" / "Fix all in Claude" buttons are UI affordances — work from the comment text. Surface the score per PR in the report.
 
 ## The loop, one full iteration
 
@@ -137,15 +148,24 @@ gh api "repos/<owner/repo>/issues/<#>/comments" \
   --jq '[.[] | select(.user.type != "Bot") | {id, user: .user.login, body, created_at}]'
 ```
 
+**Greptile summary comment (confidence score + T-Rex logs)** — Greptile's *first* post on a PR is a top-level **issue comment**, not a review body (its review body is empty), so it slips past *both* the reviews query and the bot-filtered issue-comment query above. Fetch it explicitly:
+
+```bash
+gh api "repos/<owner/repo>/issues/<#>/comments" \
+  --jq '.[] | select(.user.login=="greptile-apps[bot]") | .body' | tail -1
+```
+
+It carries a **Confidence Score: N/5** and a collapsed **🦖 T-Rex Logs** section (runtime findings from Greptile actually executing the code). It's an **L3-bot** source — read it per **The Greptile summary comment** below.
+
 ### Step 2: Classify each PR (fill in the matrix)
 
 For each PR, bucket every finding into a layer (L1 / L2 / L3) tagged with author + state per the matrix. Then assign the PR a disposition:
 
-- **DONE** — CI green (latest-per-name) AND mergeable AND zero unresolved threads (bot or human) AND every blocking human review has been turned around (re-requested) or all its findings filed as follow-ups.
+- **DONE** — CI green (latest-per-name) AND mergeable AND zero unresolved threads (bot or human) AND no unaddressed Greptile **summary-only** finding (see "The Greptile summary comment") AND every blocking human review has been turned around (re-requested) or all its findings filed as follow-ups.
 - **WAITING** — checks include `in_progress/running` items (Cursor BugBot mid-review, e2e shards) but nothing failing, threads are clean, no new human verdicts. Not done; **don't dispatch** — the next iteration rechecks.
-- **NEEDS FIX** — anything else: a failing check, a conflict, an unresolved thread, an unaddressed `CHANGES_REQUESTED`, or triaged approved-PR nits.
+- **NEEDS FIX** — anything else: a failing check, a conflict, an unresolved thread, a summary-only Greptile finding, an unaddressed `CHANGES_REQUESTED`, or triaged approved-PR nits.
 
-A NEEDS-FIX PR is **gated** (needs Step 3 confirmation) iff it has a live human **approval** AND this cycle would push at least one **avoidable** commit to it — anything that isn't merge-required. Avoidable = L2/L3 human non-blocking nits (the fix-here-vs-follow-up class) *and* any bot-thread code-fix on the approved PR (you could pushback-resolve or defer it, so spending the approval on it is a judgment call). **Autonomous** = merge-required fixes (a real CI failure, a conflict) when they're the *only* work on an approved PR, plus *all* findings on non-approved PRs (`CHANGES_REQUESTED`, `COMMENTED`, unreviewed).
+A NEEDS-FIX PR is **gated** (needs Step 3 confirmation) iff it has a live human **approval** AND this cycle would push at least one **avoidable** commit to it — anything that isn't merge-required. Avoidable = L2/L3 human non-blocking nits (the fix-here-vs-follow-up class) *and* any bot-thread or Greptile-summary code-fix on the approved PR (you could pushback-resolve or defer it, so spending the approval on it is a judgment call). **Autonomous** = merge-required fixes (a real CI failure, a conflict) when they're the *only* work on an approved PR, plus *all* findings on non-approved PRs (`CHANGES_REQUESTED`, `COMMENTED`, unreviewed).
 
 **Gating is per-PR, not per-finding.** If a PR is gated, its *entire* fix waits for the confirm — including any autonomous sub-findings it also has (a flake rerun, a bot thread). They're all handled by the one agent dispatched after the gate, so the PR still pushes exactly once. (Non-push actions like a rerun or a pushback-resolve don't void approval, but they ride along with that single agent rather than firing separately — simpler than splitting a PR's work across the gate.)
 
@@ -187,7 +207,7 @@ If an approved PR has *only* a merge-required fix (no avoidable work), it isn't 
 For each NEEDS-FIX PR (gated ones after confirmation), dispatch exactly **one** fix agent (Agent tool, `general-purpose`). Give each agent:
 
 - The exact worktree path
-- The full bucketed finding set for its PR (L1 checks, L2 threads with `databaseId` + thread `id` + author + state, L3 body items, conflict state), plus the fix-here/follow-up decision for any gated items
+- The full bucketed finding set for its PR (L1 checks, L2 threads with `databaseId` + thread `id` + author + state, L3 review-body items, L3 Greptile summary-only findings, conflict state), plus the fix-here/follow-up decision for any gated items
 - The follow-up tracker (`linear` or `jira`) and the origin ticket ID (from the branch name)
 - The fix protocol below
 
@@ -203,7 +223,7 @@ The only time you DON'T reschedule is when **every** PR is DONE and you're repor
 
 ### Step 6: Report iteration
 
-Under 300 words. A status table per PR + what was fixed/filed this cycle + any **size-gate actions** + next wakeup ETA (or `DONE`).
+Under 300 words. A status table per PR (include Greptile's confidence score N/5 when present) + what was fixed/filed this cycle + any **size-gate actions** + next wakeup ETA (or `DONE`).
 
 ### Step 7: On the next firing — recheck, re-request, or re-loop
 
@@ -251,7 +271,8 @@ The agent receives the worktree path, the bucketed findings, the follow-up track
      - **Human thread, blocking** (PR `CHANGES_REQUESTED`) → fix. Higher bar to push back than for bots.
      - **Human thread, non-blocking** (PR `APPROVED`/`COMMENTED`) → already triaged in Step 3. If **fix-here**, fix + reply + resolve as above. If **follow-up**, do **not** change code; file a ticket (see below) and reply `Filed as follow-up: <ticket-url>`, then resolve.
 
-5. **Layer 3 — overall review body** (one big top-level comment listing fixes, not inline):
+5. **Layer 3 — top-level findings (review bodies + Greptile summary):**
+   - **Greptile summary-only finding** (from the confidence-score reasoning or T-Rex logs, with no matching inline thread) → treat as a bot finding: smallest correct fix, one commit, **no reply** (the summary isn't threadable). If it duplicates an inline thread you're already fixing in Layer 2, skip it — one commit covers both. Push back per **Pushback-worthy findings** if it's wrong or out of scope (no reply; note it in the report).
    - **`CHANGES_REQUESTED` body** → split the requested changes into discrete fixes, **one commit per requested change** so the reviewer can scan commit-by-commit. **No reply to the review body** — the Convergence re-request is the response.
    - **`APPROVED`/`COMMENTED` body** → already triaged in Step 3. Fix-here items become commits (no thread reply needed for a top-level approval comment). Follow-up items become tickets, acknowledged with **one** PR-level comment: `gh pr comment <#> --body "Filed as follow-up: <ticket-url> (re: @reviewer's note about …)"`.
 
@@ -391,6 +412,7 @@ EOF
 - **Bots replying to their own resolved threads**: treat as a new finding only if the follow-up asks for additional code change.
 - **Cursor BugBot still `in_progress`**: if all threads are clean but Cursor is mid-review, don't declare DONE — wait one more cycle (WAITING).
 - **Reviewer comments on a PR you already retitled**: title edits re-fire the conventional-commits check but do NOT dismiss reviews — reviews persist.
+- **Greptile re-reviews after a push**: it updates its summary comment with a new confidence score and fresh T-Rex logs (the "Re-trigger Greptile" / re-review path). Re-read Greptile's latest summary each cycle — the score and findings move as you push fixes; a rising score signals the fixes landed.
 
 ## Final DONE report
 
