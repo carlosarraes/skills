@@ -111,13 +111,15 @@ A smarter PR sweep loop for CI, review threads, and bot/human feedback.
 
 Completion: all watched PRs are clean/mergeable, waiting on external actors, or explicitly handed back.
 
-## Model scorecard
+## Model & effort scorecard
 
 Use a 1-5 score. Higher cost means more expensive. These are defaults, not limits.
 
 | model | cost | intelligence | taste | default use |
 |---|---:|---:|---:|---|
-| GPT-5.5 | 3 | 4 | 3 | bulk implementation, investigation, review, migrations, data/code analysis |
+| GPT-5.6 Luna | 2 | 2 | 2 | mechanical subagent work: migrations, formulaic fixes, sweeps, log/diff scraping |
+| GPT-5.6 Terra | 3 | 3 | 3 | routine review/feedback at medium effort, investigation, data/code analysis |
+| GPT-5.6 Sol | 4 | 5 | 4 | hard implementation, deep review; high effort on $200 tier, low otherwise |
 | Sonnet | 3 | 3 | 4 | wrapper agents, routine review, tool bridging, medium-complexity work |
 | Opus | 4 | 4 | 4 | architecture/API/design review, higher-confidence critique |
 | Fable | 5 | 5 | 5 | parent orchestration, product calls, hardest architecture, final review |
@@ -127,7 +129,18 @@ Rules:
 - Use cheaper models for broad exploration and mechanical work.
 - Use high-taste models for product judgment, UI/API design, architecture, and final review.
 - If a cheaper model's output is weak, escalate without asking. Judge output quality, not the price tag.
+- Fast modes multiply every delegate's cost (~2.5x) — never run fleets in fast mode. Avoid Codex "Ultra" mode: it spawns oversized fleets at inherited-high reasoning.
 - Checkpoint before risky actions regardless of model.
+
+Effort is a dial separate from model. Delegates inherit the parent's model AND effort when unspecified, so every dispatch states both explicitly.
+
+| effort | use for |
+|---|---|
+| low/medium | scouts, classification, mechanical fixes, log/diff scraping |
+| medium/high | implementation, review |
+| xhigh/max | at most one hardest judge/verify/architecture stream per fleet |
+
+The orchestrator holds high; managing a big fleet does not require max. Mechanisms: Workflow `agent()` takes `effort` and `model` opts; Codex headless takes `codex exec -m <model> -c model_reasoning_effort=<level>`.
 
 ## Access paths
 
@@ -136,18 +149,18 @@ Models are separate from access paths.
 | access path | use |
 |---|---|
 | Host subagents/workflows/jobs | Native delegation and fanout in the current harness: Claude Code Task/workflows, Pi subagents/chains, Codex jobs, or equivalent. Skills run inside agents per "Running a skill inside an agent". |
-| Codex CLI headless | Run GPT-5.5 via `codex exec` with self-contained prompts for code/review/research/data work. |
+| Codex CLI headless | Run GPT-5.6 (Luna/Terra/Sol) via `codex exec` with self-contained prompts for code/review/research/data work. |
 | agent-browser | Browser/runtime/UI verification, screenshots, and interaction debugging when available. |
 | Worktrees | Isolation for parallel implementation or risky edits. |
 
-When using `codex exec`, provide a self-contained prompt with repository path, goal, constraints, files to inspect, allowed write policy, validation command, timeout expectations, and output format. Label wrapper agents/jobs with a `gpt-5.5:` prefix so the fleet view reveals the real worker model.
+When using `codex exec`, set the model and reasoning effort explicitly (`-m <model> -c model_reasoning_effort=<level>`) and provide a self-contained prompt with repository path, goal, constraints, files to inspect, allowed write policy, validation command, timeout expectations, and output format. Label wrapper agents/jobs with a `gpt-5.6-<tier>:` prefix so the fleet view reveals the real worker model.
 
 ## Fleet rules
 
 - **One writer.** Only one agent/job writes to a given worktree at a time. Parallel writers require isolated worktrees.
 - **Fresh reviewers.** Reviewers/scouts should inspect actual files/diffs from fresh context, not rely on parent summaries.
 - **Artifacts over vibes.** Ask delegates for file paths, commands run, failures, diffs, and concise verdicts.
-- **Bounded prompts.** Give each delegate one role, one goal, constraints, validation, and output shape.
+- **Bounded prompts.** Give each delegate one role, one goal, constraints, validation, an output shape, and an explicit stop point — where it stops and reports instead of continuing.
 - **Escalate on ambiguity.** Ask the user when a decision is product/security/architecture-sensitive or when streams conflict.
 - **Use workflows where deterministic.** Fanout, review, verification, and polling are good workflow targets. Checkpoint-driven product work is not one giant workflow.
 
@@ -163,7 +176,7 @@ Before an execution phase, report:
 Goal: <what this phase should accomplish>
 Built on: <readiness reports, dependency map, or QA evidence this plan cites>
 Streams:
-- <stream>: <agent/job/skill>, <model>, <worktree/isolation>, <writes?>, <validation>
+- <stream>: <agent/job/skill>, <model>, <effort>, <worktree/isolation>, <writes?>, <validation>
 
 Risk gates:
 - <merge/push/approval/destructive/product/security risk or "none">
