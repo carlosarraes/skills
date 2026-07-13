@@ -53,3 +53,34 @@ Mined verbatim from 129 review comments across 43 teammate PRs (2026-06-30 → 2
 
 - `backend/tests/unit/ai/test_context_assembler.py`:383 — [P1] This local `import html` is unused, and both Ruff (`F401`) and Pyright (`reportUnusedImport`) flag it. The backend lint/type-check gates will fail until this import is removed.
 
+
+---
+
+# Zapsign / Bitbucket corpus (Portuguese-English, casual register)
+
+Mined verbatim via `bt pr review-history` (30 comments, `zapsign/api`, 2026). Same reviewer, different register: bilingual PT-BR/EN and far more conversational than the Mondrio corpus. Substance is the same — regressions, N+1s, swallowed errors, type/signature mismatches, validation bypasses, defensive nil-handling, observability/support-friendliness — but the tone is a teammate thinking out loud, often hedged with "might be intentional" / "is this intended?".
+
+## Reviewing others — substance findings
+
+- `backoffice/modules/payments/serializers.py:75` — This will cause an N+1 query on the pricing-options list. Since payment_methods is an M2M, please `prefetch_related('payment_methods')` in the list queryset.
+- `backoffice/.../priced_entity_validator.py:160` — This only rejects `[pix_id]`. Inputs like `[pix_id, pix_id]` or `[pix_id, 999999]` can still resolve to only PIX after `filter(id__in=...)`, so this rule is bypassable.
+- `.../pricing_option_update_service.py:34` — Unknown payment method IDs are ignored here. If none of them exist, `.set(payment_methods)` clears the current payment methods instead of returning a validation error.
+- `api/services/events/handlers/doc_signed_handler.py:61` — Here, `notify()` returns `False` when it fails… we are ignoring that and, if it fails, we will still count as a success, i dont think thats intended?
+- `api/services/events/handlers/doc_signed_handler.py:52` — This function signature says it is going to return a Dict[str, bool] but it only returns a bool? I saw that we ignore the return of this function, but still… i think its good to fix this
+- `.../create_plan_subscription.py:107` — The previous facade persisted newly created cards via `_persist_saved_card()`… so enabling this refactor stops cards created during plan subscription from being saved for later reuse. Just letting you know theres a regression here (might be intentional).
+- `.../pagarme_v5_facade.py:321` — I would raise here if `raw_status` is `None`, so we can be super clear on whats happening.
+- `.../pagarme_v5_facade.py:150` — In here, you are just logging the keys, no? That isnt helpful for support.
+- `api/services/events/event_handler.py:57` — Hmm this checks for `truora_client` but not `truora_client_id`… meanwhile `_is_truora_notifier_enabled` checks both, shouldnt we check both here too?
+- `utils/webhook/webhook_utils.py:50` — Is this intended? we wont persist it anymore, WebhookLog entries wont be linked to their endpoint
+
+## Portuguese-BR register (same person, casual)
+
+- `docs/v2/dtos/create_document_dto.py:46` — Dessa forma aqui, qnd o lang não for enviado, todo doc vai ser pt-br… o behavior atual é "Se não tem lang, o fallback é `doc.company.lang`", com essa mudança nunca teremos esse fallback, melhor deixar `None` msm para ter o fallback de volta.
+- `docs/v2/views/documents_view.py:47` — Hmmm eu moveria isso aqui para dentro do `try`… por mais que vc esteja cobrindo tudo para montar o DTO certinho, se no futuro tiver alguma alteração e a pessoa não cobrir tudo, vai só levar 500 na cara
+- `docs/v2/dtos/create_signer_dto.py:7` — Acho que teve uma regressão aqui, talvez seja intencional, mas antes o signer chegava no `create_doc()` com `name` e `auth_mode` vazios
+
+## Author-reply register (his own PRs, defending/explaining decisions)
+
+- Confirmed with pedro, this is the expected behavior
+- It's per-instance (`cached_property`), so it dies with the request/task… no shared cache, nothing to invalidate. It'd only go stale if we re-read the active item after mutating items on the same instance, and no flow does that.
+- Truncation… afaik we have limits on datadog, this gets the first 1k characters which is what is usually relevant to us
