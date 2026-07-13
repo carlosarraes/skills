@@ -49,12 +49,30 @@ Check out the PR branch into a worktree (auto-derive the path per the project
 convention, or `git worktree add <path> <branch>`; `gh pr checkout <#>` if simpler).
 Derive the ticket ID from the branch name for context.
 
+### Step 1b: Get past auth before observing
+
+An auth-gated frontend redirects the browser to a hosted login and you capture a
+sign-in page instead of the feature. **Never drive a real login with the user's
+credentials.** Get past it one of two ways:
+
+- **The app's own test/dev auth bypass**, if it has one — many apps, run in a test
+  environment, return a fixed dev user from their session endpoint so the frontend
+  authenticates with no login. Check the project's dev docs / auth code for the
+  flag, and confirm the session endpoint returns the dev user before opening the
+  browser.
+- **A saved auth state the user provides** — an `agent-browser state` file or
+  session cookie from their own logged-in session. Never their password.
+
+If the app runs on a remote dev host, forward its ports to this box so
+agent-browser can reach `localhost` (a LAN IP often won't work — host firewall).
+
 ### Step 2: Plan + run the QA (via qa-ticket)
 
 Invoke `qa-ticket` against the checked-out branch to generate the targeted test
 plan and run backend (curl) + frontend (agent-browser) cases against localhost.
 qa-ticket already fixes bugs it finds and retries; let it. Collect its per-case
-pass/fail results.
+pass/fail results. Verify each route before asserting a finding — a wrong URL
+guess renders the app's own 404, not a real failure (observe, don't assume).
 
 > The user's dev environment must be running locally. If localhost isn't up, stop
 > and ask — qa-pr never tests against staging/prod (qa-ticket's rule).
