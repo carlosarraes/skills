@@ -53,6 +53,7 @@ If no map is given, **auto-derive** the worktree path from the branch name. The 
 The handling is the same for inline threads regardless of author, but a few sub-decisions (the confirm gate, fix-here-vs-follow-up triage, the pushback bar, re-requesting review) depend on it. A reviewer is a **bot** if any of the following is true:
 - The GitHub user `type` is `Bot` (visible in `gh api repos/<o/r>/pulls/<#>/reviews --jq '.[].user.type'`).
 - The login matches the known list: `greptile-apps[bot]`, `cursor[bot]`, `cursoragent[bot]`, `dependabot[bot]`, `copilot[bot]`, `github-actions[bot]`, `coderabbitai[bot]`, `renovate[bot]`, `sonarqubecloud[bot]`.
+- The comment body carries the `🤖 Automated comment by` header — even when posted from a plain `User` account. Skills like `review-swarm` and `qa-pr` post through the user's own account, so the header, not the account, is what marks them automated. A thread opened by a header-marked comment gets **bot** handling (fix or pushback + resolve); a human replying inside it makes the thread human per the usual rules.
 
 Everything else is a human. When the type/login is ambiguous, treat as human — false positives here are harmless (the user just sees the comment surfaced and triaged).
 
@@ -90,13 +91,32 @@ Greptile's first post on every PR is a **top-level issue comment** (not a review
 
 **The one rule: cross-check, don't double-fix.** The score reasoning and T-Rex logs are a *rollup*. A concern Greptile could pin to a line **also** appears as an inline thread (L2) — handle it there, once. A **summary-only** concern (named in the score reasoning or T-Rex logs with no matching inline thread — typically runtime or cross-file) is a fresh bot finding: smallest correct fix (or push back per **Pushback-worthy findings**), one commit, **no reply** — the summary isn't threadable, so the fix commit is the acknowledgment. Never reply to or "resolve" the summary comment, and never make a second commit for what an inline thread already covers. The "View all artifacts" / "Fix all in Claude" buttons are UI affordances — work from the comment text. Surface the score per PR in the report.
 
+## Sweep state — skip quiet PRs
+
+State lives in `~/.local/state/pr-sweep/state.json`, keyed by PR URL:
+
+```json
+{
+  "https://github.com/mondrio/mondrio-platform/pull/820": {
+    "updated_at": "2026-07-12T17:05:00Z",
+    "head_sha": "abc123",
+    "ci_conclusion": "success",
+    "last_comment_at": "2026-07-12T17:00:00Z"
+  }
+}
+```
+
+A PR is **quiet** — skip all its Step 1 per-PR queries this cycle — when its `updatedAt` from the listing call matches the stored `updated_at` AND the stored `ci_conclusion` is terminal-good (`success`/`skipped`). PRs recorded as pending or failing always get the per-PR fetch until CI concludes green: completing check runs do **not** bump a PR's `updatedAt`, so an unchanged `updatedAt` proves nothing while CI is in flight. A DONE verdict still requires the full Step 2 criteria — quiet only means "nothing changed since the state was written", so a PR that went quiet while NEEDS-FIX stays NEEDS-FIX.
+
+On an all-quiet cycle the listing query is the only API call made — that's the point: under a long `/loop`, most cycles are all-quiet, and this collapses them to one call. Explicit-PR-list runs skip the listing but still read/write state. After each cycle (Step 6), write back every swept PR's `updated_at`, `head_sha`, `ci_conclusion`, and newest `last_comment_at`, and drop keys for PRs no longer open so merged/closed PRs don't accumulate. Treat a missing file as `{}`.
+
 ## The loop, one full iteration
 
 Follow it exactly — the order matters because re-scheduling has to happen unconditionally at the end.
 
 ### Step 1: Sweep all PRs in parallel
 
-For each PR, run these queries in parallel (one Bash call per PR is fine):
+Read the state file first and mark quiet PRs per **Sweep state** — they skip this step entirely. For each remaining PR, run these queries in parallel (one Bash call per PR is fine):
 
 **CI check status** — use the API, not `gh pr checks --json`. The latter exits non-zero whenever anything is non-success, which breaks shell pipelines:
 
@@ -221,9 +241,11 @@ This bites because it's easy to forget after dispatching fix agents (the active 
 
 The only time you DON'T reschedule is when **every** PR is DONE and you're reporting the final terminating state. Re-arming is unconditional otherwise — **including a cycle where you dispatched nothing** (e.g. every live PR was WAITING on in-progress checks). "No agents this cycle" is not "done"; only all-DONE is done.
 
-### Step 6: Report iteration
+### Step 6: Update state + report iteration
 
-Under 300 words. A status table per PR (include Greptile's confidence score N/5 when present) + what was fixed/filed this cycle + any **size-gate actions** + next wakeup ETA (or `DONE`).
+Write the sweep state back per **Sweep state** (every swept PR's current facts; prune closed/merged keys).
+
+Then report, under 300 words: a status table per PR (include Greptile's confidence score N/5 when present; mark quiet PRs `quiet — skipped`) + what was fixed/filed this cycle + any **size-gate actions** + next wakeup ETA (or `DONE`).
 
 ### Step 7: On the next firing — recheck, re-request, or re-loop
 
