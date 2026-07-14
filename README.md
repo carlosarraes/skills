@@ -23,6 +23,7 @@ Claude Code skills for development workflows.
 | `qa-pr` | Outward sibling of `qa-ticket` — runs acceptance testing against a PR and posts one sticky evidence comment (screenshots/GIFs) so reviewers observe behavior |
 | `carraes-reviewer` | Code reviewer in Carlos's voice and priorities; plugs into `review-swarm` (draft — pending mined review history) |
 | `explain-diff` | Generates a teaching artifact (Background → Intuition → literate walkthrough → quiz) so you deeply understand a subsystem or diff; renders via `visual-explainer` |
+| `video-extract` | Pulls clean transcripts from one or more YouTube videos (captions-first via yt-dlp), ready to read or mine |
 
 ## Install
 
