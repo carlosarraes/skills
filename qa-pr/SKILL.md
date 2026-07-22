@@ -1,145 +1,273 @@
 ---
 name: qa-pr
-description: >
-  Use when the user wants to QA a PR and leave observable evidence ON the PR for
-  reviewers — "qa-pr", "qa this PR and post the results", "prove this PR works on
-  the PR", "attach test evidence to #123". The outward-facing sibling of qa-ticket:
-  qa-ticket QAs your own branch privately; qa-pr runs the same acceptance testing
-  against a PR and posts one sticky evidence comment with screenshots/GIFs so a
-  human reviewer can observe behavior instead of re-reasoning about the diff.
-  Takes a PR number/URL. Localhost only; checkpoints before posting.
+description: Use when the user wants to QA a GitHub or Bitbucket PR and leave observable acceptance-test evidence on the PR for reviewers.
 ---
 
-# QA PR: post observable evidence on a PR
+# QA PR: publish proof bound to a PR commit
 
-Reviewers trust behavior they can see over reasoning they have to check. `qa-pr`
-runs acceptance testing against a PR's branch and posts one evidence comment —
-per-case pass/fail plus screenshots and GIFs — so the reviewer observes the feature
-working instead of reconstructing it from the diff. It's `qa-ticket` pointed at
-someone else's PR (or your own) with an outward evidence artifact.
+Proof binds observable behavior to the exact commit a reviewer can inspect.
+`qa-pr` invokes `qa-ticket` for test selection, execution, fixes, and retries; it
+adds PR checkout, deterministic evidence capture, hosted video/report lifecycle,
+and exactly one upserted PR comment. Do not duplicate `qa-ticket`'s planning or
+testing logic.
 
-**Relationship to qa-ticket:** the test-planning and execution engine is
-`qa-ticket`'s — this skill does **not** re-derive it. qa-pr adds three things:
-checkout of the PR branch, media capture, and the sticky PR comment. Everything
-about *what to test and how* (test-plan generation from the ticket+diff, happy /
-edge / error cases, backend via curl, frontend via agent-browser, localhost-only,
-fix-and-retry) comes from `qa-ticket` — invoke it, don't duplicate it.
+All testing is localhost-only. Never test staging or production. Never publish
+evidence unless the user asked to place it on that PR.
 
-## Bot identifier — REQUIRED on the posted comment
+Before assembling or updating evidence, read
+`references/evidence-format.md`. It owns the report, manifest, chapter links,
+hidden artifact markers, and video-present/report-only sticky-comment forms.
 
-The evidence comment must begin with:
+## 1. Resolve the immutable target
 
-```markdown
-> [!NOTE]
-> 🤖 Automated comment by **QA PR** — not written by a human
-```
-
-This is what marks it automated so a reviewer (and `pr-sweep`) can tell it from a
-human comment.
-
-## Workflow
-
-### Step 1: Resolve and check out the PR
+Resolve the forge, PR URL/number, repository, repository visibility, head/base
+refs, full head/base OIDs, and title. GitHub requires `headRefOid`:
 
 ```bash
-gh pr view <#> --json number,headRefName,baseRefName,url,headRefOid,title
+gh pr view <pr> --json number,url,title,headRefName,headRefOid,baseRefName,baseRefOid
+gh repo view --json nameWithOwner,visibility
 ```
 
-Check out the PR branch into a worktree (auto-derive the path per the project
-convention, or `git worktree add <path> <branch>`; `gh pr checkout <#>` if simpler).
-Derive the ticket ID from the branch name for context.
+Use the Bitbucket equivalent through `bt`. If repository visibility cannot be
+determined, handle it as private/unknown.
 
-### Step 1b: Get past auth before observing
+Create or reuse an isolated worktree at the resolved PR head. Record:
 
-An auth-gated frontend redirects the browser to a hosted login and you capture a
-sign-in page instead of the feature. **Never drive a real login with the user's
-credentials.** Get past it one of two ways:
-
-- **The app's own test/dev auth bypass**, if it has one — many apps, run in a test
-  environment, return a fixed dev user from their session endpoint so the frontend
-  authenticates with no login. Check the project's dev docs / auth code for the
-  flag, and confirm the session endpoint returns the dev user before opening the
-  browser.
-- **A saved auth state the user provides** — an `agent-browser state` file or
-  session cookie from their own logged-in session. Never their password.
-
-If the app runs on a remote dev host, forward its ports to this box so
-agent-browser can reach `localhost` (a LAN IP often won't work — host firewall).
-
-### Step 2: Plan + run the QA (via qa-ticket)
-
-Invoke `qa-ticket` against the checked-out branch to generate the targeted test
-plan and run backend (curl) + frontend (agent-browser) cases against localhost.
-qa-ticket already fixes bugs it finds and retries; let it. Collect its per-case
-pass/fail results. Verify each route before asserting a finding — a wrong URL
-guess renders the app's own 404, not a real failure (observe, don't assume).
-
-> The user's dev environment must be running locally. If localhost isn't up, stop
-> and ask — qa-pr never tests against staging/prod (qa-ticket's rule).
-
-### Step 3: Capture observable evidence
-
-For each meaningful case, capture media as it runs:
-
-- **Frontend** — agent-browser screenshots at each key step. For a flow, capture a
-  sequence of frames and assemble a GIF (`ffmpeg` from the frames, or reuse
-  `demo-video`'s recording pieces if a moving capture is warranted).
-- **Backend** — the actual request and response (curl command + JSON body), fenced
-  in the comment; a screenshot only if there's a UI side effect.
-
-Store media under the worktree's scratch dir; upload by attaching to the comment
-(drag-drop isn't available headless — use `gh` to attach, or host the image inline
-as a link the PR can render).
-
-### Step 4: Checkpoint before posting
-
-Posting to a PR is outward-facing. Show the user the assembled evidence comment
-(verdict + per-case results + media list) and get a go-ahead before the first post.
-On re-runs of a PR that already carries the evidence marker, update without asking.
-
-### Step 5: Post one sticky evidence comment, upserted
-
-Find any comment containing `<!-- qa-pr-evidence -->`; PATCH it if present, else
-`gh pr comment`. Never post a second evidence comment — the latest run is on top,
-prior runs collapse into a `<details>` block.
-
-```markdown
-<!-- qa-pr-evidence -->
-> [!NOTE]
-> 🤖 Automated comment by **QA PR** — not written by a human
-
-## QA evidence — <verdict emoji> <PASS | PASS WITH NOTES | FAIL> <sub>(@ <short_sha>)</sub>
-
-| Case | Type | Result | Evidence |
-| --- | --- | --- | --- |
-| <happy path> | frontend | ✅ | <screenshot/GIF> |
-| <edge case>  | backend  | ✅ | <curl + response> |
-| <error case> | backend  | ⚠️ | <note> |
-
-<any bugs found + fixed this run, with SHAs>
-
-<details><summary>Previous runs</summary>
-<one line per prior run: `@ <sha> — <verdict>`>
-</details>
+```bash
+git rev-parse HEAD
+git status --porcelain
 ```
 
-### Step 6: Report
+The worktree must be clean before capture. Derive ticket context from the branch
+or PR, but let `qa-ticket` fetch and interpret it.
 
-Terminal summary: verdict, per-case results, media captured, any bugs fixed during
-QA (with SHAs), and the comment URL.
+## 2. Preflight before testing
 
-## Platform notes
+Complete this gate in order:
 
-- **GitHub:** full flow above (`gh` for checkout + comment upsert + media).
-- **Bitbucket (acme/api):** `bt pr comment <id>` posts the evidence comment
-  (top-level comments work); media is attached as links. Same bot header, same
-  sticky-marker upsert via `bt pr comments` to find the prior one.
+1. Require `agent-browser`, `ffmpeg`, `ffprobe`, and `snapdoc` on `PATH`.
+2. Run `snapdoc whoami`; authentication and the configured API must work.
+3. Run `snapdoc publish --help` and require `--poster`. This proves the installed
+   Snapdoc supports native video evidence.
+4. Discover the localhost frontend/backend origins, route, auth mode, and fixture
+   or data setup. Record sanitized labels for the manifest.
+5. Verify the local app and auth/session endpoint before opening the feature.
+6. Record browser, viewport, tool versions, UTC time, clean state, and local HEAD.
 
-## Constraints
+If Snapdoc authentication/API is unavailable, stop before capture: neither the
+video nor the hosted report can be completed. If video prerequisites are missing,
+offer the user a choice to stop or continue with screenshots plus a report-only
+bundle. This degraded path must be labeled in the report; never imply it contains
+video.
 
-- Localhost only — never test against staging/prod (inherited from qa-ticket).
-- Checkpoint before the first post (outward action).
-- One sticky evidence comment per PR — upsert, never duplicate.
-- Don't re-implement qa-ticket's test planning or execution — invoke it.
-- On your own PR the evidence is still useful; on a teammate's PR, only post if the
-  user asked you to QA it (don't surprise-comment on others' PRs).
+Get past authentication with the app's test/dev bypass or browser state supplied
+by the user. Never request a password or drive a real login. Forward remote dev
+ports so the browser still reaches `localhost`; a LAN, staging, or production URL
+is not an acceptable substitute.
+
+## 3. Run qa-ticket, then record deterministic clips
+
+Invoke `qa-ticket` in the PR worktree. Consume its stable case IDs, categories,
+expected results, actual results, verdict, and fix SHAs. Verify routes before
+calling a result a product failure.
+
+Finish exploration, fixture setup, diagnosis, fixes, and route discovery before
+recording. A QA recording is a clean replay, not a debugging session.
+
+For each meaningful frontend case:
+
+1. Reset to a known initial state.
+2. Start one recording named for its stable case ID.
+3. Replay only the known deterministic actions.
+4. Stop when the observable assertion is visibly settled.
+5. Capture a key-state screenshot when it helps scanning or becomes the poster.
+
+```bash
+agent-browser record start <scratch>/<case-id>.webm
+# deterministic actions and visible assertion
+agent-browser record stop
+```
+
+Do not record setup, waiting, unrelated navigation, or duplicate cases. Inspect
+the clips, screenshots/frames, visible inputs, and browser chrome before hosting.
+Reject and recapture evidence containing secrets, credentials, cookies, personal
+or private tenant data, incorrect tenant context, or unrelated windows/tabs.
+
+Backend evidence is the exact sanitized request and response text. A screenshot
+or decorative video never replaces request/response evidence. When every case is
+backend-only, skip video creation and publish the report-only form.
+
+## 4. Build the chaptered video
+
+Write an ordered `cases.json` whose entries are `{id, title, file}` and whose
+order matches the report. Run:
+
+```bash
+python3 <qa-pr-skill>/scripts/build-video-evidence.py \
+  --cases <scratch>/cases.json \
+  --output-dir <scratch>/video
+```
+
+The command must produce `evidence.mp4`, `poster.jpg`, and `chapters.json`.
+Verify the manifest reports H.264, yuv420p, silence, dimensions at most 1280x720,
+duration at most 600 seconds, size at most 100,000,000 bytes, the MP4 SHA-256,
+and one contiguous ordered chapter per case.
+
+If the combined bundle exceeds a Snapdoc limit, partition only at acceptance-case
+boundaries into the smallest number of contiguous ordered parts. Build
+`cases-part-N.json` once per part and index all parts from the single report. Never
+split a case to make a limit fit. One video remains the normal path.
+
+## 5. Build the report and bind it to the commit
+
+Normalize the final test plan before hashing it: serialize the ordered case IDs,
+categories, descriptions, expected results, and actual results as UTF-8 JSON with
+sorted object keys, compact separators, LF endings, and one terminal newline.
+Record its SHA-256.
+
+Render the report from `references/evidence-format.md` with:
+
+- a Mermaid requirement → acceptance case → observed result graph using
+  accessible `accTitle` and `accDescr`;
+- a concise acceptance-case table;
+- timestamp links of the form `version_file_url#t=<seconds.milliseconds>` for
+  every video chapter;
+- sanitized backend request/response sections;
+- fix commits and retests; and
+- the complete commit/environment/publication manifest from the reference.
+
+The report table is the browser-visible chapter navigator. Snapdoc's watch page
+does not provide one.
+
+After any fix, require a committed, clean local HEAD. Immediately before the
+first outward action, refetch the live PR and require:
+
+```text
+clean local worktree
+local HEAD == manifest head SHA == current PR headRefOid
+```
+
+For Bitbucket, compare the equivalent current source commit. If any value differs,
+mark the local bundle stale and stop without uploading or commenting. Ask the user
+to push/update the PR, then revalidate the remote head and evidence. Never post a
+claim for a local-only commit, even when labeled local-only.
+
+## 6. Choose privacy and checkpoint
+
+The first outward-action checkpoint happens before any Snapdoc upload or PR
+comment. Show the user:
+
+- verdict and exact full SHA;
+- per-case results;
+- video parts, screenshots, and report inventory;
+- manifest summary;
+- repository visibility;
+- proposed privacy and expiry;
+- the complete proposed sticky comment with hosted-URL placeholders.
+
+Defaults and allowed choices:
+
+- Public repository: recommend unlisted Snapdoc links, expiring in 3 days.
+- Private/unknown repository: require an explicit choice between unlisted and
+  passcode; recommend unlisted with a 3-day expiry and explain that anyone with
+  the URL can access it.
+- Snapdoc accepts TTLs from 1 hour through 7 days. Never silently make evidence
+  permanent or extend its expiry.
+
+The existing marked comment is authorization to rerun with the same destination,
+privacy, and non-expanded expiry. A first publication or any destination, privacy,
+or expiry expansion requires a fresh checkpoint.
+
+For passcode protection, receive the passcode out of band and send it only to the
+two Snapdoc create invocations (video and report). Never echo it, log it, write it
+to scratch, include it in the report/manifest/hidden markers, or place it on the
+forge. Updates retain the artifact's protection and do not receive `--passcode`.
+
+## 7. Publish or update stable Snapdoc artifacts
+
+Read the existing `<!-- qa-pr-evidence -->` comment before publishing. Parse its
+video/report artifact IDs, ordered `part` attributes, privacy, expiry, current
+stable links, and Previous runs version-pinned links.
+
+When privacy is unchanged, update the same artifact IDs so current URLs stay
+stable:
+
+```bash
+snapdoc publish <evidence.mp4> --json --ttl <ttl> \
+  --poster <poster.jpg> --update <video-id>
+snapdoc publish <report.md> --markdown --json --ttl <ttl> --update <report-id>
+```
+
+For multipart video, match IDs by ordered part number. Reuse matching parts and
+create only newly required parts. Do not silently expire a removed or superseded
+artifact; show it in the checkpoint and follow the user's retention choice.
+
+For a first publication, changed privacy, or a missing ID, create artifacts:
+
+```bash
+snapdoc publish <evidence.mp4> --json --ttl <ttl> --poster <poster.jpg>
+snapdoc publish <report.md> --markdown --json --ttl <ttl>
+```
+
+Default Snapdoc creation is unlisted. Add `--passcode` only for the approved
+protected create path, without persisting its value.
+
+Publish video first and save each JSON response in scratch. Use its artifact ID,
+version, stable watch/file URLs, and `version_file_url` to finish the report's
+timestamp and manifest fields. Then publish the report and save its JSON response.
+
+The report must name its own artifact ID and version. On the first run, bootstrap
+it once: create the report, take the returned ID, render that ID and expected
+version 2 into the complete report, then update the same ID and verify the response
+is version 2. On reruns, read the current report version with `snapdoc get <id>
+--json`, render the expected next version, publish one update, and verify the
+returned version. If the version is not the rendered value, correct the manifest
+by updating the same report ID again; never mint a replacement merely to repair
+self-metadata.
+
+If video succeeds but report publication fails, keep the video response, leave the
+PR unchanged, and retry the report; do not create another video. If only poster
+upload fails, use Snapdoc's poster-only retry rather than uploading a new version:
+
+```bash
+snapdoc publish --json --update <video-id> --poster <poster.jpg>
+```
+
+For protected evidence, the PR contains only protected watch/report links. Never
+embed or link the raw media URL, and keep the passcode out of GitHub/Bitbucket.
+
+## 8. Final gate and sticky-comment upsert
+
+Load the correct form from `references/evidence-format.md`. Preserve prior-run
+report/video URLs as version-pinned links. Keep the new stable watch/report URLs
+prominent and store the current artifact IDs in hidden markers.
+
+Refetch the PR source SHA one final time and recheck the clean three-way equality.
+If it moved after upload, do not post stale evidence; retain the returned Snapdoc
+JSON, rerun/revalidate, and update the same artifacts only when safe.
+
+Find the one comment containing `<!-- qa-pr-evidence -->`:
+
+- If absent, create it after the approved checkpoint.
+- If present, PATCH that exact comment.
+- If the forge/connector cannot update it, stop. Never create a duplicate.
+
+For GitHub, use `gh` to create or PATCH the marked comment. For Bitbucket,
+preserve the existing `bt pr comment`/comment-update behavior; if update support
+is unavailable, stop instead of adding a second comment.
+
+## 9. Completion report
+
+Return all of the following:
+
+- verdict and exact tested SHA;
+- stable case IDs and results;
+- stable video watch URL(s), report URL, and sticky-comment URL;
+- privacy, expiry, artifact IDs, and artifact versions;
+- MP4 and test-plan SHA-256 values;
+- bugs fixed and their commit SHAs; and
+- whether the run was video+report, multipart, or backend-only report.
+
+Do not claim completion unless preflight passed, every capture was inspected,
+the publication manifest is complete, the clean three-way SHA gate passed twice,
+and exactly one marked PR comment exists.
