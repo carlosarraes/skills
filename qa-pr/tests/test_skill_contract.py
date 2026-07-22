@@ -11,11 +11,14 @@ REQUIRED_SKILL_TEXT = [
     "build-video-evidence.py",
     "snapdoc whoami",
     "--poster",
+    "--title",
     "headRefOid",
     "repository visibility",
     "first outward action",
     "version-pinned",
     "backend-only",
+    "passing and failing",
+    "hashes and case results",
     "references/evidence-format.md",
 ]
 

@@ -202,6 +202,15 @@ class FinalVideoValidationTests(unittest.TestCase):
                         )
 
 
+class ToolPreflightTests(unittest.TestCase):
+    def test_reports_missing_media_tools(self):
+        with mock.patch.object(builder.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(
+                RuntimeError, "required executable not found: ffmpeg, ffprobe"
+            ):
+                builder._require_tools()
+
+
 class FfmpegIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -349,9 +358,11 @@ class FfmpegIntegrationTests(unittest.TestCase):
             for name, content in originals.items():
                 (output / name).write_bytes(content)
 
-            with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
+            with self.assertRaises(RuntimeError) as raised:
                 builder.build(cases, output)
 
+            self.assertIn("case T1", str(raised.exception))
+            self.assertIn(str(bad_clip), str(raised.exception))
             self.assertEqual(
                 {name: (output / name).read_bytes() for name in originals},
                 originals,

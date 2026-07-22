@@ -335,7 +335,12 @@ def build(cases_path: Path, output_dir: Path) -> Path:
         probes = []
         for index, case in enumerate(cases, start=1):
             target = scratch / f"{index:03d}-{case.case_id}.mp4"
-            _normalize_clip(case.file, target)
+            try:
+                _normalize_clip(case.file, target)
+            except RuntimeError as error:
+                raise RuntimeError(
+                    f"case {case.case_id} clip {case.file}: {error}"
+                ) from error
             normalized.append(target)
             probes.append(probe_video(target))
 

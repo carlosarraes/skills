@@ -58,7 +58,8 @@ If Snapdoc authentication/API is unavailable, stop before capture: neither the
 video nor the hosted report can be completed. If video prerequisites are missing,
 offer the user a choice to stop or continue with screenshots plus a report-only
 bundle. This degraded path must be labeled in the report; never imply it contains
-video.
+video. If Snapdoc is older than `0.0.10` or lacks `--poster`, state the installed
+version and stop with an instruction to upgrade before capturing anything.
 
 Get past authentication with the app's test/dev bypass or browser state supplied
 by the user. Never request a password or drive a real login. Forward remote dev
@@ -70,6 +71,10 @@ is not an acceptable substitute.
 Invoke `qa-ticket` in the PR worktree. Consume its stable case IDs, categories,
 expected results, actual results, verdict, and fix SHAs. Verify routes before
 calling a result a product failure.
+
+Keep passing and failing acceptance cases in plan order. A failed case remains
+visible in the report and receives a chapter whenever a meaningful recording
+exists; never omit failure evidence to improve the verdict.
 
 Finish exploration, fixture setup, diagnosis, fixes, and route discovery before
 recording. A QA recording is a clean replay, not a debugging session.
@@ -194,8 +199,11 @@ stable:
 
 ```bash
 snapdoc publish <evidence.mp4> --json --ttl <ttl> \
+  --title "<owner/repo> PR #<number> QA @ <short-sha>" \
   --poster <poster.jpg> --update <video-id>
-snapdoc publish <report.md> --markdown --json --ttl <ttl> --update <report-id>
+snapdoc publish <report.md> --markdown --json --ttl <ttl> \
+  --title "<owner/repo> PR #<number> QA report @ <short-sha>" \
+  --update <report-id>
 ```
 
 For multipart video, match IDs by ordered part number. Reuse matching parts and
@@ -205,8 +213,10 @@ artifact; show it in the checkpoint and follow the user's retention choice.
 For a first publication, changed privacy, or a missing ID, create artifacts:
 
 ```bash
-snapdoc publish <evidence.mp4> --json --ttl <ttl> --poster <poster.jpg>
-snapdoc publish <report.md> --markdown --json --ttl <ttl>
+snapdoc publish <evidence.mp4> --json --ttl <ttl> \
+  --title "<owner/repo> PR #<number> QA @ <short-sha>" --poster <poster.jpg>
+snapdoc publish <report.md> --markdown --json --ttl <ttl> \
+  --title "<owner/repo> PR #<number> QA report @ <short-sha>"
 ```
 
 Default Snapdoc creation is unlisted. Add `--passcode` only for the approved
@@ -245,6 +255,10 @@ prominent and store the current artifact IDs in hidden markers.
 Refetch the PR source SHA one final time and recheck the clean three-way equality.
 If it moved after upload, do not post stale evidence; retain the returned Snapdoc
 JSON, rerun/revalidate, and update the same artifacts only when safe.
+
+Before comment upsert, also verify the published video/report hashes and case results
+match the manifest, report, and proposed comment. A mismatch is stale evidence:
+stop and rebuild or rerender it instead of posting inconsistent proof.
 
 Find the one comment containing `<!-- qa-pr-evidence -->`:
 
