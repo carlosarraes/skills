@@ -1,0 +1,18 @@
+{
+  "fixtures": {
+    "contract-repo": {
+      "binary_overrides": {
+        ".notes/feature-proj-123/contract/v1/execution-ledger.md": "IyBFeGVjdXRpb24gTGVkZ2VyCgo="
+      },
+      "expected_branch": "feature/proj-123",
+      "expected_head": "41958d7a6d6eb7282ebcd58ac657410652097a43"
+    },
+    "legacy-repo": {
+      "binary_overrides": {},
+      "expected_branch": "feature/proj-123",
+      "expected_head": "10bf362f358cc49e193dff07e8b1ee13b452a6b3"
+    }
+  },
+  "schema_version": 1,
+  "treatment_preparation": "Task 3 must invoke materialize_fixture.py for every treatment repository or copy a preserved accepted baseline repository."
+}
