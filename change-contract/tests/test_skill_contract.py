@@ -1,3 +1,6 @@
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,6 +25,36 @@ class SkillContractTests(unittest.TestCase):
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("references/contract-protocol.md", text)
         self.assertIn("scripts/contract_state.py approve", text)
+
+    def test_state_commands_are_location_independent(self):
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "python change-contract/scripts/contract_state.py",
+            text,
+        )
+        self.assertIn(
+            "python <skill-dir>/scripts/contract_state.py approve",
+            text,
+        )
+        self.assertIn(
+            "python <skill-dir>/scripts/contract_state.py verify",
+            text,
+        )
+
+    def test_state_helper_runs_from_a_foreign_working_directory(self):
+        helper = ROOT / "scripts" / "contract_state.py"
+        with tempfile.TemporaryDirectory() as cwd:
+            result = subprocess.run(
+                [sys.executable, str(helper), "--help"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("approve", result.stdout)
+        self.assertIn("verify", result.stdout)
 
     def test_protocol_contains_required_contract_sections(self):
         text = PROTOCOL.read_text(encoding="utf-8")

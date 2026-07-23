@@ -58,10 +58,12 @@ draft before presenting it again.
 
 ### Step 5: Freeze the approved version
 
-Write the approved draft to a temporary Markdown file, then run:
+Resolve `<skill-dir>` as the absolute directory containing the currently loaded
+`SKILL.md`, independent of the working directory. Write the approved draft to a
+temporary Markdown file, then run:
 
 ```bash
-python change-contract/scripts/contract_state.py approve \
+python <skill-dir>/scripts/contract_state.py approve \
   --root <notes-root>/<branch>/contract \
   --draft <approved-draft> \
   --ticket <ticket> \
@@ -71,8 +73,15 @@ python change-contract/scripts/contract_state.py approve \
   --approved-at <iso-8601>
 ```
 
-Run `verify` against the same root. Report the version, paths, SHA-256, and the
-recommended next command: `/exec-ticket`.
+Then run:
+
+```bash
+python <skill-dir>/scripts/contract_state.py verify \
+  --root <notes-root>/<branch>/contract
+```
+
+Report the version, paths, SHA-256, and the recommended next command:
+`/exec-ticket`.
 
 **Complete when:** `verify` returns `"valid": true`, `current.json` names the new
 version, its ledger is empty, and no source file was modified.
