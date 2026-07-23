@@ -143,6 +143,11 @@ enforces versioning. Deliberate coordinated mutation of `contract.md` plus
 `approval.json` is outside the threat model and requires an external trust
 anchor, which is not included here.
 
+Hidden `.vN-*` staging directories and `.current.json-*` pointer temp files
+left by hard process death are tolerated and ignored. They never become active
+and do not block retry; only `current.json` pointing to a complete, verified
+`vN` determines active contract state.
+
 ### `execution-ledger.md`
 
 An append-only account of implementation discoveries. Every bounded deviation

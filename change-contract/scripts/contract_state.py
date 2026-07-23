@@ -51,11 +51,26 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _read_json(path: Path, description: str) -> object:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise ContractStateError(
+            f"invalid UTF-8 in {description}: {path}"
+        ) from error
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ContractStateError(
+            f"invalid JSON in {description}: {path}"
+        ) from error
+
+
 def _active_version(root: Path) -> int:
     current = root / "current.json"
     if not current.exists():
         raise ContractStateError(f"missing current contract: {current}")
-    value = json.loads(current.read_text(encoding="utf-8"))
+    value = _read_json(current, "current contract")
     if not isinstance(value, dict):
         raise ContractStateError(
             f"current contract must be a JSON object: {current}"
@@ -104,7 +119,7 @@ def _verify_version_dir(version_dir: Path, version: int) -> dict:
             raise ContractStateError(f"missing contract artifact: {path}")
 
     approval = _validate_approval(
-        json.loads(approval_path.read_text(encoding="utf-8")),
+        _read_json(approval_path, "approval"),
         version,
     )
     expected = approval["contract_sha256"]
@@ -162,7 +177,12 @@ def approve(
 
     root.mkdir(parents=True, exist_ok=True)
     current = root / "current.json"
-    version = _active_version(root) + 1 if current.exists() else 1
+    if current.exists():
+        active_version = _active_version(root)
+        _verify_version_dir(root / f"v{active_version}", active_version)
+        version = active_version + 1
+    else:
+        version = 1
     version_dir = root / f"v{version}"
     if version_dir.exists():
         expected_approval = _approval_value(
@@ -175,8 +195,9 @@ def approve(
             version=version,
         )
         result = _verify_version_dir(version_dir, version)
-        stored_approval = json.loads(
-            (version_dir / "approval.json").read_text(encoding="utf-8")
+        stored_approval = _read_json(
+            version_dir / "approval.json",
+            "approval",
         )
         if stored_approval != expected_approval:
             raise ContractStateError(

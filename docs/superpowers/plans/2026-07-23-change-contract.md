@@ -14,6 +14,7 @@
 - The skill ends after human approval and immutable persistence; it never starts implementation.
 - The approved baseline is versioned and immutable; a changed agreement creates a new version.
 - Workflow immutability detects accidental, partial, and contract-only drift and enforces versioning. Deliberate coordinated mutation of `contract.md` plus `approval.json` is outside the threat model and requires an external trust anchor, which is not included here.
+- Hidden `.vN-*` staging directories and `.current.json-*` pointer temp files left by hard process death are tolerated and ignored; they never become active and do not block retry.
 - YAGNI order is existing code, native/platform capability, installed dependency, a few new lines, then new structure.
 - Every required behavior maps to acceptance evidence.
 - Every proposed new responsibility has a reuse verdict grounded in repository files.

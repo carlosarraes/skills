@@ -92,6 +92,52 @@ class ContractStateTests(unittest.TestCase):
             2,
         )
 
+    def test_approve_rejects_missing_active_version(self):
+        module = load_module()
+        self.root.mkdir()
+        (self.root / "current.json").write_text(
+            json.dumps({"version": 2}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            module.ContractStateError,
+            "missing contract artifact",
+        ):
+            self.approve(module)
+
+        self.assertEqual(
+            json.loads((self.root / "current.json").read_text())["version"],
+            2,
+        )
+        self.assertFalse((self.root / "v3").exists())
+        self.assertEqual(list(self.root.glob(".v3-*")), [])
+
+    def test_approve_rejects_tampered_active_contract(self):
+        module = load_module()
+        self.approve(module)
+        (self.root / "v1" / "contract.md").write_text(
+            "# Contract\n\nTampered\n",
+            encoding="utf-8",
+        )
+        self.draft.write_text("# Contract\n\nBehavior B\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            module.ContractStateError,
+            "hash mismatch",
+        ):
+            self.approve(
+                module,
+                approved_at="2026-07-23T13:00:00-03:00",
+            )
+
+        self.assertEqual(
+            json.loads((self.root / "current.json").read_text())["version"],
+            1,
+        )
+        self.assertFalse((self.root / "v2").exists())
+        self.assertEqual(list(self.root.glob(".v2-*")), [])
+
     def test_explicit_version_remains_verifiable_after_new_approval(self):
         module = load_module()
         self.approve(module)
@@ -122,6 +168,27 @@ class ContractStateTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("current contract must be a JSON object", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_verify_rejects_invalid_utf8_current_json(self):
+        module = load_module()
+        self.root.mkdir()
+        (self.root / "current.json").write_bytes(b"\xff")
+
+        with self.assertRaisesRegex(
+            module.ContractStateError,
+            "invalid UTF-8.*current.json",
+        ):
+            module.verify(self.root)
+
+    def test_cli_verify_rejects_invalid_utf8_current_without_traceback(self):
+        self.root.mkdir()
+        (self.root / "current.json").write_bytes(b"\xff")
+
+        result = self.run_cli("verify", "--root", str(self.root))
+
+        self.assertEqual(result.returncode, 1)
+        self.assertRegex(result.stderr, "invalid UTF-8.*current.json")
         self.assertNotIn("Traceback", result.stderr)
 
     def test_verify_rejects_invalid_current_version_values(self):
@@ -167,6 +234,18 @@ class ContractStateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("approval must be a JSON object", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_verify_rejects_invalid_utf8_approval_json(self):
+        module = load_module()
+        self.approve(module)
+        approval_path = self.root / "v1" / "approval.json"
+        approval_path.write_bytes(b"\xff")
+
+        with self.assertRaisesRegex(
+            module.ContractStateError,
+            "invalid UTF-8.*approval.json",
+        ):
+            module.verify(self.root)
 
     def test_verify_rejects_invalid_required_approval_fields(self):
         module = load_module()
