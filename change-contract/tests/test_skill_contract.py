@@ -10,6 +10,10 @@ SKILL = ROOT / "SKILL.md"
 PROTOCOL = ROOT / "references" / "contract-protocol.md"
 
 
+def normalized(text):
+    return " ".join(text.split()).lower()
+
+
 class SkillContractTests(unittest.TestCase):
     def test_user_invoked_frontmatter(self):
         text = SKILL.read_text(encoding="utf-8")
@@ -38,6 +42,26 @@ class SkillContractTests(unittest.TestCase):
         )
         self.assertIn(
             "python <skill-dir>/scripts/contract_state.py verify",
+            text,
+        )
+
+    def test_producer_uses_the_protocol_branch_directory_root(self):
+        text = SKILL.read_text(encoding="utf-8")
+        flattened = normalized(text)
+
+        self.assertIn(
+            normalized(
+                "derive `<branch-dir>` using the protocol sanitizer already read"
+            ),
+            flattened,
+        )
+        self.assertEqual(
+            text.count("--root <notes-root>/<branch-dir>/contract"),
+            2,
+        )
+        self.assertNotIn("--root <notes-root>/<branch>/contract", text)
+        self.assertNotIn(
+            're.sub(r"[^A-Za-z0-9._-]+"',
             text,
         )
 

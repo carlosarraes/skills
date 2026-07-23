@@ -125,6 +125,118 @@ class ContractIntegrationTests(unittest.TestCase):
             self.assertTrue(payload["valid"])
             self.assertEqual(payload["version"], 1)
 
+    def test_producer_approval_is_discovered_by_consumer_from_foreign_cwd(self):
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            repo = temp / "repo"
+            foreign = temp / "foreign"
+            repo.mkdir()
+            foreign.mkdir()
+            subprocess.run(
+                ["git", "init", "-b", "feature/proj-123"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "eval@example.com"],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Skill Eval"],
+                cwd=repo,
+                check=True,
+            )
+            (repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+            subprocess.run(["git", "add", "seed.txt"], cwd=repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "seed"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            base_sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            (repo / ".notes").mkdir()
+            draft = temp / "contract.md"
+            draft.write_text("# Contract\n\nBehavior B1\n", encoding="utf-8")
+            producer_root = (
+                repo / ".notes" / "feature-proj-123" / "contract"
+            )
+
+            approved = subprocess.run(
+                [
+                    sys.executable,
+                    str(HELPER),
+                    "approve",
+                    "--root",
+                    str(producer_root),
+                    "--draft",
+                    str(draft),
+                    "--ticket",
+                    "PROJ-123",
+                    "--branch",
+                    "feature/proj-123",
+                    "--base-sha",
+                    base_sha,
+                    "--approved-by",
+                    "Carlos",
+                    "--approved-at",
+                    "2026-07-23T12:00:00-03:00",
+                ],
+                cwd=repo,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(approved.returncode, 0, approved.stderr)
+
+            branch = subprocess.run(
+                ["git", "branch", "--show-current"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            consumer_root = (
+                repo / ".notes" / sanitize_branch(branch) / "contract"
+            )
+            self.assertEqual(consumer_root, producer_root)
+            self.assertEqual(
+                json.loads(
+                    (consumer_root / "current.json").read_text(
+                        encoding="utf-8"
+                    )
+                ),
+                {"version": 1},
+            )
+
+            verified = subprocess.run(
+                [
+                    sys.executable,
+                    str(HELPER),
+                    "verify",
+                    "--root",
+                    str(consumer_root),
+                ],
+                cwd=foreign,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            payload = json.loads(verified.stdout)
+            self.assertTrue(payload["valid"])
+            self.assertEqual(payload["version"], 1)
+
     def test_protocol_is_read_before_contract_path_discovery(self):
         self.assert_ordered(
             self.skill,

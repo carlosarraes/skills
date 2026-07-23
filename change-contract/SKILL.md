@@ -59,12 +59,13 @@ draft before presenting it again.
 ### Step 5: Freeze the approved version
 
 Resolve `<skill-dir>` as the absolute directory containing the currently loaded
-`SKILL.md`, independent of the working directory. Write the approved draft to a
-temporary Markdown file, then run:
+`SKILL.md`, independent of the working directory. Derive `<branch-dir>` using
+the protocol sanitizer already read. Write the approved draft to a temporary
+Markdown file, then run:
 
 ```bash
 python <skill-dir>/scripts/contract_state.py approve \
-  --root <notes-root>/<branch>/contract \
+  --root <notes-root>/<branch-dir>/contract \
   --draft <approved-draft> \
   --ticket <ticket> \
   --branch <full-branch> \
@@ -77,7 +78,7 @@ Then run:
 
 ```bash
 python <skill-dir>/scripts/contract_state.py verify \
-  --root <notes-root>/<branch>/contract
+  --root <notes-root>/<branch-dir>/contract
 ```
 
 Report the version, paths, SHA-256, and the recommended next command:
