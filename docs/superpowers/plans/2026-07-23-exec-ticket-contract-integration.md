@@ -58,7 +58,10 @@ parity is auditable.
    assertions, valid fixture v1 integrity, empty initial ledger, and absence of
    contract state in the legacy fixture.
 5. Run three fresh trials per eval using the current `exec-ticket` skill. Each
-   trial gets its own copied repository and persisted neutral runner prompt.
+   trial gets its own repository created exclusively by
+   `exec-ticket/evals/materialize_fixture.py` and a persisted neutral runner
+   prompt. Before dispatch, require the manifest's expected HEAD and a clean
+   `git status --porcelain`.
 6. Grade transcript order and environment outcomes. Record exact
    `task_complete.duration_ms`, final total tokens, rollout/model provenance,
    and sample-specific evidence.
@@ -156,7 +159,10 @@ observed need.
 **Steps:**
 
 1. Rerun all three evals three times with fresh contexts and the same neutral
-   runner shape used by controls.
+   runner shape used by controls. Create every initial Task 3 repository
+   exclusively with `exec-ticket/evals/materialize_fixture.py`; copying
+   preserved post-run repositories is invalid. Before each dispatch, assert
+   the manifest's expected HEAD and a clean worktree.
 2. Grade every assertion against both arms.
 3. Critical treatment requirements:
    - valid contract verified before any test/source write;
@@ -216,4 +222,3 @@ TDD preservation, legacy compatibility, evaluation integrity, and installation.
 Fix every important finding test-first and re-review.
 
 **Complete when:** spec, quality, evaluation, and handoff verdicts all pass.
-

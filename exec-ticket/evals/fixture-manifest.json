@@ -14,5 +14,5 @@
     }
   },
   "schema_version": 1,
-  "treatment_preparation": "Task 3 must invoke materialize_fixture.py for every treatment repository or copy a preserved accepted baseline repository."
+  "treatment_preparation": "Task 3 must use materialize_fixture.py exclusively for every initial treatment repository, then verify the manifest's expected HEAD and a clean worktree before dispatch."
 }

@@ -11,6 +11,15 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 EVALS = ROOT / "evals" / "evals.json"
 MATERIALIZER = ROOT / "evals" / "materialize_fixture.py"
+FIXTURE_README = ROOT / "evals" / "README.md"
+FIXTURE_MANIFEST = ROOT / "evals" / "fixture-manifest.json"
+PLAN = (
+    ROOT.parent
+    / "docs"
+    / "superpowers"
+    / "plans"
+    / "2026-07-23-exec-ticket-contract-integration.md"
+)
 ASSERTION_CONTRACT_PATH = ROOT / "evals" / "assertion_contract.py"
 ASSERTION_SPEC = importlib.util.spec_from_file_location(
     "exec_ticket_assertion_contract",
@@ -53,6 +62,32 @@ class EvalContractTests(unittest.TestCase):
         assertions[0], assertions[1] = assertions[1], assertions[0]
         with self.assertRaisesRegex(ValueError, "assertion order mismatch"):
             ASSERTION_CONTRACT.validate_assertion_order(document)
+
+    def test_task3_requires_exclusive_clean_canonical_materialization(self):
+        readme = FIXTURE_README.read_text(encoding="utf-8")
+        manifest = json.loads(FIXTURE_MANIFEST.read_text(encoding="utf-8"))
+        plan = PLAN.read_text(encoding="utf-8")
+        sources = {
+            "README": readme,
+            "manifest": manifest["treatment_preparation"],
+            "plan": plan,
+        }
+        for label, text in sources.items():
+            with self.subTest(source=label):
+                self.assertNotIn(
+                    "copy a preserved accepted baseline",
+                    text,
+                )
+                self.assertNotIn("or copy one of the preserved", text)
+                for phrase in (
+                    "Task 3",
+                    "materialize_fixture.py",
+                    "exclusively",
+                    "expected HEAD",
+                    "clean worktree",
+                    "before dispatch",
+                ):
+                    self.assertIn(phrase, text)
 
     def test_contract_fixture_is_runnable_and_integrity_valid(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -97,6 +132,16 @@ class EvalContractTests(unittest.TestCase):
                     text=True,
                 ).stdout.strip(),
                 "41958d7a6d6eb7282ebcd58ac657410652097a43",
+            )
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    cwd=repo,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout,
+                "",
             )
             root = repo / ".notes" / "feature-proj-123" / "contract"
             current = json.loads(
@@ -165,6 +210,16 @@ class EvalContractTests(unittest.TestCase):
                     text=True,
                 ).stdout.strip(),
                 "10bf362f358cc49e193dff07e8b1ee13b452a6b3",
+            )
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    cwd=repo,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout,
+                "",
             )
             self.assertFalse((repo / ".notes").exists())
             self.assertFalse((repo / "ai_docs").exists())
