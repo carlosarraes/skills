@@ -2,8 +2,10 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -11,11 +13,34 @@ class ContractStateError(RuntimeError):
     pass
 
 
+_APPROVAL_TEXT_FIELDS = (
+    "approved_at",
+    "approved_by",
+    "base_sha",
+    "branch",
+    "ticket",
+)
+
+
 def _write_json(path: Path, value: dict) -> None:
     path.write_text(
         json.dumps(value, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _write_json_atomic(path: Path, value: dict) -> None:
+    handle, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}-",
+    )
+    os.close(handle)
+    temporary = Path(temporary_name)
+    try:
+        _write_json(temporary, value)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _sha256(path: Path) -> str:
@@ -31,10 +56,94 @@ def _active_version(root: Path) -> int:
     if not current.exists():
         raise ContractStateError(f"missing current contract: {current}")
     value = json.loads(current.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ContractStateError(
+            f"current contract must be a JSON object: {current}"
+        )
     version = value.get("version")
-    if not isinstance(version, int) or version < 1:
+    if type(version) is not int or version < 1:
         raise ContractStateError(f"invalid contract version in {current}")
     return version
+
+
+def _validate_approval(approval: object, version: int) -> dict:
+    if not isinstance(approval, dict):
+        raise ContractStateError("approval must be a JSON object")
+
+    for field in _APPROVAL_TEXT_FIELDS:
+        value = approval.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ContractStateError(f"invalid approval field: {field}")
+
+    digest = approval.get("contract_sha256")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ContractStateError("invalid approval field: contract_sha256")
+
+    approval_version = approval.get("version")
+    if type(approval_version) is not int or approval_version < 1:
+        raise ContractStateError("invalid approval field: version")
+    if approval_version != version:
+        raise ContractStateError(
+            f"approval version mismatch: expected {version}, "
+            f"got {approval_version}"
+        )
+    return approval
+
+
+def _verify_version_dir(version_dir: Path, version: int) -> dict:
+    contract_path = version_dir / "contract.md"
+    approval_path = version_dir / "approval.json"
+    ledger_path = version_dir / "execution-ledger.md"
+
+    for path in (contract_path, approval_path, ledger_path):
+        if not path.is_file():
+            raise ContractStateError(f"missing contract artifact: {path}")
+
+    approval = _validate_approval(
+        json.loads(approval_path.read_text(encoding="utf-8")),
+        version,
+    )
+    expected = approval["contract_sha256"]
+    actual = _sha256(contract_path)
+    if expected != actual:
+        raise ContractStateError(
+            f"contract hash mismatch for v{version}: "
+            f"expected {expected}, got {actual}"
+        )
+
+    return {
+        "approval_path": str(approval_path),
+        "contract_path": str(contract_path),
+        "ledger_path": str(ledger_path),
+        "sha256": actual,
+        "valid": True,
+        "version": version,
+    }
+
+
+def _approval_value(
+    *,
+    approved_at: str,
+    approved_by: str,
+    base_sha: str,
+    branch: str,
+    contract_sha256: str,
+    ticket: str,
+    version: int,
+) -> dict:
+    return {
+        "approved_at": approved_at,
+        "approved_by": approved_by,
+        "base_sha": base_sha,
+        "branch": branch,
+        "contract_sha256": contract_sha256,
+        "ticket": ticket,
+        "version": version,
+    }
 
 
 def approve(
@@ -56,59 +165,79 @@ def approve(
     version = _active_version(root) + 1 if current.exists() else 1
     version_dir = root / f"v{version}"
     if version_dir.exists():
-        raise ContractStateError(f"contract version already exists: {version_dir}")
+        expected_approval = _approval_value(
+            approved_at=approved_at,
+            approved_by=approved_by,
+            base_sha=base_sha,
+            branch=branch,
+            contract_sha256=_sha256(draft),
+            ticket=ticket,
+            version=version,
+        )
+        result = _verify_version_dir(version_dir, version)
+        stored_approval = json.loads(
+            (version_dir / "approval.json").read_text(encoding="utf-8")
+        )
+        if stored_approval != expected_approval:
+            raise ContractStateError(
+                f"contract version already exists: {version_dir}"
+            )
+        _write_json_atomic(current, {"version": version})
+        return result
 
-    version_dir.mkdir()
-    contract_path = version_dir / "contract.md"
-    shutil.copyfile(draft, contract_path)
-    digest = _sha256(contract_path)
-    approval = {
-        "approved_at": approved_at,
-        "approved_by": approved_by,
-        "base_sha": base_sha,
-        "branch": branch,
-        "contract_sha256": digest,
-        "ticket": ticket,
-        "version": version,
-    }
-    _write_json(version_dir / "approval.json", approval)
-    (version_dir / "execution-ledger.md").write_text(
-        "# Execution Ledger\n\n",
-        encoding="utf-8",
+    staging_dir = Path(
+        tempfile.mkdtemp(
+            dir=root,
+            prefix=f".v{version}-",
+        )
     )
-    _write_json(current, {"version": version})
-    return verify(root, version)
+    published = False
+    activated = False
+    try:
+        contract_path = staging_dir / "contract.md"
+        shutil.copyfile(draft, contract_path)
+        digest = _sha256(contract_path)
+        approval = _approval_value(
+            approved_at=approved_at,
+            approved_by=approved_by,
+            base_sha=base_sha,
+            branch=branch,
+            contract_sha256=digest,
+            ticket=ticket,
+            version=version,
+        )
+        _write_json(staging_dir / "approval.json", approval)
+        (staging_dir / "execution-ledger.md").write_text(
+            "# Execution Ledger\n\n",
+            encoding="utf-8",
+        )
+        _verify_version_dir(staging_dir, version)
+
+        os.replace(staging_dir, version_dir)
+        published = True
+        result = _verify_version_dir(version_dir, version)
+        _write_json_atomic(current, {"version": version})
+        activated = True
+        return result
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        if published and not activated:
+            try:
+                active_version = _active_version(root)
+            except (ContractStateError, json.JSONDecodeError, OSError):
+                active_version = None
+            if active_version != version and version_dir.exists():
+                shutil.rmtree(version_dir, ignore_errors=True)
 
 
 def verify(root: Path, version: int | None = None) -> dict:
     root = Path(root)
     resolved_version = version if version is not None else _active_version(root)
+    if type(resolved_version) is not int or resolved_version < 1:
+        raise ContractStateError(f"invalid contract version: {resolved_version}")
     version_dir = root / f"v{resolved_version}"
-    contract_path = version_dir / "contract.md"
-    approval_path = version_dir / "approval.json"
-    ledger_path = version_dir / "execution-ledger.md"
-
-    for path in (contract_path, approval_path, ledger_path):
-        if not path.is_file():
-            raise ContractStateError(f"missing contract artifact: {path}")
-
-    approval = json.loads(approval_path.read_text(encoding="utf-8"))
-    expected = approval.get("contract_sha256")
-    actual = _sha256(contract_path)
-    if expected != actual:
-        raise ContractStateError(
-            f"contract hash mismatch for v{resolved_version}: "
-            f"expected {expected}, got {actual}"
-        )
-
-    return {
-        "approval_path": str(approval_path),
-        "contract_path": str(contract_path),
-        "ledger_path": str(ledger_path),
-        "sha256": actual,
-        "valid": True,
-        "version": resolved_version,
-    }
+    return _verify_version_dir(version_dir, resolved_version)
 
 
 def _parser() -> argparse.ArgumentParser:

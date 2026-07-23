@@ -138,6 +138,11 @@ Every consumer verifies the hash before trusting the contract. The approved
 version directory approved by the human; implementation agents never rewrite an
 approved version.
 
+Workflow immutability detects accidental, partial, and contract-only drift and
+enforces versioning. Deliberate coordinated mutation of `contract.md` plus
+`approval.json` is outside the threat model and requires an external trust
+anchor, which is not included here.
+
 ### `execution-ledger.md`
 
 An append-only account of implementation discoveries. Every bounded deviation
