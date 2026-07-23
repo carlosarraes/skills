@@ -70,6 +70,44 @@ class ContractStateTests(unittest.TestCase):
         )
         self.assertTrue(module.verify(self.root)["valid"])
 
+    def test_identical_approval_retry_returns_active_version(self):
+        module = load_module()
+        first = self.approve(module)
+
+        retried = self.approve(module)
+
+        self.assertEqual(retried, first)
+        self.assertEqual(
+            json.loads((self.root / "current.json").read_text())["version"],
+            1,
+        )
+        self.assertFalse((self.root / "v2").exists())
+
+    def test_changed_approval_metadata_activates_new_version(self):
+        module = load_module()
+        changed_values = {
+            "approved_at": "2026-07-23T13:00:00-03:00",
+            "approved_by": "Ana",
+            "base_sha": "def456",
+            "branch": "feature/proj-124",
+            "ticket": "PROJ-124",
+        }
+
+        for field, value in changed_values.items():
+            with self.subTest(field=field):
+                self.root = Path(self.temp.name) / field
+                self.approve(module)
+
+                result = self.approve(module, **{field: value})
+
+                self.assertEqual(result["version"], 2)
+                self.assertEqual(
+                    json.loads(
+                        (self.root / "current.json").read_text()
+                    )["version"],
+                    2,
+                )
+
     def test_second_approval_preserves_v1_and_activates_v2(self):
         module = load_module()
         first = self.approve(module)
@@ -425,13 +463,11 @@ class ContractStateTests(unittest.TestCase):
 
     def test_interruption_after_pointer_swap_preserves_active_version(self):
         module = load_module()
-        self.approve(module)
-        self.draft.write_text("# Contract\n\nBehavior B\n", encoding="utf-8")
         real_write_json_atomic = module._write_json_atomic
 
         def interrupt_after_swap(path, value):
             real_write_json_atomic(path, value)
-            if value == {"version": 2}:
+            if value == {"version": 1}:
                 raise OSError("interrupted after current publication")
 
         with mock.patch.object(
@@ -443,17 +479,18 @@ class ContractStateTests(unittest.TestCase):
                 OSError,
                 "interrupted after current publication",
             ):
-                self.approve(
-                    module,
-                    approved_at="2026-07-23T13:00:00-03:00",
-                )
+                self.approve(module)
+
+        result = self.approve(module)
 
         self.assertEqual(
             json.loads((self.root / "current.json").read_text())["version"],
-            2,
+            1,
         )
+        self.assertEqual(result["version"], 1)
         self.assertTrue(module.verify(self.root)["valid"])
-        self.assertEqual(module.verify(self.root)["version"], 2)
+        self.assertEqual(module.verify(self.root)["version"], 1)
+        self.assertFalse((self.root / "v2").exists())
 
     def test_verify_rejects_modified_approved_contract(self):
         module = load_module()

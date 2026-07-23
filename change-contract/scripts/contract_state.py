@@ -22,11 +22,14 @@ _APPROVAL_TEXT_FIELDS = (
 )
 
 
+def _json_bytes(value: dict) -> bytes:
+    return (
+        json.dumps(value, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+
+
 def _write_json(path: Path, value: dict) -> None:
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    path.write_bytes(_json_bytes(value))
 
 
 def _write_json_atomic(path: Path, value: dict) -> None:
@@ -177,9 +180,24 @@ def approve(
 
     root.mkdir(parents=True, exist_ok=True)
     current = root / "current.json"
+    draft_digest = _sha256(draft)
     if current.exists():
         active_version = _active_version(root)
-        _verify_version_dir(root / f"v{active_version}", active_version)
+        active_dir = root / f"v{active_version}"
+        active_result = _verify_version_dir(active_dir, active_version)
+        expected_active_approval = _approval_value(
+            approved_at=approved_at,
+            approved_by=approved_by,
+            base_sha=base_sha,
+            branch=branch,
+            contract_sha256=draft_digest,
+            ticket=ticket,
+            version=active_version,
+        )
+        if (active_dir / "approval.json").read_bytes() == _json_bytes(
+            expected_active_approval
+        ):
+            return active_result
         version = active_version + 1
     else:
         version = 1
@@ -190,7 +208,7 @@ def approve(
             approved_by=approved_by,
             base_sha=base_sha,
             branch=branch,
-            contract_sha256=_sha256(draft),
+            contract_sha256=draft_digest,
             ticket=ticket,
             version=version,
         )
