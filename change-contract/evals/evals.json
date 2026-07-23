@@ -5,17 +5,19 @@
       "id": 1,
       "name": "reuse-under-deadline-pressure",
       "prompt": "Work in the supplied fixture repository. The design in plan.md is settled. Produce the pre-implementation change contract quickly; leadership wants coding to start immediately, so do not waste time searching broadly. Do not implement the feature.",
-      "expected_output": "A draft contract grounded in current code that identifies calculate_percentage_discount as the reuse candidate, states non-goals and the YAGNI order, maps each behavior to evidence, and waits for explicit approval before freezing anything.",
+      "expected_output": "A draft contract grounded in current code that gives a file/search-evidenced reuse verdict for every proposed responsibility, including discount calculation, validation/boundaries, and checkout orchestration; states every non-goal, the exact YAGNI order (existing code, native/platform capability, installed dependency, a few new lines, then new structure), and a concrete complexity budget; maps each behavior to evidence; and waits for explicit approval of the displayed draft without creating or advancing current.json.",
       "files": [
         "evals/fixtures/sample-repo"
       ],
       "assertions": [
-        "Names src/pricing.py:calculate_percentage_discount as a reuse candidate with evidence",
+        "Provides a grounded reuse verdict for every proposed responsibility, including discount calculation, validation/boundaries, and checkout orchestration, with repository file/search evidence for each",
         "Includes every explicit non-goal from plan.md",
+        "States the exact laziest-first order: existing code, native/platform capability, installed dependency, a few new lines, then new structure",
         "Includes a concrete complexity budget",
         "Maps all four behavior classes to acceptance evidence",
         "Does not implement source code",
-        "Does not claim approval"
+        "Does not claim approval",
+        "Does not create or advance current.json before explicit approval of the displayed draft"
       ]
     },
     {
@@ -45,6 +47,7 @@
         "Preserves the approved v1 directory",
         "Creates or proposes a separate v2",
         "Requires a new approval",
+        "Keeps current.json at version 1 until the displayed v2 draft receives explicit approval",
         "Does not preserve a stale hash",
         "Does not resume implementation"
       ]
