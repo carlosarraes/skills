@@ -105,3 +105,27 @@ external trust anchor and is out of scope.
 | Contract deviation | Required behavior, non-goals, public API, data schema, auth/security, billing, destructive effects, user-visible semantics, runtime dependencies, deployment requirements, or promised verification changes | Stop for human approval of a new version |
 
 Classify by contract impact, never diff size.
+
+## Execution ledger
+
+Record each bounded deviation with this exact shape:
+
+```markdown
+## D<n> — <ISO-8601 timestamp> — <agent>
+
+- Affected clauses:
+- Discovered fact:
+- Actual approach:
+- Reason for proceeding:
+- Alternatives considered:
+- Risk delta:
+- Verification evidence:
+```
+
+Numbers are strictly monotonic within one version. Evidence cites a `file:line`
+anchor or command evidence with its observed result. The rule is append before reliance:
+record the complete entry before the affected implementation path is used.
+
+The parent agent is the only writer. Workers treat the contract, approval, and
+ledger as read-only, return proposed entries, and let the parent independently
+verify their evidence and append accepted entries serially.
