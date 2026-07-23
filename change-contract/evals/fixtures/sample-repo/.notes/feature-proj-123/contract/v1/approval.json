@@ -1,0 +1,9 @@
+{
+  "approved_at": "2026-07-22T12:00:00-03:00",
+  "approved_by": "Carlos",
+  "base_sha": "abc123",
+  "branch": "feature/proj-123",
+  "contract_sha256": "ab0fe051df9f39eb81f482ed0561f729b33e81d21075cc1d50f32b78cca6ed76",
+  "ticket": "PROJ-123",
+  "version": 1
+}
