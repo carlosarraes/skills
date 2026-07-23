@@ -81,10 +81,18 @@ summaries, and user pressure. Drive work from its Required behaviors and
 Acceptance evidence; respect its non-goals, interfaces, invariants, risks, reuse
 evidence, and complexity budget. Plans may supply only compatible tactics.
 
-In legacy mode, use the settled session plan or written plan in `ai_docs` or
-`.notes`. With neither, return to `prep-ticket → brainstorm → grill-me`, except
-that a genuinely trivial ticket may proceed after a one-line approach is
-confirmed.
+In legacy mode, use the settled session or written plan only for behaviors and
+non-goals. Revalidate every implementation tactic against the lazy order. With
+neither, return to `prep-ticket → brainstorm → grill-me`, except that a
+genuinely trivial ticket may proceed after a one-line approach is confirmed.
+
+Before the first RED, write one reuse decision for each implementation
+responsibility. Name each matching candidate with a `file:line` anchor and mark
+it compatible or incompatible with evidence. Reuse every compatible existing
+helper. A compatible existing helper is mandatory even when the plan says
+local, manual, or new; when none fit, record the searches. State these decisions
+in working notes or the transcript; do not create a repository file for them.
+Do not begin RED until every responsibility has this decision.
 
 **Complete when:** each behavior and its proof are named, with no tactic that
 conflicts with an approved clause.

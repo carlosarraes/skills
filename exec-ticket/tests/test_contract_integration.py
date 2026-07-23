@@ -323,6 +323,29 @@ class ContractIntegrationTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), self.skill_normalized)
 
+    def test_legacy_plan_tactics_do_not_override_existing_helper_reuse(self):
+        for phrase in (
+            "In legacy mode, use the settled session or written plan only for "
+            "behaviors and non-goals",
+            "Revalidate every implementation tactic against the lazy order",
+            "Before the first RED, write one reuse decision for each "
+            "implementation responsibility",
+            "Name each matching candidate with a `file:line` anchor and mark "
+            "it compatible or incompatible with evidence",
+            "Reuse every compatible existing helper",
+            "A compatible existing helper is mandatory even when the plan "
+            "says local, manual, or new",
+            "State these decisions in working notes or the transcript; do not "
+            "create a repository file for them",
+            "Do not begin RED until every responsibility has this decision",
+        ):
+            self.assertIn(normalized(phrase), self.skill_normalized)
+        self.assert_ordered(
+            self.skill,
+            "Before the first RED, write one reuse decision",
+            "For each behavior:",
+        )
+
     def test_skill_is_ordered_and_compact(self):
         self.assert_ordered(
             self.skill,
