@@ -6,9 +6,17 @@ checking an approved change contract.
 
 ## Storage
 
-Use `.notes/<branch>/contract/` when `.notes/` exists; otherwise use
-`ai_docs/<branch>/contract/`. Sanitize the branch only for its directory name.
-Each approved version lives in `vN/`; `current.json` names the active version.
+Derive `<branch-dir>` from the full branch exactly once:
+
+1. `value = re.sub(r"[^A-Za-z0-9._-]+", "-", full_branch)`
+2. `value = re.sub(r"-+", "-", value).strip("-")`
+3. Preserve ASCII letter case and reject the result when it is empty, `.` or
+   `..`.
+
+Sanitize only the directory name; keep the unsanitized full branch in contract
+identity. Use `.notes/<branch-dir>/contract/` when `.notes/` exists; otherwise
+use `ai_docs/<branch-dir>/contract/`. Each approved version lives in `vN/`;
+`current.json` names the active version.
 
 ## Contract template
 
@@ -106,6 +114,12 @@ external trust anchor and is out of scope.
 
 Classify by contract impact, never diff size.
 
+Read-only inspection, commands, and tests may discover and prove drift. For a
+bounded deviation, append the verified entry before an implementation or source
+path relies on it—not before discovery. For a contract deviation, stop before
+writing tests or source that encode the changed agreement; existing and
+read-only tests remain allowed, and the deviation never enters the ledger.
+
 ## Execution ledger
 
 Record each bounded deviation with this exact shape:
@@ -123,8 +137,8 @@ Record each bounded deviation with this exact shape:
 ```
 
 Numbers are strictly monotonic within one version. Evidence cites a `file:line`
-anchor or command evidence with its observed result. The rule is append before reliance:
-record the complete entry before the affected implementation path is used.
+anchor or command evidence with its observed result. Append the complete entry
+before the affected implementation path is used.
 
 The parent agent is the only writer. Workers treat the contract, approval, and
 ledger as read-only, return proposed entries, and let the parent independently

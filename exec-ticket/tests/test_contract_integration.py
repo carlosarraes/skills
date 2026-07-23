@@ -1,84 +1,167 @@
+import json
+import re
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
 SKILL = ROOT / "SKILL.md"
-PROTOCOL = ROOT.parent / "change-contract" / "references" / "contract-protocol.md"
+PROTOCOL_ROOT = ROOT.parent / "change-contract"
+PROTOCOL = PROTOCOL_ROOT / "references" / "contract-protocol.md"
+HELPER = PROTOCOL_ROOT / "scripts" / "contract_state.py"
+MATERIALIZER = ROOT / "evals" / "materialize_fixture.py"
+
+
+def sanitize_branch(branch):
+    value = re.sub(r"[^A-Za-z0-9._-]+", "-", branch)
+    value = re.sub(r"-+", "-", value).strip("-")
+    if not value or value in {".", ".."}:
+        raise ValueError("unsafe empty branch directory")
+    return value
+
+
+def normalized(text):
+    return " ".join(text.split()).lower()
 
 
 class ContractIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.skill = SKILL.read_text(encoding="utf-8")
         self.protocol = PROTOCOL.read_text(encoding="utf-8")
+        self.skill_normalized = normalized(self.skill)
+        self.protocol_normalized = normalized(self.protocol)
 
     def assert_ordered(self, text, *phrases):
-        positions = [text.index(phrase) for phrase in phrases]
+        text = normalized(text)
+        positions = [text.index(normalized(phrase)) for phrase in phrases]
         self.assertEqual(positions, sorted(positions), phrases)
 
-    def test_contract_gate_follows_identity_and_precedes_implementation_writes(self):
-        self.assert_ordered(
-            self.skill,
-            "### Step 1: Resolve the ticket and branch",
-            "### Step 2: Gate on contract state before implementation writes",
-            "### Step 3: Load the implementation authority",
-            "### Step 4: Build one required behavior at a time",
+    def materialize_contract_repo(self, destination):
+        subprocess.run(
+            [
+                sys.executable,
+                str(MATERIALIZER),
+                "contract-repo",
+                str(destination),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
-        self.assertIn(
-            "before any source, test, contract, or ledger write",
-            self.skill,
-        )
+
+    def test_protocol_defines_one_deterministic_branch_sanitizer(self):
         self.assertEqual(
-            self.skill.count("### Step "),
-            self.skill.count("**Complete when:**"),
+            {
+                branch: sanitize_branch(branch)
+                for branch in (
+                    "feature/proj-123",
+                    "Feature//MON 123",
+                    "-release---v1.2_hotfix-",
+                )
+            },
+            {
+                "feature/proj-123": "feature-proj-123",
+                "Feature//MON 123": "Feature-PROJ-123",
+                "-release---v1.2_hotfix-": "release-v1.2_hotfix",
+            },
         )
-
-    def test_present_current_requires_protocol_and_helper_verification(self):
+        for branch in ("///", "---", ".", ".."):
+            with self.subTest(branch=branch), self.assertRaises(ValueError):
+                sanitize_branch(branch)
         for phrase in (
-            "If `current.json` exists, read the full shared protocol",
-            "scripts/contract_state.py verify",
-            "A present but malformed, incomplete, or unverifiable `current.json`",
-            "hard stop",
-            "never fall back to the legacy flow",
+            're.sub(r"[^A-Za-z0-9._-]+", "-", full_branch)',
+            're.sub(r"-+", "-", value).strip("-")',
         ):
-            self.assertIn(phrase, self.skill)
+            self.assertEqual(self.protocol.count(phrase), 1)
+        for phrase in (
+            "preserve ASCII letter case",
+            "reject the result when it is empty, `.` or `..`",
+        ):
+            self.assertIn(normalized(phrase), self.protocol_normalized)
+
+    def test_materialized_fixture_resolves_and_verifies_from_foreign_cwd(self):
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            repo = temp / "repo"
+            foreign = temp / "foreign"
+            foreign.mkdir()
+            self.materialize_contract_repo(repo)
+            branch = subprocess.run(
+                ["git", "branch", "--show-current"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            contract_root = (
+                repo / ".notes" / sanitize_branch(branch) / "contract"
+            )
+
+            self.assertEqual(branch, "feature/proj-123")
+            self.assertEqual(
+                json.loads(
+                    (contract_root / "current.json").read_text(encoding="utf-8")
+                ),
+                {"version": 1},
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(HELPER),
+                    "verify",
+                    "--root",
+                    str(contract_root),
+                ],
+                cwd=foreign,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["valid"])
+            self.assertEqual(payload["version"], 1)
+
+    def test_protocol_is_read_before_contract_path_discovery(self):
         self.assert_ordered(
             self.skill,
-            "If `current.json` exists, read the full shared protocol",
+            "absolute directory containing this loaded `SKILL.md`",
+            "Read the sibling protocol completely",
+            "Sanitize the full branch",
+            "Look for `current.json`",
             "scripts/contract_state.py verify",
-            "Only after every check passes",
         )
 
-    def test_verified_identity_and_base_ancestry_are_required(self):
+    def test_present_pointer_requires_full_identity_and_integrity_gate(self):
         for phrase in (
-            "active version in `current.json`",
-            "approval branch exactly matches the full current branch",
-            "approval ticket exactly matches the normalized ticket",
-            "approval version matches the active version",
+            "A present but malformed, incomplete, or unverifiable `current.json`",
+            "never legacy fallback",
+            "approval branch equals the full current branch",
+            "approval ticket equals the normalized ticket",
+            "approval version equals the active version",
             "git merge-base --is-ancestor <base-sha> HEAD",
-            "approved base SHA is an ancestor of `HEAD`",
         ):
-            self.assertIn(phrase, self.skill)
+            self.assertIn(normalized(phrase), self.skill_normalized)
 
-    def test_approved_contract_drives_tdd_and_outranks_prior_context(self):
+    def test_contract_authority_drives_tdd_and_drift_boundaries(self):
         for phrase in (
-            "approved contract outranks session memory",
-            "older plans",
-            "user pressure",
+            "approved contract outranks session memory, older plans",
             "Required behaviors",
             "Acceptance evidence",
             "RED → GREEN → REFACTOR",
+            "Read-only tests and commands may discover and prove a deviation",
+            "appends the complete `D<n>` before implementation relies",
+            "stop before writing tests or source that encode the changed agreement",
+            "never put a contract deviation in the ledger",
+            "`/change-contract`",
         ):
-            self.assertIn(phrase, self.skill)
-        self.assert_ordered(
-            self.skill,
-            "Required behaviors",
-            "RED → GREEN → REFACTOR",
-        )
+            self.assertIn(normalized(phrase), self.skill_normalized)
 
-    def test_protocol_defines_the_canonical_parent_owned_ledger(self):
+    def test_protocol_owns_ledger_shape_and_serialization(self):
         for phrase in (
-            "## Execution ledger",
             "## D<n> — <ISO-8601 timestamp> — <agent>",
             "- Affected clauses:",
             "- Discovered fact:",
@@ -90,59 +173,58 @@ class ContractIntegrationTests(unittest.TestCase):
             "strictly monotonic",
             "`file:line`",
             "command evidence",
-            "append before reliance",
             "parent agent is the only writer",
         ):
-            self.assertIn(phrase, self.protocol)
+            self.assertIn(normalized(phrase), self.protocol_normalized)
 
-    def test_drift_classes_have_distinct_write_boundaries(self):
-        for phrase in (
-            "Implementation details need no ledger entry",
-            "complete proposed ledger entry",
-            "independently verify its cited facts and evidence",
-            "parent appends the complete next `D<n>`",
-            "before the affected path is used",
-            "Contract deviations are a hard stop",
-            "before any affected source, test, or ledger write",
-            "never append a contract deviation",
-            "`/change-contract`",
-        ):
-            self.assertIn(phrase, self.skill)
-
-    def test_subagents_are_read_only_contract_workers(self):
+    def test_subagents_receive_read_only_contract_context(self):
         for phrase in (
             "contract path, approved hash, ledger path, and drift rules",
             "read-only",
-            "return proposed ledger entries",
-            "Only the parent appends",
-            "serially",
+            "return proposed entries",
+            "parent independently verifies",
+            "appends serially",
         ):
-            self.assertIn(phrase, self.skill)
+            self.assertIn(normalized(phrase), self.skill_normalized)
 
-    def test_legacy_flow_and_reports_remain_explicit(self):
+    def test_contract_and_legacy_reports_have_separate_scopes(self):
+        contract_start = self.skill.index("In contract mode, report:")
+        legacy_start = self.skill.index("In legacy mode, report:")
+        report_end = self.skill.index("Then stop", legacy_start)
+        contract_report = self.skill[contract_start:legacy_start]
+        legacy_report = self.skill[legacy_start:report_end]
+
+        self.assertIn("Contract version", contract_report)
+        self.assertIn("Ledger entry count", contract_report)
+        self.assertNotIn("Contract version", legacy_report)
+        self.assertNotIn("Ledger entry count", legacy_report)
+        self.assertIn("Do not invent contract metadata", legacy_report)
+
+    def test_legacy_flow_preserves_original_tdd_and_report(self):
         for phrase in (
-            "If `current.json` does not exist, use the legacy flow",
-            "do not request, fabricate, or create contract state",
+            "When `current.json` is absent, use legacy mode",
+            "do not create or request contract state",
             "Ticket and branch",
             "Behaviors implemented, with the test that pins each",
             "Files changed",
             "Suite result",
-            "Contract version",
-            "Ledger entry count",
         ):
-            self.assertIn(phrase, self.skill)
-        self.assertIn(
-            "Do not invent contract metadata in the legacy report",
-            self.skill,
-        )
+            self.assertIn(normalized(phrase), self.skill_normalized)
 
-    def test_sibling_contract_tools_are_resolved_independently_of_cwd(self):
-        for phrase in (
-            "absolute directory containing this loaded `SKILL.md`",
-            "`<exec-ticket-skill-dir>/../change-contract`",
-            "independent of the consumer repository working directory",
-        ):
-            self.assertIn(phrase, self.skill)
+    def test_skill_is_ordered_and_compact(self):
+        self.assert_ordered(
+            self.skill,
+            "### Step 1: Resolve the ticket and branch",
+            "### Step 2: Resolve and verify contract state",
+            "### Step 3: Load the authority",
+            "### Step 4: Implement one behavior at a time",
+            "### Step 5: Verify and report",
+        )
+        self.assertEqual(
+            self.skill.count("### Step "),
+            self.skill.count("**Complete when:**"),
+        )
+        self.assertLessEqual(len(self.skill.split()), 1200)
 
 
 if __name__ == "__main__":
