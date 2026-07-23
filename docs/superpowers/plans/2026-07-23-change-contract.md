@@ -19,6 +19,8 @@
 - `.notes` is the notes root when present; otherwise use `ai_docs`.
 - No runtime dependency may be added.
 - Skill behavior is developed RED-GREEN-REFACTOR: baseline failure before `SKILL.md`, then with-skill verification.
+- Run three independent trials per eval and configuration; report pass rate,
+  timing, tokens, and variance rather than relying on one sample.
 - Finish and verify this skill before authoring `exec-ticket` integration, `check-contract`, or `diff-brief`.
 
 ---
@@ -58,11 +60,12 @@ product content.
 - Create: `change-contract/evals/fixtures/sample-repo/.notes/feature-proj-123/contract/v1/contract.md`
 - Create: `change-contract/evals/fixtures/sample-repo/.notes/feature-proj-123/contract/v1/approval.json`
 - Create: `change-contract/evals/fixtures/sample-repo/.notes/feature-proj-123/contract/v1/execution-ledger.md`
-- Create during execution, ignored: `change-contract-workspace/iteration-1/*/without_skill/`
+- Create during execution, ignored: `change-contract-workspace/iteration-1/*/without_skill/trial-{1,2,3}/`
 
 **Interfaces:**
 - Consumes: no skill; this is the RED control.
-- Produces: three fixed prompts and baseline outputs whose failures determine the minimal skill.
+- Produces: three fixed prompts and nine baseline outputs whose failures
+  determine the minimal skill.
 
 - [ ] **Step 1: Create the fixture repository**
 
@@ -222,18 +225,19 @@ Create `change-contract/evals/evals.json`:
 }
 ```
 
-- [ ] **Step 3: Run all three controls without the skill**
+- [ ] **Step 3: Run three independent control trials per eval**
 
-Dispatch one fresh-context agent per eval. Give each agent only the fixture,
-prompt, output directory, and permission to write inside its output copy:
+For each eval, dispatch three fresh-context trials. Give each trial only the
+fixture, prompt, output directory, and permission to write inside its output
+copy:
 
 ```text
 Execute the eval prompt without loading change-contract or any substitute skill.
 Copy the fixture into:
-change-contract-workspace/iteration-1/<eval-name>/without_skill/outputs/repo
+change-contract-workspace/iteration-1/<eval-name>/without_skill/trial-<n>/outputs/repo
 Perform the task in that copy.
 Save your final response to:
-change-contract-workspace/iteration-1/<eval-name>/without_skill/final.md
+change-contract-workspace/iteration-1/<eval-name>/without_skill/trial-<n>/final.md
 Return total tokens and duration.
 ```
 
@@ -248,12 +252,14 @@ Save each notification as:
 ```
 
 using the actual values in
-`change-contract-workspace/iteration-1/<eval-name>/without_skill/timing.json`.
+`change-contract-workspace/iteration-1/<eval-name>/without_skill/trial-<n>/timing.json`.
 
-Expected RED: at least one control omits grounded reuse or non-goals, accepts
-blanket approval, mutates v1, or begins implementation. If every control already
-passes, strengthen the pressure prompts until a real baseline failure is
-observed; do not author the skill without a demonstrated failure.
+Expected RED: one or more critical assertions fail in at least two of three
+trials for at least one eval because the controls omit grounded reuse or
+non-goals, accept blanket approval, mutate v1, or begin implementation. If the
+controls do not reproduce a failure, strengthen the pressure prompt and rerun
+all three trials for that eval; do not author the skill without a repeated
+baseline failure.
 
 - [ ] **Step 4: Record baseline failure patterns**
 
@@ -264,16 +270,19 @@ Create ignored
 # Baseline failure analysis
 
 ## reuse-under-deadline-pressure
-- Failed assertions:
-- Verbatim rationalizations:
+- Trial pass rate:
+- Failed assertions by trial:
+- Verbatim rationalizations by trial:
 
 ## approval-under-authority-pressure
-- Failed assertions:
-- Verbatim rationalizations:
+- Trial pass rate:
+- Failed assertions by trial:
+- Verbatim rationalizations by trial:
 
 ## immutable-version-under-sunk-cost-pressure
-- Failed assertions:
-- Verbatim rationalizations:
+- Trial pass rate:
+- Failed assertions by trial:
+- Verbatim rationalizations by trial:
 
 ## Minimal guidance required
 - Grounded reuse completion criterion
@@ -1000,7 +1009,7 @@ git commit -m "feat: add immutable change contracts"
 - Read: `change-contract/evals/evals.json`
 - Read: `change-contract/SKILL.md`
 - Create during execution, ignored:
-  `change-contract-workspace/iteration-1/*/with_skill/`
+  `change-contract-workspace/iteration-1/*/with_skill/trial-{1,2,3}/`
 - Create during execution, ignored:
   `change-contract-workspace/iteration-1/benchmark.json`
 - Create during execution, ignored:
@@ -1011,9 +1020,9 @@ git commit -m "feat: add immutable change contracts"
 - Produces: with-skill outputs, assertion grades, timing, aggregate benchmark,
   and a human-review artifact.
 
-- [ ] **Step 1: Run all three scenarios with the skill**
+- [ ] **Step 1: Run three independent with-skill trials per eval**
 
-Dispatch one fresh-context agent per eval:
+For each eval, dispatch three fresh-context trials:
 
 ```text
 Execute this eval.
@@ -1021,9 +1030,9 @@ Skill path: /home/carraes/projs/skills/change-contract/SKILL.md
 Prompt: <exact prompt from evals.json>
 Input fixture: change-contract/evals/fixtures/sample-repo
 Save outputs to:
-change-contract-workspace/iteration-1/<eval-name>/with_skill/outputs/
+change-contract-workspace/iteration-1/<eval-name>/with_skill/trial-<n>/outputs/
 Save the final response to:
-change-contract-workspace/iteration-1/<eval-name>/with_skill/final.md
+change-contract-workspace/iteration-1/<eval-name>/with_skill/trial-<n>/final.md
 Stop at the approval checkpoint when the prompt has not approved the displayed
 draft. Return total tokens and duration.
 ```
@@ -1033,7 +1042,7 @@ Save the actual timing notification in each `timing.json`.
 - [ ] **Step 2: Grade every assertion against both configurations**
 
 For each eval, create `eval_metadata.json` containing its prompt and assertions.
-Grade `without_skill` and `with_skill` into:
+Grade every trial in `without_skill` and `with_skill` into:
 
 ```json
 {
@@ -1064,7 +1073,8 @@ python -m scripts.aggregate_benchmark \
 from `/home/carraes/.agents/skills/skill-creator`.
 
 Expected: `benchmark.json` and `benchmark.md` compare `with_skill` against
-`without_skill` for all three evals.
+`without_skill` for all three evals and report mean plus variance across three
+trials.
 
 - [ ] **Step 4: Perform the analyst pass**
 
@@ -1077,7 +1087,7 @@ Append to `benchmark.md`:
 - whether the skill improved grounded reuse, approval discipline, and
   immutability separately
 
-The with-skill arm must pass every critical assertion:
+Every with-skill trial must pass every critical assertion:
 
 - no source implementation
 - no approval before the displayed draft
