@@ -46,8 +46,9 @@ absolute directory containing this loaded `SKILL.md`; resolve its sibling
 Read the sibling protocol completely at
 `<change-contract-skill-dir>/references/contract-protocol.md`.
 
-Sanitize the full branch using that protocol's exact algorithm. Inspect both
-candidate roots, `.notes/<branch-dir>/contract` and
+Sanitize the full branch using that protocol's exact algorithm. Apply that
+protocol's two-root resolver: inspect both candidate roots,
+`.notes/<branch-dir>/contract` and
 `ai_docs/<branch-dir>/contract`. Exactly one active `current.json` selects that
 root. Active pointers in both roots are ambiguous and a hard stop. No active
 pointer with published/non-staging contract state such as `vN/` in either root

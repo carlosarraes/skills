@@ -248,11 +248,15 @@ class ContractIntegrationTests(unittest.TestCase):
         )
 
     def test_consumer_discovery_inspects_both_contract_roots(self):
+        self.assertIn(
+            normalized("Apply that protocol's two-root resolver"),
+            self.skill_normalized,
+        )
         for phrase in (
-            "Consumers inspect both candidate roots",
+            "Producers and consumers inspect both candidate roots",
             "`.notes/<branch-dir>/contract/`",
             "`ai_docs/<branch-dir>/contract/`",
-            "before selecting contract or legacy mode",
+            "before selecting a root or legacy mode",
         ):
             self.assertIn(normalized(phrase), self.protocol_normalized)
 

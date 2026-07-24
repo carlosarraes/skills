@@ -14,17 +14,25 @@ Derive `<branch-dir>` from the full branch exactly once:
    `..`.
 
 Sanitize only the directory name; keep the unsanitized full branch in contract
-identity. Use `.notes/<branch-dir>/contract/` when `.notes/` exists; otherwise
-use `ai_docs/<branch-dir>/contract/`. Each approved version lives in `vN/`;
-`current.json` names the active version.
+identity. Each approved version lives in `vN/`; `current.json` names the active
+version.
 
-Consumers inspect both candidate roots, `.notes/<branch-dir>/contract/` and
-`ai_docs/<branch-dir>/contract/`, before selecting contract or legacy mode.
-Exactly one `current.json` selects its root. Pointers in both roots are
-ambiguous and a hard stop. With no pointer, published/non-staging contract state
-such as `vN/` in either root is partial or orphaned and a hard stop. Ignore
-hidden staging artifacts `.vN-*` and `.current.json-*`; only otherwise empty
-roots enter legacy behavior.
+Producers and consumers inspect both candidate roots,
+`.notes/<branch-dir>/contract/` and `ai_docs/<branch-dir>/contract/`, before
+selecting a root or legacy mode:
+
+1. Exactly one `current.json` selects its root for reads and future approvals.
+   Continue that root's version lineage even when the other notes directory
+   later appears.
+2. Pointers in both roots are ambiguous and a hard stop.
+3. With no pointer, published/non-staging contract state such as `vN/` in either
+   root is partial or orphaned and a hard stop.
+4. Only true no-state creation chooses `.notes` when it exists, otherwise
+   `ai_docs`. Consumers enter legacy mode for that same no-state result without
+   creating or requesting contract state.
+
+Ignore hidden staging artifacts `.vN-*` and `.current.json-*` while resolving;
+they neither select a root nor count as published state.
 
 ## Contract template
 

@@ -14,14 +14,17 @@ contract shape, YAGNI order, storage, approval integrity, and drift vocabulary.
 
 ### Step 1: Resolve the agreement
 
-Resolve the ticket, full branch, full base SHA, settled design, repository rules,
-and notes root. A design is settled when brainstorming/grilling has one chosen
-approach and no open product, API, security, or data decisions.
+Resolve the ticket, full branch, full base SHA, settled design, and repository
+rules. Derive `<branch-dir>` using the protocol sanitizer already read, then
+resolve `<contract-root>` using the protocol's two-root resolver. A design is
+settled when brainstorming/grilling has one chosen approach and no open product,
+API, security, or data decisions.
 
-When the design is not settled, return to brainstorming or grilling.
+When the design is not settled, return to brainstorming or grilling. Stop on
+ambiguous or orphaned contract state instead of choosing a root.
 
 **Complete when:** every identity field has a concrete value and the settled
-design source is named.
+design source and resolved contract root are named.
 
 ### Step 2: Ground the change
 
@@ -59,13 +62,13 @@ draft before presenting it again.
 ### Step 5: Freeze the approved version
 
 Resolve `<skill-dir>` as the absolute directory containing the currently loaded
-`SKILL.md`, independent of the working directory. Derive `<branch-dir>` using
-the protocol sanitizer already read. Write the approved draft to a temporary
-Markdown file, then run:
+`SKILL.md`, independent of the working directory. Use the resolved
+`<contract-root>` from Step 1. Write the approved draft to a temporary Markdown
+file, then run:
 
 ```bash
 python <skill-dir>/scripts/contract_state.py approve \
-  --root <notes-root>/<branch-dir>/contract \
+  --root <contract-root> \
   --draft <approved-draft> \
   --ticket <ticket> \
   --branch <full-branch> \
@@ -78,7 +81,7 @@ Then run:
 
 ```bash
 python <skill-dir>/scripts/contract_state.py verify \
-  --root <notes-root>/<branch-dir>/contract
+  --root <contract-root>
 ```
 
 Report the version, paths, SHA-256, and the recommended next command:

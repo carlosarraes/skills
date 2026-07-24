@@ -45,7 +45,7 @@ class SkillContractTests(unittest.TestCase):
             text,
         )
 
-    def test_producer_uses_the_protocol_branch_directory_root(self):
+    def test_producer_uses_the_resolved_protocol_contract_root(self):
         text = SKILL.read_text(encoding="utf-8")
         flattened = normalized(text)
 
@@ -55,15 +55,39 @@ class SkillContractTests(unittest.TestCase):
             ),
             flattened,
         )
+        self.assertIn(
+            normalized(
+                "resolve `<contract-root>` using the protocol's two-root "
+                "resolver"
+            ),
+            flattened,
+        )
         self.assertEqual(
-            text.count("--root <notes-root>/<branch-dir>/contract"),
+            text.count("--root <contract-root>"),
             2,
         )
+        self.assertNotIn("--root <notes-root>", text)
         self.assertNotIn("--root <notes-root>/<branch>/contract", text)
         self.assertNotIn(
             're.sub(r"[^A-Za-z0-9._-]+"',
             text,
         )
+
+    def test_protocol_has_one_producer_and_consumer_root_resolver(self):
+        text = PROTOCOL.read_text(encoding="utf-8")
+        flattened = normalized(text)
+
+        for phrase in (
+            "Producers and consumers inspect both candidate roots",
+            "Exactly one `current.json` selects its root for reads and future "
+            "approvals",
+            "Pointers in both roots are ambiguous and a hard stop",
+            "With no pointer, published/non-staging contract state",
+            "Only true no-state creation chooses `.notes` when it exists, "
+            "otherwise `ai_docs`",
+            "Ignore hidden staging artifacts `.vN-*` and `.current.json-*`",
+        ):
+            self.assertIn(normalized(phrase), flattened)
 
     def test_state_helper_runs_from_a_foreign_working_directory(self):
         helper = ROOT / "scripts" / "contract_state.py"
