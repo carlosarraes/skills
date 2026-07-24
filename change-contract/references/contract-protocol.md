@@ -156,6 +156,24 @@ Numbers are strictly monotonic within one version. Evidence cites a `file:line`
 anchor or command evidence with its observed result. Append the complete entry
 before the affected implementation path is used.
 
+A D entry may add one optional replay declaration immediately after its human
+verification evidence:
+
+```markdown
+- Replay probe: `{"kind":"python-call-v1","module":"src.pricing","callable":"validate_percentage","cases":[{"args":[0],"expect":"returns"},{"args":[-1],"expect":"raises","exception":"ValueError"}]}`
+```
+
+The backticked value is canonical compact JSON data in the field order shown,
+never shell, argv, or Python code. Version 1 accepts exactly the
+`python-call-v1` object fields shown. `module` is one or more dotted Python
+identifiers, `callable` is one Python identifier, `cases` is a list, and each
+`args` value is a list of positional JSON scalars. A case has exactly one of
+these shapes: `{"args":[...],"expect":"returns"}` or
+`{"args":[...],"expect":"raises","exception":"ValueError"}`. No other
+exception is supported. Unknown kinds, fields, or expectation shapes hard-stop.
+The runtime owns the fixed no-shell runner that consumes this data; neither the
+ledger nor the model supplies a command.
+
 The parent agent is the only writer. Workers treat the contract, approval, and
 ledger as read-only, return proposed entries, and let the parent independently
 verify their evidence and append accepted entries serially.

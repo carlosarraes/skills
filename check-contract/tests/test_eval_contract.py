@@ -33,6 +33,32 @@ RUNNER_SPEC.loader.exec_module(RUNNER)
 sys.path.pop(0)
 CONTRACT_ROOT = Path(".notes/feature-proj-123/contract")
 VERSION = CONTRACT_ROOT / "v1"
+DOCUMENTED_DRIFT_OVERLAY = (
+    ROOT
+    / "evals"
+    / "fixtures"
+    / "documented-drift"
+    / "overlay"
+)
+REPLAY_PROBE = {
+    "kind": "python-call-v1",
+    "module": "src.pricing",
+    "callable": "validate_percentage",
+    "cases": [
+        {"args": [0], "expect": "returns"},
+        {"args": [100], "expect": "returns"},
+        {
+            "args": [-1],
+            "expect": "raises",
+            "exception": "ValueError",
+        },
+        {
+            "args": [101],
+            "expect": "raises",
+            "exception": "ValueError",
+        },
+    ],
+}
 
 
 def git(repo, *args):
@@ -424,6 +450,39 @@ class EvalContractTests(unittest.TestCase):
         self.assertFalse((target_b / VERSION / "check-report.md").exists())
         summary = target_b / ".worker-results/implementation-summary.md"
         self.assertIn("B1, B2, B3, and B4 all pass", summary.read_text())
+
+    def test_documented_drift_declares_exact_replay_probe(self):
+        relative = VERSION / "execution-ledger.md"
+        source = DOCUMENTED_DRIFT_OVERLAY / relative
+        materialized = (
+            Path(
+                self.outputs["documented-drift"]["targets"]["target"][
+                    "destination"
+                ]
+            )
+            / relative
+        )
+
+        for ledger in (source, materialized):
+            lines = [
+                line
+                for line in ledger.read_text(encoding="utf-8").splitlines()
+                if line.startswith("- Replay probe: ")
+            ]
+            self.assertEqual(len(lines), 1)
+            prefix = "- Replay probe: `"
+            self.assertTrue(lines[0].startswith(prefix))
+            self.assertTrue(lines[0].endswith("`"))
+            encoded = lines[0][len(prefix) : -1]
+            self.assertEqual(
+                encoded,
+                json.dumps(
+                    REPLAY_PROBE,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                ),
+            )
+            self.assertEqual(json.loads(encoded), REPLAY_PROBE)
 
     def test_fixture_behavior_is_green_and_encodes_scenarios(self):
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}

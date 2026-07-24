@@ -58,7 +58,7 @@
     "documented-drift": {
       "targets": {
         "target": {
-          "expected_head": "5fb9f31bc13d312753668bca15678e44cc9f1c0a",
+          "expected_head": "dcb517d0269bbead400bce8f6a9dea513cd6b2b5",
           "ledger": "d1",
           "inventory": [
             {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
