@@ -1,4 +1,5 @@
 import hashlib
+import ctypes
 import fcntl
 import errno
 import gc
@@ -1277,6 +1278,9 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             original_state = store.load(started.session)
             session_module = sys.modules["audit_session"]
             original_close = session_module.os.close
+            original_owned_close = (
+                session_module._close_owned_descriptor
+            )
             close_paused = threading.Event()
             release_close = threading.Event()
             delayed = False
@@ -1288,14 +1292,14 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                     close_paused.set()
                     if not release_close.wait(2):
                         raise AssertionError("lease close was not released")
-                return original_close(value)
+                return original_owned_close(value)
 
             closer = threading.Thread(target=lease.close)
             child_result_read, child_result_write = os.pipe()
             child_hold_read, child_hold_write = os.pipe()
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 paused_close,
             ):
                 closer.start()
@@ -1353,7 +1357,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             descriptor = lease._descriptor
             original_state = store.load(started.session)
             session_module = sys.modules["audit_session"]
-            original_close = session_module.os.close
+            original_close = session_module._close_owned_descriptor
             close_paused = threading.Event()
             release_close = threading.Event()
             delayed = False
@@ -1369,8 +1373,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 return original_close(value)
 
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 paused_close,
             ):
                 closer = threading.Thread(target=lease.close)
@@ -1538,7 +1542,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             lease = store.claim_lease(started.session)
             original_state = store.load(started.session)
             session_module = sys.modules["audit_session"]
-            original_close = session_module.os.close
+            original_close = session_module._close_owned_descriptor
             transaction_entered = threading.Event()
             exit_transaction = threading.Event()
             close_paused = threading.Event()
@@ -1572,8 +1576,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 "response_name": f"{'b' * 32}.json",
             }
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 paused_close,
             ):
                 worker = threading.Thread(target=hold_transaction)
@@ -1744,7 +1748,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             token = lease._tracking_token
             session_module = sys.modules["audit_session"]
             close_called = threading.Event()
-            original_close = session_module.os.close
+            original_close = session_module._close_owned_descriptor
 
             def observed_close(value):
                 if value == descriptor:
@@ -1755,8 +1759,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 (descriptor, token)
             )
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 observed_close,
             ):
                 before = time.monotonic()
@@ -1879,7 +1883,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         token = object()
         ownership = (descriptor, token)
         session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
-        original_close = session_module.os.close
+        original_close = session_module._close_owned_descriptor
         parent_pid = os.getpid()
         close_paused = threading.Event()
         release_close = threading.Event()
@@ -1891,8 +1895,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             return original_close(value)
 
         with mock.patch.object(
-            session_module.os,
-            "close",
+            session_module,
+            "_close_owned_descriptor",
             paused_parent_close,
         ):
             with session_module._ownership_publication():
@@ -1963,7 +1967,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         token = object()
         ownership = (descriptor, token)
         session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
-        original_close = session_module.os.close
+        original_close = session_module._close_owned_descriptor
         attempts = 0
 
         def transient_close(value):
@@ -1977,8 +1981,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         session_module._before_fork()
         session_module._schedule_pending_cleanup("lease", ownership)
         with mock.patch.object(
-            session_module.os,
-            "close",
+            session_module,
+            "_close_owned_descriptor",
             transient_close,
         ):
             before = time.monotonic()
@@ -2042,7 +2046,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             )
             descriptor = lease._descriptor
             session_module = sys.modules["audit_session"]
-            original_close = session_module.os.close
+            original_close = session_module._close_owned_descriptor
             attempts = 0
 
             def transient_close(value):
@@ -2054,8 +2058,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 return original_close(value)
 
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 transient_close,
             ):
                 lease.close()
@@ -2079,7 +2083,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             descriptor,
             token,
         )
-        original_close = session_module.os.close
+        original_close = session_module._close_owned_descriptor
         attempts = 0
 
         def transient_close(value):
@@ -2090,7 +2094,11 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                     raise OSError(errno.EIO, "transient close failure")
             return original_close(value)
 
-        with mock.patch.object(session_module.os, "close", transient_close):
+        with mock.patch.object(
+            session_module,
+            "_close_owned_descriptor",
+            transient_close,
+        ):
             store._close_tracked_claim_descriptor(descriptor)
             deadline = time.monotonic() + 1
             while attempts < 2 and time.monotonic() < deadline:
@@ -2109,7 +2117,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             store = self.module.SessionStore(root)
             lease = store.claim_lease(started.session)
             session_module = sys.modules["audit_session"]
-            original_close = session_module.os.close
+            original_close = session_module._close_owned_descriptor
             captured = []
             attempts = 0
 
@@ -2122,8 +2130,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 return original_close(value)
 
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 transient_close,
             ):
                 with store._successor_transaction_lock(lease):
@@ -2149,7 +2157,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             (descriptor, token)
         )
         session_module._PENDING_LEASE_CLOSE_FDS.add((descriptor, token))
-        original_close = session_module.os.close
+        original_close = session_module._close_owned_descriptor
         attempts = 0
 
         def transient_close(value):
@@ -2160,7 +2168,11 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                     raise OSError(errno.EIO, "transient close failure")
             return original_close(value)
 
-        with mock.patch.object(session_module.os, "close", transient_close):
+        with mock.patch.object(
+            session_module,
+            "_close_owned_descriptor",
+            transient_close,
+        ):
             session_module._schedule_pending_cleanup(
                 "lease",
                 (descriptor, token),
@@ -2232,7 +2244,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         stale_ownership = (descriptor, stale_token)
         session_module._TRACKED_LEASE_OWNERSHIPS.add(stale_ownership)
         session_module._PENDING_LEASE_CLOSE_FDS.add(stale_ownership)
-        original_close = session_module.os.close
+        original_close = session_module._close_owned_descriptor
         physically_closed = threading.Event()
         release_cleanup = threading.Event()
 
@@ -2247,8 +2259,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             args=("lease", stale_ownership),
         )
         with tempfile.TemporaryDirectory() as temporary, mock.patch.object(
-            session_module.os,
-            "close",
+            session_module,
+            "_close_owned_descriptor",
             close_then_pause,
         ):
             parent = os.open(
@@ -2358,7 +2370,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         )
         ambiguous_ownership = (ambiguous, object())
         unrelated_ownership = (unrelated, object())
-        original_close = session_module.os.close
+        original_close = session_module._close_owned_descriptor
         ambiguous_attempted = threading.Event()
         allow_ambiguous_close = threading.Event()
 
@@ -2374,8 +2386,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         )
         try:
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 fail_before_close,
             ):
                 session_module._schedule_pending_cleanup(
@@ -2445,67 +2457,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 except OSError:
                     pass
 
-    def test_close_then_error_is_resolved_before_fd_reuse(self):
-        session_module = sys.modules["audit_session"]
-        descriptor = os.open(
-            "/dev/null",
-            os.O_RDONLY | os.O_CLOEXEC,
-        )
-        ownership = (descriptor, object())
-        original_close = session_module.os.close
-        attempts = 0
-
-        def close_then_error(value):
-            nonlocal attempts
-            if value == descriptor:
-                attempts += 1
-                original_close(value)
-                raise OSError(errno.EIO, "close completed")
-            return original_close(value)
-
-        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
-        try:
-            with mock.patch.object(
-                session_module.os,
-                "close",
-                close_then_error,
-            ):
-                self.assertTrue(
-                    session_module._close_pending_ownership(
-                        "lease",
-                        ownership,
-                    )
-                )
-
-            replacement = os.open(
-                "/dev/null",
-                os.O_RDONLY | os.O_CLOEXEC,
-            )
-            self.assertEqual(replacement, descriptor)
-            session_module._schedule_pending_cleanup(
-                "lease",
-                ownership,
-            )
-            time.sleep(0.05)
-            os.fstat(replacement)
-            os.close(replacement)
-        finally:
-            session_module._TRACKED_LEASE_OWNERSHIPS.discard(
-                ownership
-            )
-            session_module._PENDING_LEASE_CLOSE_FDS.discard(
-                ownership
-            )
-            (
-                session_module._DESCRIPTOR_OWNERSHIP_GATE
-                ._writer_intents.clear()
-            )
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-
-    def test_close_error_cannot_retry_same_inode_untracked_reuse(self):
+    def test_single_slot_close_preserves_same_inode_untracked_reuse(self):
         session_module = sys.modules["audit_session"]
         with tempfile.TemporaryDirectory() as temporary:
             store = self.module.SessionStore(Path(temporary))
@@ -2514,23 +2466,22 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             original_close = session_module.os.close
             replacement = []
 
-            def close_reopen_same_directory(value):
-                if value == descriptor and not replacement:
-                    original_close(value)
-                    replacement.append(
-                        store._open_directory(temporary)
-                    )
-                    raise OSError(
-                        errno.EIO,
-                        "close completed before error",
-                    )
-                return original_close(value)
+            def close_reopen_same_directory(first, last, flags):
+                self.assertEqual(
+                    (first, last, flags),
+                    (descriptor, descriptor, 0),
+                )
+                original_close(descriptor)
+                replacement.append(
+                    store._open_directory(temporary)
+                )
+                return 0
 
             session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
             try:
                 with mock.patch.object(
-                    session_module.os,
-                    "close",
+                    session_module,
+                    "_CLOSE_RANGE",
                     close_reopen_same_directory,
                 ):
                     self.assertTrue(
@@ -2584,6 +2535,176 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                         os.close(value)
                     except OSError:
                         pass
+
+    def test_single_slot_close_preserves_same_ofd_fd_reuse(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        duplicate = os.dup(descriptor)
+        ownership = (descriptor, object())
+        replacement = []
+
+        def close_then_reuse_same_ofd(first, last, flags):
+            self.assertEqual((first, last, flags), (descriptor,) * 2 + (0,))
+            os.close(descriptor)
+            replacement.append(os.dup(duplicate))
+            self.assertEqual(replacement, [descriptor])
+            return 0
+
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        try:
+            with mock.patch.object(
+                session_module,
+                "_CLOSE_RANGE",
+                close_then_reuse_same_ofd,
+            ):
+                self.assertTrue(
+                    session_module._close_pending_ownership(
+                        "lease",
+                        ownership,
+                    )
+                )
+
+            session_module._schedule_pending_cleanup(
+                "lease",
+                ownership,
+            )
+            time.sleep(0.05)
+            os.fstat(replacement[0])
+        finally:
+            session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                ownership
+            )
+            session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                ownership
+            )
+            (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                ._writer_intents.clear()
+            )
+            for value in replacement + [duplicate, descriptor]:
+                try:
+                    os.close(value)
+                except OSError:
+                    pass
+
+    def test_single_slot_close_failure_never_touches_descriptor(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+
+        def blocked_close_range(first, last, flags):
+            ctypes.set_errno(errno.EPERM)
+            return -1
+
+        try:
+            with mock.patch.object(
+                session_module,
+                "_CLOSE_RANGE",
+                blocked_close_range,
+            ):
+                with self.assertRaises(OSError) as raised:
+                    session_module._close_owned_descriptor(descriptor)
+            self.assertEqual(raised.exception.errno, errno.EPERM)
+            os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def test_unavailable_single_slot_close_never_uses_raw_close(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        try:
+            with mock.patch.object(
+                session_module,
+                "_CLOSE_RANGE",
+                None,
+            ), mock.patch.object(
+                session_module.os,
+                "close",
+                side_effect=AssertionError("raw close fallback"),
+            ):
+                with self.assertRaises(OSError) as raised:
+                    session_module._close_owned_descriptor(descriptor)
+            self.assertEqual(raised.exception.errno, errno.ENOSYS)
+            os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def test_single_slot_close_has_no_guard_or_ofd_probe(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        try:
+            self.assertFalse(
+                hasattr(
+                    session_module,
+                    "_same_open_file_description",
+                )
+            )
+            with mock.patch.object(
+                session_module.os,
+                "dup",
+                side_effect=AssertionError("unexpected close guard"),
+            ), mock.patch.object(
+                session_module.fcntl,
+                "fcntl",
+                side_effect=OSError(errno.EINVAL, "unexpected OFD probe"),
+            ):
+                session_module._close_owned_descriptor(descriptor)
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+        finally:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+    def test_child_snapshot_does_not_retry_same_ofd_reuse(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        duplicate = os.dup(descriptor)
+        ownership = (descriptor, object())
+        replacement = []
+        calls = 0
+
+        def close_then_reuse(first, last, flags):
+            nonlocal calls
+            calls += 1
+            os.close(descriptor)
+            replacement.append(os.dup(duplicate))
+            self.assertEqual(replacement, [descriptor])
+            return 0
+
+        try:
+            with mock.patch.object(
+                session_module,
+                "_CLOSE_RANGE",
+                close_then_reuse,
+            ):
+                failed = session_module._close_child_snapshot(
+                    {ownership}
+                )
+            self.assertEqual(failed, set())
+            self.assertEqual(calls, 1)
+            os.fstat(replacement[0])
+        finally:
+            for value in replacement + [duplicate, descriptor]:
+                try:
+                    os.close(value)
+                except OSError:
+                    pass
 
     def test_stale_job_cannot_release_another_jobs_intent(self):
         session_module = sys.modules["audit_session"]
@@ -2926,6 +3047,224 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             except OSError:
                 pass
 
+    def test_direct_lease_keyboard_interrupt_queues_exact_cleanup(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        store = self.module.SessionStore(Path("/unused"))
+        lease = session_module.ClaimLease(
+            store,
+            "a" * 32,
+            "b" * 64,
+            descriptor,
+        )
+        ownership = (descriptor, lease._tracking_token)
+        original_close_record = session_module._close_owned_record
+        interrupted = False
+
+        def interrupt_once(kind, value):
+            nonlocal interrupted
+            if value == ownership and not interrupted:
+                interrupted = True
+                raise KeyboardInterrupt("direct close interrupted")
+            return original_close_record(kind, value)
+
+        with mock.patch.object(
+            session_module,
+            "_close_owned_record",
+            interrupt_once,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                lease.close()
+
+        deadline = time.monotonic() + 1
+        while ownership in session_module._TRACKED_LEASE_OWNERSHIPS:
+            if time.monotonic() >= deadline:
+                self.fail("interrupted lease close was not handed off")
+            time.sleep(0.005)
+        self.assertNotIn(
+            ownership,
+            session_module._PENDING_LEASE_CLOSE_FDS,
+        )
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_tracked_claim_keyboard_interrupt_queues_exact_cleanup(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        ownership = (descriptor, object())
+        store = self.module.SessionStore(Path("/unused"))
+        store._tracked_claim_ownerships[descriptor] = ownership
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        original_close_record = session_module._close_owned_record
+        interrupted = False
+
+        def interrupt_once(kind, value):
+            nonlocal interrupted
+            if value == ownership and not interrupted:
+                interrupted = True
+                raise KeyboardInterrupt("tracked close interrupted")
+            return original_close_record(kind, value)
+
+        with mock.patch.object(
+            session_module,
+            "_close_owned_record",
+            interrupt_once,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                store._close_tracked_claim_descriptor(descriptor)
+
+        deadline = time.monotonic() + 1
+        while ownership in session_module._TRACKED_LEASE_OWNERSHIPS:
+            if time.monotonic() >= deadline:
+                self.fail("interrupted tracked close was not handed off")
+            time.sleep(0.005)
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_lease_finalizer_keyboard_interrupt_queues_exact_cleanup(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        lease = session_module.ClaimLease(
+            self.module.SessionStore(Path("/unused")),
+            "a" * 32,
+            "b" * 64,
+            descriptor,
+        )
+        ownership = (descriptor, lease._tracking_token)
+        original_close_record = session_module._close_owned_record
+        interrupted = False
+
+        def interrupt_once(kind, value):
+            nonlocal interrupted
+            if value == ownership and not interrupted:
+                interrupted = True
+                raise KeyboardInterrupt("finalizer interrupted")
+            return original_close_record(kind, value)
+
+        with mock.patch.object(
+            session_module,
+            "_close_owned_record",
+            interrupt_once,
+        ):
+            lease.__del__()
+
+        deadline = time.monotonic() + 1
+        while ownership in session_module._TRACKED_LEASE_OWNERSHIPS:
+            if time.monotonic() >= deadline:
+                self.fail("interrupted finalizer was not handed off")
+            time.sleep(0.005)
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_transaction_keyboard_interrupt_queues_exact_cleanup(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            session_module = sys.modules["audit_session"]
+            original_close_record = session_module._close_owned_record
+            interrupted_ownership = None
+
+            def interrupt_once(kind, value):
+                nonlocal interrupted_ownership
+                if kind == "transaction" and interrupted_ownership is None:
+                    interrupted_ownership = value
+                    raise KeyboardInterrupt(
+                        "transaction close interrupted"
+                    )
+                return original_close_record(kind, value)
+
+            with mock.patch.object(
+                session_module,
+                "_close_owned_record",
+                interrupt_once,
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    with store._successor_transaction_lock(lease):
+                        pass
+
+            self.assertIsNotNone(interrupted_ownership)
+            deadline = time.monotonic() + 1
+            while (
+                interrupted_ownership
+                in session_module._TRACKED_TRANSACTION_OWNERSHIPS
+            ):
+                if time.monotonic() >= deadline:
+                    self.fail(
+                        "interrupted transaction was not handed off"
+                    )
+                time.sleep(0.005)
+            self.assertNotIn(
+                interrupted_ownership,
+                session_module._PENDING_TRANSACTION_CLOSE_FDS,
+            )
+            with self.assertRaises(OSError):
+                os.fstat(interrupted_ownership[0])
+            lease.close()
+
+    def test_cleanup_exit_system_exit_releases_and_restarts(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        ownership = (descriptor, object())
+        gate = session_module._DESCRIPTOR_OWNERSHIP_GATE
+        original_exit = gate.exit_cleanup
+        crashed_worker = None
+        exited = False
+
+        def exit_once(*args, **kwargs):
+            nonlocal crashed_worker, exited
+            if not exited:
+                exited = True
+                crashed_worker = threading.current_thread()
+                raise SystemExit("cleanup exit interrupted")
+            return original_exit(*args, **kwargs)
+
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        try:
+            with mock.patch.object(gate, "exit_cleanup", exit_once):
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                deadline = time.monotonic() + 1
+                while (
+                    not exited
+                    or gate._writer_intents
+                    or gate._cleanup is not None
+                    and gate._cleanup.locked()
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail("cleanup exit crash wedged admission")
+                    time.sleep(0.005)
+
+            self.assertIsNotNone(crashed_worker)
+            crashed_worker.join(timeout=1)
+            self.assertFalse(crashed_worker.is_alive())
+            self.assertIsNot(
+                session_module._CLEANUP_THREAD,
+                crashed_worker,
+            )
+            publisher = gate.try_enter_publication()
+            self.assertIsNotNone(publisher)
+            gate.exit_publication(publisher)
+        finally:
+            gate._writer_intents.clear()
+            if gate._cleanup is not None and gate._cleanup.locked():
+                gate._cleanup.release()
+            session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                ownership
+            )
+            session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                ownership
+            )
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
     @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
     def test_child_cleanup_start_failure_can_be_retried(self):
         session_module = sys.modules["audit_session"]
@@ -3000,6 +3339,9 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             descriptor = lease._descriptor
             session_module = sys.modules["audit_session"]
             original_close = session_module.os.close
+            original_owned_close = (
+                session_module._close_owned_descriptor
+            )
             parent_pid = os.getpid()
             failed = False
             result_read, result_write = os.pipe()
@@ -3013,11 +3355,11 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 ):
                     failed = True
                     raise OSError(errno.EIO, "transient child close failure")
-                return original_close(value)
+                return original_owned_close(value)
 
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 one_shot_child_eio,
             ):
                 child = os.fork()
@@ -3057,6 +3399,9 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             ownership = (descriptor, token)
             session_module = sys.modules["audit_session"]
             original_close = session_module.os.close
+            original_owned_close = (
+                session_module._close_owned_descriptor
+            )
             parent_pid = os.getpid()
             child_attempts = 0
             result_read, result_write = os.pipe()
@@ -3070,11 +3415,11 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                             errno.EIO,
                             "persistent child close failure",
                         )
-                return original_close(value)
+                return original_owned_close(value)
 
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 two_child_eios,
             ):
                 child = os.fork()
@@ -3221,6 +3566,9 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             lease = store.claim_lease(started.session)
             session_module = sys.modules["audit_session"]
             original_close = session_module.os.close
+            original_owned_close = (
+                session_module._close_owned_descriptor
+            )
             transaction_entered = threading.Event()
             exit_transaction = threading.Event()
             close_paused = threading.Event()
@@ -3234,7 +3582,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                         raise AssertionError(
                             "transaction close was not released"
                         )
-                return original_close(descriptor)
+                return original_owned_close(descriptor)
 
             def hold_transaction():
                 with store._successor_transaction_lock(lease):
@@ -3248,8 +3596,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
 
             child_result_read, child_result_write = os.pipe()
             with mock.patch.object(
-                session_module.os,
-                "close",
+                session_module,
+                "_close_owned_descriptor",
                 paused_close,
             ):
                 worker = threading.Thread(target=hold_transaction)

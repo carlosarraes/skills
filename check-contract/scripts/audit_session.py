@@ -61,6 +61,15 @@ _PENDING_TRANSACTION_CLOSE_FDS = set()
 _CLEANUP_QUEUE = queue.SimpleQueue()
 _CLEANUP_THREAD = None
 _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
+_LIBC = ctypes.CDLL(None, use_errno=True)
+_CLOSE_RANGE = getattr(_LIBC, "close_range", None)
+if _CLOSE_RANGE is not None:
+    _CLOSE_RANGE.argtypes = (
+        ctypes.c_uint,
+        ctypes.c_uint,
+        ctypes.c_int,
+    )
+    _CLOSE_RANGE.restype = ctypes.c_int
 
 
 class _ForkLifecycleGate:
@@ -175,23 +184,49 @@ class _DescriptorOwnershipGate:
         *,
         retain_intent: bool,
     ) -> None:
+        gate.ensure_cleanup_released(
+            cleanup,
+            intent_key,
+            writer_intent,
+            retain_intent=retain_intent,
+        )
+
+    def ensure_cleanup_released(
+        gate,
+        cleanup,
+        intent_key,
+        writer_intent,
+        *,
+        retain_intent: bool,
+    ) -> None:
         if (
             not retain_intent
             and gate._writer_intents.get(intent_key) is writer_intent
         ):
             del gate._writer_intents[intent_key]
-        cleanup.release()
+        if cleanup.locked():
+            cleanup.release()
 
 
 _DESCRIPTOR_OWNERSHIP_GATE = _DescriptorOwnershipGate()
 
 
 def _close_owned_descriptor(descriptor: int) -> None:
-    try:
-        os.close(descriptor)
-    except OSError as error:
-        if error.errno != errno.EBADF:
-            raise
+    """Close one Linux fd slot without surfacing per-descriptor errors."""
+    if _CLOSE_RANGE is None:
+        raise OSError(
+            errno.ENOSYS,
+            "single-slot close_range is unavailable",
+        )
+    ctypes.set_errno(0)
+    result = _CLOSE_RANGE(descriptor, descriptor, 0)
+    if result != 0:
+        number = ctypes.get_errno() or errno.EIO
+        raise OSError(
+            number,
+            os.strerror(number),
+            descriptor,
+        )
 
 
 @contextmanager
@@ -229,12 +264,20 @@ def _ownership_cleanup(kind: str, ownership):
         admission.retain()
         raise
     finally:
-        _DESCRIPTOR_OWNERSHIP_GATE.exit_cleanup(
-            cleanup,
-            intent_key,
-            writer_intent,
-            retain_intent=admission.retain_intent,
-        )
+        try:
+            _DESCRIPTOR_OWNERSHIP_GATE.exit_cleanup(
+                cleanup,
+                intent_key,
+                writer_intent,
+                retain_intent=admission.retain_intent,
+            )
+        finally:
+            _DESCRIPTOR_OWNERSHIP_GATE.ensure_cleanup_released(
+                cleanup,
+                intent_key,
+                writer_intent,
+                retain_intent=admission.retain_intent,
+            )
 
 
 def _ownership_state(kind: str):
@@ -255,57 +298,10 @@ def _close_owned_record(kind: str, ownership) -> bool:
     if ownership not in tracked:
         return _forget_owned_record(kind, ownership)
     try:
-        guard = os.dup(ownership[0])
-    except OSError as error:
-        if error.errno == errno.EBADF:
-            return _forget_owned_record(kind, ownership)
-        return False
-    try:
-        try:
-            _close_owned_descriptor(ownership[0])
-        except Exception:
-            if _same_open_file_description(
-                guard,
-                ownership[0],
-            ):
-                return False
-            return _forget_owned_record(kind, ownership)
-        return _forget_owned_record(kind, ownership)
-    finally:
-        try:
-            os.close(guard)
-        except OSError:
-            pass
-
-
-def _same_open_file_description(guard: int, candidate: int) -> bool:
-    original_flags = None
-    try:
-        original_flags = fcntl.fcntl(guard, fcntl.F_GETFL)
-        observations = []
-        for enabled in (True, False):
-            probe_flags = (
-                original_flags | os.O_NONBLOCK
-                if enabled
-                else original_flags & ~os.O_NONBLOCK
-            )
-            fcntl.fcntl(guard, fcntl.F_SETFL, probe_flags)
-            candidate_flags = fcntl.fcntl(
-                candidate,
-                fcntl.F_GETFL,
-            )
-            observations.append(
-                bool(candidate_flags & os.O_NONBLOCK)
-            )
-        return observations == [True, False]
+        _close_owned_descriptor(ownership[0])
     except OSError:
         return False
-    finally:
-        if original_flags is not None:
-            try:
-                fcntl.fcntl(guard, fcntl.F_SETFL, original_flags)
-            except OSError:
-                pass
+    return _forget_owned_record(kind, ownership)
 
 
 def _forget_owned_record(kind: str, ownership) -> bool:
@@ -359,12 +355,17 @@ def _background_pending_cleanup() -> None:
                     _FORK_FD_LIFECYCLE_GATE.exit_audit(reader)
         except BaseException as error:
             crashed = error
+        if crashed is not None:
+            _queue_cleanup(kind, ownership)
+            if _handoff_cleanup_worker():
+                raise crashed
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 0.05)
+            continue
         if closed:
             retry_delay = 0.001
             continue
         _queue_cleanup(kind, ownership)
-        if crashed is not None and _handoff_cleanup_worker():
-            raise crashed
         time.sleep(retry_delay)
         retry_delay = min(retry_delay * 2, 0.05)
 
@@ -571,13 +572,14 @@ class ClaimLease:
                     admission.retain()
         except SessionBusyError:
             pass
-        if not closed:
-            _schedule_pending_cleanup("lease", ownership)
+        finally:
+            if not closed:
+                _schedule_pending_cleanup("lease", ownership)
 
     def __del__(self):
         try:
             self.close()
-        except Exception:
+        except BaseException:
             pass
 
 
@@ -748,8 +750,9 @@ class SessionStore:
                     admission.retain()
         except SessionBusyError:
             pass
-        if not closed:
-            _schedule_pending_cleanup("lease", ownership)
+        finally:
+            if not closed:
+                _schedule_pending_cleanup("lease", ownership)
 
     def _open_base(self, *, create: bool) -> int:
         self._require_current_process()
@@ -1551,8 +1554,12 @@ class SessionStore:
                         admission.retain()
             except SessionBusyError:
                 pass
-            if not closed:
-                _schedule_pending_cleanup("transaction", ownership)
+            finally:
+                if not closed:
+                    _schedule_pending_cleanup(
+                        "transaction",
+                        ownership,
+                    )
 
     def claim_lease(self, token: str) -> ClaimLease:
         run_id, digest = self._parse_token(token)
