@@ -1,7 +1,11 @@
 import hashlib
+import fcntl
 import importlib
 import json
+import multiprocessing
 import os
+import signal
+import stat
 import sys
 import tempfile
 import threading
@@ -1083,6 +1087,181 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             )
             self.assertEqual(self.generation_count(root, started.session), 1)
 
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_fork_inherited_lease_cannot_commit_a_second_successor(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            original_state = store.load(started.session)
+            original_successors = store._direct_successors
+            precheck = multiprocessing.Barrier(2, timeout=0.4)
+
+            def synchronized_precheck(run_id, predecessor_digest):
+                children = original_successors(run_id, predecessor_digest)
+                if not children:
+                    try:
+                        precheck.wait()
+                    except threading.BrokenBarrierError:
+                        pass
+                return children
+
+            store._direct_successors = synchronized_precheck
+            read_result, write_result = os.pipe()
+            child = os.fork()
+            if child == 0:
+                os.close(read_result)
+                state = {
+                    **original_state,
+                    "phase": "reconciliation",
+                    "nonce": "b" * 32,
+                    "response_name": f"{'c' * 32}.json",
+                }
+                try:
+                    store.append_claimed(
+                        started.session,
+                        state,
+                        {"schema_version": 1, "kind": "reconciliation"},
+                        lease=lease,
+                    )
+                    outcome = b"child-ok"
+                except Exception as error:
+                    outcome = f"child-error:{type(error).__name__}".encode()
+                os.write(write_result, outcome)
+                os.close(write_result)
+                os._exit(0)
+
+            os.close(write_result)
+            parent_state = {
+                **original_state,
+                "phase": "reconciliation",
+                "nonce": "a" * 32,
+                "response_name": f"{'d' * 32}.json",
+            }
+            try:
+                try:
+                    parent_result = store.append_claimed(
+                        started.session,
+                        parent_state,
+                        {"schema_version": 1, "kind": "reconciliation"},
+                        lease=lease,
+                    )
+                except Exception as error:
+                    parent_result = error
+            finally:
+                store._direct_successors = original_successors
+                lease.close()
+            _, status = os.waitpid(child, 0)
+            child_result = os.read(read_result, 1024)
+            os.close(read_result)
+
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
+            self.assertIsInstance(
+                parent_result,
+                sys.modules["audit_session"].SessionGeneration,
+            )
+            self.assertEqual(child_result, b"child-error:SessionIntegrityError")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+            run_id, digest = started.session.split(".", 1)
+            self.assertEqual(
+                len(original_successors(run_id, digest)),
+                1,
+            )
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_at_fork_child_resets_a_held_successor_registry_guard(self):
+        session_module = sys.modules["audit_session"]
+        read_result, write_result = os.pipe()
+        session_module._SUCCESSOR_LOCKS_GUARD.acquire()
+        child = os.fork()
+        if child == 0:
+            os.close(read_result)
+
+            def timed_out(signum, frame):
+                os._exit(91)
+
+            signal.signal(signal.SIGALRM, timed_out)
+            signal.alarm(1)
+            try:
+                with session_module._successor_transition_lock(
+                    ("fork-reset-probe",)
+                ):
+                    os.write(write_result, b"child-ok")
+                signal.alarm(0)
+                os.close(write_result)
+                os._exit(0)
+            except Exception:
+                os._exit(92)
+
+        os.close(write_result)
+        _, status = os.waitpid(child, 0)
+        session_module._SUCCESSOR_LOCKS_GUARD.release()
+        child_result = os.read(read_result, 1024)
+        os.close(read_result)
+
+        self.assertTrue(os.WIFEXITED(status))
+        self.assertEqual(os.WEXITSTATUS(status), 0)
+        self.assertEqual(child_result, b"child-ok")
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_fresh_child_ofd_cannot_enter_parent_successor_transaction(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            run_id, digest = started.session.split(".", 1)
+            transaction = (
+                root / run_id / "claims" / digest / "transaction"
+            )
+            read_result, write_result = os.pipe()
+            with store._successor_transaction_lock(lease):
+                child = os.fork()
+                if child == 0:
+                    os.close(read_result)
+
+                    def timed_out(signum, frame):
+                        os._exit(91)
+
+                    signal.signal(signal.SIGALRM, timed_out)
+                    signal.alarm(1)
+                    descriptor = os.open(
+                        transaction,
+                        os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                    )
+                    try:
+                        try:
+                            fcntl.flock(
+                                descriptor,
+                                fcntl.LOCK_EX | fcntl.LOCK_NB,
+                            )
+                            outcome = b"child-entered"
+                        except BlockingIOError:
+                            outcome = b"child-busy"
+                        os.write(write_result, outcome)
+                        signal.alarm(0)
+                    finally:
+                        os.close(descriptor)
+                        os.close(write_result)
+                    os._exit(0)
+
+                os.close(write_result)
+                _, status = os.waitpid(child, 0)
+                child_result = os.read(read_result, 1024)
+                os.close(read_result)
+            lease.close()
+
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
+            self.assertEqual(child_result, b"child-busy")
+            self.assertEqual(self.generation_count(root, started.session), 1)
+
     def test_active_continuation_lease_cannot_be_preempted_by_duplicate(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -1142,6 +1321,18 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             store = self.module.SessionStore(root)
             lease = store.claim_lease(started.session)
             try:
+                run_id, digest = started.session.split(".", 1)
+                transaction = (
+                    root / run_id / "claims" / digest / "transaction"
+                )
+                self.assertEqual(
+                    transaction.read_bytes(),
+                    b"transaction-v1\n",
+                )
+                self.assertEqual(
+                    stat.S_IMODE(transaction.stat().st_mode),
+                    0o400,
+                )
                 before = time.monotonic()
                 result = self.runtime(root).advance(
                     self.module.ContinueAudit(
@@ -1172,7 +1363,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             def fail_claims_fsync(descriptor):
                 nonlocal calls
                 calls += 1
-                if calls == 3:
+                if calls == 4:
                     raise OSError("injected post-publication fsync failure")
                 return original_fsync(descriptor)
 
