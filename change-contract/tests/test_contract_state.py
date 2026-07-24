@@ -1,6 +1,7 @@
 import importlib.util
 import hashlib
 import json
+import stat
 import subprocess
 import sys
 import tempfile
@@ -75,12 +76,24 @@ class ContractStateTests(unittest.TestCase):
         result = {}
         for path in sorted(repo.rglob("*")):
             relative = str(path.relative_to(repo))
-            if path.is_dir():
-                result[relative] = "directory"
-            elif path.is_file():
-                result[relative] = hashlib.sha256(
-                    path.read_bytes()
-                ).hexdigest()
+            metadata = path.lstat()
+            if path.is_symlink():
+                result[relative] = {
+                    "target": str(path.readlink()),
+                    "type": "symlink",
+                }
+            elif stat.S_ISDIR(metadata.st_mode):
+                result[relative] = {"type": "directory"}
+            elif stat.S_ISREG(metadata.st_mode):
+                result[relative] = {
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "type": "file",
+                }
+            else:
+                result[relative] = {
+                    "mode": stat.S_IFMT(metadata.st_mode),
+                    "type": "other",
+                }
         return result
 
     def contract_root(self, repo, storage=".notes"):
@@ -713,6 +726,35 @@ class ContractStateTests(unittest.TestCase):
 
                 self.assertEqual(orphaned.returncode, 1)
                 self.assertIn("orphaned", orphaned.stderr)
+
+    def test_resolver_rejects_non_directory_contract_roots(self):
+        def create_live_symlink(root):
+            target = root.parent / "linked-contract-root"
+            target.mkdir()
+            root.symlink_to(target, target_is_directory=True)
+
+        cases = (
+            ("file", lambda root: root.write_text("invalid\n", encoding="utf-8")),
+            (
+                "dangling-symlink",
+                lambda root: root.symlink_to("missing-contract-root"),
+            ),
+            ("live-symlink", create_live_symlink),
+        )
+        for storage in (".notes", "ai_docs"):
+            for kind, create in cases:
+                with self.subTest(storage=storage, kind=kind):
+                    name = f"{storage.replace('.', 'dot')}-{kind}"
+                    repo, _ = self.init_repo(name)
+                    root = self.contract_root(repo, storage)
+                    root.parent.mkdir(parents=True)
+                    create(root)
+
+                    result = self.resolve_read_only(repo)
+
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("invalid contract root", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
 
     def test_hidden_staging_is_ignored_and_true_absence_is_read_only(self):
         repo, _ = self.init_repo("absent")

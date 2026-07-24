@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -310,8 +311,12 @@ def _sanitize_branch(full_branch: str) -> str:
 
 
 def _has_published_state(root: Path) -> bool:
-    if not root.is_dir():
+    try:
+        metadata = root.lstat()
+    except FileNotFoundError:
         return False
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ContractStateError(f"invalid contract root: {root}")
     for path in root.iterdir():
         if re.fullmatch(r"\.v[1-9][0-9]*-.+", path.name):
             continue
@@ -329,6 +334,7 @@ def _select_consumer_root(
         repository_root / ".notes" / branch_directory / "contract",
         repository_root / "ai_docs" / branch_directory / "contract",
     )
+    published_state = tuple(_has_published_state(root) for root in roots)
     selected = [root for root in roots if (root / "current.json").exists()]
     if len(selected) == 2:
         raise ContractStateError(
@@ -336,7 +342,7 @@ def _select_consumer_root(
         )
     if selected:
         return selected[0]
-    if any(_has_published_state(root) for root in roots):
+    if any(published_state):
         raise ContractStateError(
             "orphaned contract authority: published state has no current.json"
         )
