@@ -10,11 +10,12 @@ the generation first, then reads only the exact issued response name through
 the verified inbox directory descriptor with O_NOFOLLOW and a fixed byte
 limit.
 
-Claimed-generation appenders serialize on a crash-released filesystem lock.
-A fully fsynced authenticated generation becomes the one successor at its
-atomic directory rename; dot-prefixed staging directories are never children.
-After an interrupted call, authenticated child discovery recovers a committed
-rename or permits a terminal child when no rename committed.
+Each claim is published only after its nonblocking exclusive lease is live.
+The lease spans response validation through the successor commit and is
+released by descriptor close, including on process exit. A fully fsynced
+authenticated generation becomes the one successor at its atomic directory
+rename; dot-prefixed staging directories are never children. Recovery never
+waits for an active lease.
 """
 
 import hashlib
@@ -26,6 +27,8 @@ import re
 import secrets
 import stat
 import fcntl
+import errno
+import ctypes
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +42,40 @@ DIRECTORY_FLAGS = (
 )
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
 RESPONSE_BYTE_LIMIT = 2 * 1024 * 1024
+RENAME_NOREPLACE = 1
+
+
+def _rename_noreplace(
+    source_directory: int,
+    source_name: str,
+    target_directory: int,
+    target_name: str,
+) -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        renameat2 = libc.renameat2
+    except AttributeError as error:
+        raise SessionIntegrityError(
+            "atomic no-replace claim publication is unavailable"
+        ) from error
+    renameat2.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        source_directory,
+        os.fsencode(source_name),
+        target_directory,
+        os.fsencode(target_name),
+        RENAME_NOREPLACE,
+    )
+    if result != 0:
+        number = ctypes.get_errno()
+        raise OSError(number, os.strerror(number), target_name)
 
 
 class SessionIntegrityError(RuntimeError):
@@ -48,9 +85,36 @@ class SessionIntegrityError(RuntimeError):
 class ClaimedResponseError(SessionIntegrityError):
     """Raised after a generation was irreversibly claimed for a bad response."""
 
+    def __init__(self, message: str, lease=None):
+        super().__init__(message)
+        self.lease = lease
+
 
 class GenerationConsumedError(SessionIntegrityError):
     """Raised when a generation claim already exists."""
+
+
+class SessionBusyError(SessionIntegrityError):
+    """Raised when another process owns the live claim transition."""
+
+
+class ClaimLease:
+    """Process-scoped capability proving ownership of one claimed transition."""
+
+    def __init__(self, owner, run_id: str, digest: str, descriptor: int):
+        self._owner = owner
+        self.run_id = run_id
+        self.digest = digest
+        self._descriptor = descriptor
+        self.closed = False
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        descriptor = self._descriptor
+        self._descriptor = -1
+        self.closed = True
+        os.close(descriptor)
 
 
 @dataclass(frozen=True)
@@ -650,35 +714,143 @@ class SessionStore:
             )
         return packet
 
-    def claim(self, token: str) -> None:
-        run_id, digest = self._parse_token(token)
-        self.load(token)
+    def _new_claim_lease(self, run_id: str, digest: str) -> ClaimLease:
+        temporary_name = f".{digest}-{secrets.token_hex(8)}"
+        claim = None
+        published = False
         with self._run_directories(run_id) as directories:
             try:
                 os.mkdir(
-                    digest,
+                    temporary_name,
                     mode=0o700,
                     dir_fd=directories["claims"],
                 )
-            except FileExistsError as error:
-                raise GenerationConsumedError(
-                    "generation was already consumed"
-                ) from error
+                claim = self._open_directory(
+                    temporary_name,
+                    dir_fd=directories["claims"],
+                )
+                os.fchmod(claim, 0o700)
+                self._write_file(claim, "lease", b"claim-v1\n")
+                os.fsync(claim)
+                fcntl.flock(claim, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                try:
+                    _rename_noreplace(
+                        directories["claims"],
+                        temporary_name,
+                        directories["claims"],
+                        digest,
+                    )
+                except OSError as error:
+                    if error.errno in (errno.EEXIST, errno.ENOTEMPTY):
+                        raise GenerationConsumedError(
+                            "generation was already consumed"
+                        ) from error
+                    raise
+                published = True
+                os.fsync(directories["claims"])
+                lease = ClaimLease(self, run_id, digest, claim)
+                claim = None
+                return lease
+            except GenerationConsumedError:
+                raise
             except OSError as error:
                 raise SessionIntegrityError(
                     "cannot claim generation"
                 ) from error
-            os.fsync(directories["claims"])
+            finally:
+                if not published:
+                    if claim is not None:
+                        try:
+                            os.unlink("lease", dir_fd=claim)
+                        except FileNotFoundError:
+                            pass
+                        os.close(claim)
+                    try:
+                        os.rmdir(
+                            temporary_name,
+                            dir_fd=directories["claims"],
+                        )
+                    except FileNotFoundError:
+                        pass
+                elif claim is not None:
+                    os.close(claim)
+
+    def _existing_claim_lease(
+        self,
+        run_id: str,
+        digest: str,
+    ) -> ClaimLease:
+        with self._run_directories(run_id) as directories:
+            claim = self._open_directory(
+                digest,
+                dir_fd=directories["claims"],
+            )
+            try:
+                try:
+                    fcntl.flock(
+                        claim,
+                        fcntl.LOCK_EX | fcntl.LOCK_NB,
+                    )
+                except BlockingIOError as error:
+                    raise SessionBusyError(
+                        "generation transition is active"
+                    ) from error
+                marker = self._read_file(
+                    claim,
+                    "lease",
+                    expected_mode=0o400,
+                )
+                if marker != b"claim-v1\n":
+                    raise SessionIntegrityError(
+                        "claim lease marker is invalid"
+                    )
+                return ClaimLease(self, run_id, digest, claim)
+            except Exception:
+                os.close(claim)
+                raise
+
+    def _require_claim_lease(
+        self,
+        token: str,
+        lease: ClaimLease,
+    ) -> tuple[str, str]:
+        run_id, digest = self._parse_token(token)
+        if (
+            not isinstance(lease, ClaimLease)
+            or lease._owner is not self
+            or lease.run_id != run_id
+            or lease.digest != digest
+            or lease.closed
+        ):
+            raise SessionIntegrityError(
+                "claimed append requires the live owning lease"
+            )
+        try:
+            _owned(os.fstat(lease._descriptor), directory=True)
+        except OSError as error:
+            raise SessionIntegrityError(
+                "claim lease is no longer live"
+            ) from error
+        return run_id, digest
+
+    def claim_lease(self, token: str) -> ClaimLease:
+        run_id, digest = self._parse_token(token)
+        self.load(token)
+        return self._new_claim_lease(run_id, digest)
+
+    def claim(self, token: str) -> None:
+        lease = self.claim_lease(token)
+        lease.close()
 
     def claim_and_read(
         self,
         token: str,
         response_path: Path,
-    ) -> bytes:
+    ) -> tuple[ClaimLease, bytes]:
         """Claim once, then read only the state-issued no-follow inbox name."""
         run_id, digest = self._parse_token(token)
         state = self.load(token)
-        self.claim(token)
+        lease = self.claim_lease(token)
         try:
             with self._run_directories(run_id) as directories:
                 response_name = self._response_name(state)
@@ -691,28 +863,15 @@ class SessionStore:
                     raise SessionIntegrityError(
                         "caller response path does not match the issued path"
                     )
-                return self._read_file(
+                raw = self._read_file(
                     directories["inbox"],
                     response_name,
                     byte_limit=RESPONSE_BYTE_LIMIT,
                     nonblocking=True,
                 )
+                return lease, raw
         except (OSError, SessionIntegrityError) as error:
-            raise ClaimedResponseError(str(error)) from error
-
-    @contextmanager
-    def _claim_lock(self, run_id: str, digest: str):
-        with self._run_directories(run_id) as directories:
-            claim = self._open_directory(
-                digest,
-                dir_fd=directories["claims"],
-            )
-            try:
-                fcntl.flock(claim, fcntl.LOCK_EX)
-                yield
-            finally:
-                fcntl.flock(claim, fcntl.LOCK_UN)
-                os.close(claim)
+            raise ClaimedResponseError(str(error), lease) from error
 
     def _direct_successors(
         self,
@@ -845,33 +1004,41 @@ class SessionStore:
         token: str,
         state: Mapping[str, object],
         packet: Mapping[str, object],
+        lease: ClaimLease | None = None,
     ) -> SessionGeneration:
         """Append after an existing claim without attempting a second claim."""
+        owns_lease = lease is None
         run_id, digest = self._parse_token(token)
-        response_name = self._response_name(state)
-        issued_response_names = set()
-        self._load_verified(
-            run_id,
-            digest,
-            verify_previous=True,
-            response_names=issued_response_names,
-        )
-        if response_name in issued_response_names:
-            raise SessionIntegrityError(
-                "response name was already issued in this generation chain"
+        if lease is None:
+            lease = self._existing_claim_lease(run_id, digest)
+        try:
+            run_id, digest = self._require_claim_lease(token, lease)
+            response_name = self._response_name(state)
+            issued_response_names = set()
+            self._load_verified(
+                run_id,
+                digest,
+                verify_previous=True,
+                response_names=issued_response_names,
             )
-        with self._run_directories(run_id) as directories:
-            self._require_response_absent(
-                directories["inbox"],
-                response_name,
-            )
-        with self._claim_lock(run_id, digest):
+            if response_name in issued_response_names:
+                raise SessionIntegrityError(
+                    "response name was already issued in this generation chain"
+                )
+            with self._run_directories(run_id) as directories:
+                self._require_response_absent(
+                    directories["inbox"],
+                    response_name,
+                )
             return self._append_claimed_locked(
                 run_id,
                 digest,
                 state,
                 packet,
             )
+        finally:
+            if owns_lease:
+                lease.close()
 
     def recover_claim(
         self,
@@ -885,7 +1052,8 @@ class SessionStore:
         """
         run_id, digest = self._parse_token(token)
         self._load_verified(run_id, digest, verify_previous=True)
-        with self._claim_lock(run_id, digest):
+        lease = self._existing_claim_lease(run_id, digest)
+        try:
             children = self._direct_successors(run_id, digest)
             if children:
                 return "committed-successor"
@@ -896,6 +1064,8 @@ class SessionStore:
                 {"schema_version": 1, "kind": "terminal"},
             )
             return "abandoned-claim-closed"
+        finally:
+            lease.close()
 
     def append(
         self,
@@ -921,8 +1091,16 @@ class SessionStore:
                 directories["inbox"],
                 response_name,
             )
-        self.claim(token)
-        return self.append_claimed(token, state, packet)
+        lease = self.claim_lease(token)
+        try:
+            return self.append_claimed(
+                token,
+                state,
+                packet,
+                lease=lease,
+            )
+        finally:
+            lease.close()
 
     def tombstone(
         self,
@@ -939,9 +1117,11 @@ class SessionStore:
         self,
         token: str,
         state: Mapping[str, object],
+        lease: ClaimLease | None = None,
     ) -> SessionGeneration:
         return self.append_claimed(
             token,
             state,
             {"schema_version": 1, "kind": "terminal"},
+            lease=lease,
         )

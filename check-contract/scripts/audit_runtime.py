@@ -43,6 +43,7 @@ from audit_policy import aggregate
 from audit_session import (
     ClaimedResponseError,
     GenerationConsumedError,
+    SessionBusyError,
     SessionIntegrityError,
     SessionStore,
 )
@@ -280,11 +281,20 @@ class AuditRuntime:
         )
         return value
 
-    def _stop_after_claim(self, store, token, state, code, reason):
+    def _stop_after_claim(
+        self,
+        store,
+        token,
+        state,
+        code,
+        reason,
+        lease,
+    ):
         try:
             store.tombstone_claimed(
                 token,
                 self._terminal_state(state, code),
+                lease=lease,
             )
         except (SessionIntegrityError, OSError, ValueError) as error:
             return self._stopped(
@@ -303,6 +313,12 @@ class AuditRuntime:
             recovery = store.recover_claim(
                 token,
                 self._terminal_state(state, "ABANDONED_CLAIM"),
+            )
+        except SessionBusyError as error:
+            return self._stopped(
+                "SESSION_BUSY",
+                error,
+                state.get("target", "session"),
             )
         except (SessionIntegrityError, OSError, ValueError) as error:
             return self._stopped(
@@ -380,6 +396,7 @@ class AuditRuntime:
         state,
         code_packet,
         code_judgment,
+        lease,
     ):
         entries, narratives, content_guards = collect_guarded_narratives(
             state
@@ -424,6 +441,7 @@ class AuditRuntime:
                 state,
                 "DEADLINE_EXPIRED",
                 "audit deadline expired during narrative reconciliation",
+                lease,
             )
         evidence["runtime:QA-1"] = {
             "acceptance_qa_exists": qa_exists,
@@ -497,7 +515,12 @@ class AuditRuntime:
                 probe_ids,
             ),
         }
-        generation = store.append_claimed(token, next_state, packet)
+        generation = store.append_claimed(
+            token,
+            next_state,
+            packet,
+            lease=lease,
+        )
         return NeedJudgment(
             session=generation.token,
             target=state["target"],
@@ -564,19 +587,56 @@ class AuditRuntime:
 
     def _continue(self, request):
         store = SessionStore(self.session_root)
+        lease = None
         try:
             state = store.load(request.session)
             packet = store.load_packet(request.session)
         except (SessionIntegrityError, OSError, ValueError) as error:
             return self._stopped("SESSION_INVALID", error, "session")
-        if state["phase"] != "code":
+        try:
+            if state["phase"] != "code":
+                try:
+                    lease = store.claim_lease(request.session)
+                except GenerationConsumedError:
+                    return self._stop_consumed(
+                        store,
+                        request.session,
+                        state,
+                    )
+                except (SessionIntegrityError, OSError, ValueError) as error:
+                    return self._stopped(
+                        "SESSION_INVALID",
+                        error,
+                        state.get("target", "session"),
+                    )
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "OUT_OF_PHASE",
+                    "generation is not in the code-judgment phase",
+                    lease,
+                )
             try:
-                store.claim(request.session)
+                lease, raw = store.claim_and_read(
+                    request.session,
+                    request.response_path,
+                )
             except GenerationConsumedError:
                 return self._stop_consumed(
                     store,
                     request.session,
                     state,
+                )
+            except ClaimedResponseError as error:
+                lease = error.lease
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "RESPONSE_INVALID",
+                    error,
+                    lease,
                 )
             except (SessionIntegrityError, OSError, ValueError) as error:
                 return self._stopped(
@@ -584,88 +644,73 @@ class AuditRuntime:
                     error,
                     state.get("target", "session"),
                 )
-            return self._stop_after_claim(
-                store,
-                request.session,
-                state,
-                "OUT_OF_PHASE",
-                "generation is not in the code-judgment phase",
-            )
-        try:
-            raw = store.claim_and_read(
-                request.session,
-                request.response_path,
-            )
-        except GenerationConsumedError:
-            return self._stop_consumed(
-                store,
-                request.session,
-                state,
-            )
-        except ClaimedResponseError as error:
-            return self._stop_after_claim(
-                store,
-                request.session,
-                state,
-                "RESPONSE_INVALID",
-                error,
-            )
-        except (SessionIntegrityError, OSError, ValueError) as error:
-            return self._stopped(
-                "SESSION_INVALID",
-                error,
-                state.get("target", "session"),
-            )
-        if self.clock() > state["absolute_deadline"]:
-            return self._stop_after_claim(
-                store,
-                request.session,
-                state,
-                "DEADLINE_EXPIRED",
-                "audit deadline expired before response validation",
-            )
-        try:
-            judgment_value = self._response_envelope(
-                raw,
-                request.session,
-                state,
-            )
-            code_judgment = validate_code_judgment(
-                packet,
-                judgment_value,
-            )
-        except (AuditInputError, KeyError, TypeError, ValueError) as error:
-            return self._stop_after_claim(
-                store,
-                request.session,
-                state,
-                "RESPONSE_INVALID",
-                error,
-            )
-        try:
-            return self._issue_reconciliation(
-                store,
-                request.session,
-                state,
-                packet,
-                code_judgment,
-            )
-        except ReconciliationError as error:
-            return self._stop_after_claim(
-                store,
-                request.session,
-                state,
-                "NARRATIVE_INVALID",
-                error,
-            )
-        except (SessionIntegrityError, OSError, ValueError) as error:
-            return self._stop_after_claim(
-                store,
-                request.session,
-                state,
-                "SESSION_FAILURE",
-                error,
-            )
+            if self.clock() > state["absolute_deadline"]:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "DEADLINE_EXPIRED",
+                    "audit deadline expired before response validation",
+                    lease,
+                )
+            try:
+                judgment_value = self._response_envelope(
+                    raw,
+                    request.session,
+                    state,
+                )
+                code_judgment = validate_code_judgment(
+                    packet,
+                    judgment_value,
+                )
+            except (AuditInputError, KeyError, TypeError, ValueError) as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "RESPONSE_INVALID",
+                    error,
+                    lease,
+                )
+            try:
+                return self._issue_reconciliation(
+                    store,
+                    request.session,
+                    state,
+                    packet,
+                    code_judgment,
+                    lease,
+                )
+            except ReconciliationError as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "NARRATIVE_INVALID",
+                    error,
+                    lease,
+                )
+            except EvidenceError as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "EVIDENCE_FAILURE",
+                    error,
+                    lease,
+                )
+            except (SessionIntegrityError, OSError, ValueError) as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "SESSION_FAILURE",
+                    error,
+                    lease,
+                )
+        finally:
+            if lease is not None:
+                lease.close()
 
     def _start(self, request: StartAudit):
         target = request.primary

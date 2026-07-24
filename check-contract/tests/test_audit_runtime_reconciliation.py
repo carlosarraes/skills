@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -168,6 +169,26 @@ class DeadlineAdvancingRunner:
         ):
             self.clock.value = deadline + 0.001
         return result
+
+
+class FailingQaResolutionRunner:
+    def __init__(self, module):
+        self.module = module
+        self.delegate = module.LocalGitRunner()
+
+    def run(self, args, *, cwd, deadline, output_limit=None):
+        if args[:1] == ["rev-parse"] and args[1].startswith(
+            "--disambiguate="
+        ):
+            raise self.module.EvidenceError(
+                "injected QA reference resolution failure"
+            )
+        return self.delegate.run(
+            args,
+            cwd=cwd,
+            deadline=deadline,
+            output_limit=output_limit,
+        )
 
 
 class AuditRuntimeReconciliationTests(unittest.TestCase):
@@ -957,6 +978,121 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             )
             self.assertEqual(self.generation_count(root, started.session), 2)
 
+    def test_active_continuation_lease_cannot_be_preempted_by_duplicate(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            write_response(started.response_path, code_response(started))
+            original = self.module.SessionStore.claim_and_read
+            acquired = threading.Event()
+            release = threading.Event()
+            captured = []
+
+            def pause_after_claim(store, token, response_path):
+                lease, raw = original(store, token, response_path)
+                captured.append(lease)
+                acquired.set()
+                if not release.wait(2):
+                    lease.close()
+                    raise AssertionError("test did not release active lease")
+                return lease, raw
+
+            request = self.module.ContinueAudit(
+                started.session,
+                started.response_path,
+            )
+            with mock.patch.object(
+                self.module.SessionStore,
+                "claim_and_read",
+                pause_after_claim,
+            ), ThreadPoolExecutor(max_workers=1) as executor:
+                first = executor.submit(self.runtime(root).advance, request)
+                self.assertTrue(acquired.wait(1))
+                before = time.monotonic()
+                duplicate = self.runtime(root).advance(request)
+                elapsed = time.monotonic() - before
+                self.assertLess(elapsed, 1.0)
+                self.assertEqual(duplicate.code, "SESSION_BUSY")
+                self.assertEqual(
+                    self.generation_count(root, started.session),
+                    1,
+                )
+                release.set()
+                result = first.result(timeout=2)
+
+            self.assertIsInstance(result, self.module.NeedJudgment)
+            self.assertEqual(result.kind, "reconciliation")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+            self.assertEqual(len(captured), 1)
+            self.assertTrue(captured[0].closed)
+
+    def test_held_claim_lock_returns_session_busy_without_blocking(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            try:
+                before = time.monotonic()
+                result = self.runtime(root).advance(
+                    self.module.ContinueAudit(
+                        started.session,
+                        started.response_path,
+                    )
+                )
+                elapsed = time.monotonic() - before
+            finally:
+                lease.close()
+
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(result.code, "SESSION_BUSY")
+            self.assertEqual(self.generation_count(root, started.session), 1)
+
+    def test_post_publication_fsync_failure_releases_recoverable_lease(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            original_state = store.load(started.session)
+            session_module = sys.modules["audit_session"]
+            original_fsync = session_module.os.fsync
+            calls = 0
+
+            def fail_claims_fsync(descriptor):
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    raise OSError("injected post-publication fsync failure")
+                return original_fsync(descriptor)
+
+            with mock.patch.object(
+                session_module.os,
+                "fsync",
+                fail_claims_fsync,
+            ):
+                with self.assertRaises(self.module.SessionIntegrityError):
+                    store.claim_lease(started.session)
+
+            terminal_state = {
+                **original_state,
+                "phase": "terminal",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+            recovery = store.recover_claim(
+                started.session,
+                terminal_state,
+            )
+
+            self.assertEqual(recovery, "abandoned-claim-closed")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+
     def test_exact_code_deviation_ids_are_issued_for_matching(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -1043,7 +1179,10 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         ) as repo, tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             started = self.start(repo, root)
-            self.module.SessionStore(root).claim(started.session)
+            lease = self.module.SessionStore(root).claim_lease(
+                started.session
+            )
+            lease.close()
             run = started.session.split(".", 1)[0]
             (
                 root
@@ -1071,6 +1210,48 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 )
                 children.append(packet["kind"])
             self.assertEqual(children, ["terminal"])
+
+    def test_qa_resolution_evidence_error_after_claim_is_terminal(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            head = git(repo, "rev-parse", "HEAD")
+            narrative = repo / "qa-resolution-error.md"
+            narrative.write_text(
+                "<!-- qa-pr-evidence -->\n"
+                "## QA evidence — ✅ PASS "
+                f"<sub>(@ {head[:7]})</sub>\n",
+                encoding="utf-8",
+            )
+            root = Path(temporary)
+            started = self.start(
+                repo,
+                root,
+                narrative_paths=(narrative,),
+            )
+            write_response(started.response_path, code_response(started))
+
+            result = self.runtime(
+                root,
+                git_runner=FailingQaResolutionRunner(self.module),
+            ).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "EVIDENCE_FAILURE")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+            duplicate = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            self.assertEqual(duplicate.code, "DUPLICATE_RESPONSE")
+            self.assertEqual(self.generation_count(root, started.session), 2)
 
     def test_qa_marker_in_ledger_or_prior_report_does_not_count(self):
         with materialized_repo(
