@@ -35,6 +35,12 @@ def git(repo, *args):
     ).stdout.strip()
 
 
+def canonical(value):
+    return (
+        json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+
+
 class FakeClock:
     def __init__(self, value=1000.0):
         self.value = value
@@ -152,6 +158,15 @@ class AuditRuntimeStartTests(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, serialized)
             self.assertEqual(
+                [
+                    item["path"]
+                    for item in packet["evidence"]["inventory:NAME-1"][
+                        "entries"
+                    ]
+                ],
+                ["src/checkout.py", "src/pricing.py", "tests/test_checkout.py"],
+            )
+            self.assertEqual(
                 [item["path"] for item in packet["changed_paths"]],
                 ["src/checkout.py", "src/pricing.py", "tests/test_checkout.py"],
             )
@@ -173,6 +188,52 @@ class AuditRuntimeStartTests(unittest.TestCase):
             self.assertEqual(packet["authority"]["head_sha"], head)
             serialized = json.dumps(packet, sort_keys=True)
             self.assertNotIn('"approved_by"', serialized)
+
+    def test_deferred_old_side_of_rename_is_not_code_evidence(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            destination = repo / "src/plan_claim.py"
+            git(repo, "mv", "plan.md", str(destination.relative_to(repo)))
+            git(repo, "commit", "-m", "refactor: relocate implementation plan")
+
+            result = self.runtime(Path(temporary)).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+
+            packet = packet_of(result)
+            paths = [item["path"] for item in packet["changed_paths"]]
+            self.assertNotIn("src/plan_claim.py", paths)
+            self.assertNotIn("The design is settled", json.dumps(packet))
+
+    def test_machine_grep_preserves_colon_and_newline_path_identity(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            colon = repo / "src/colon:name.py"
+            newline = repo / "src/line\nname.py"
+            narrative = repo / "claim:\nsummary.md"
+            for path in (colon, newline, narrative):
+                path.write_text(
+                    "validate_percentage = 'PATH_SENTINEL'\n",
+                    encoding="utf-8",
+                )
+            git(repo, "add", "-A")
+            git(repo, "commit", "-m", "test: add unusual git paths")
+
+            result = self.runtime(Path(temporary)).advance(
+                self.module.StartAudit(
+                    self.target(repo, narrative_paths=(narrative,))
+                )
+            )
+
+            records = packet_of(result)["evidence"]["reuse:SEARCH-1"][
+                "results"
+            ]
+            self.assertEqual(
+                {item["path"] for item in records if "PATH_SENTINEL" in item["text"]},
+                {"src/colon:name.py", "src/line\nname.py"},
+            )
 
     def test_malformed_contract_hard_stops_before_evidence(self):
         with materialized_repo(
@@ -243,7 +304,12 @@ class AuditRuntimeStartTests(unittest.TestCase):
                 [call[3] for call in runner.calls if call[0] == grep[0]],
                 [2 * 1024 * 1024],
             )
-            self.assertIn("validate_percentage", reuse["results"])
+            self.assertTrue(
+                any(
+                    "validate_percentage" in item["text"]
+                    for item in reuse["results"]
+                )
+            )
 
     def test_dirty_worktree_is_disclosed_but_recorded_head_is_authority(self):
         with materialized_repo(
@@ -262,32 +328,49 @@ class AuditRuntimeStartTests(unittest.TestCase):
 
             packet = packet_of(result)
             self.assertTrue(packet["worktree"]["dirty"])
-            self.assertIn("src/checkout.py", packet["worktree"]["status"])
+            self.assertEqual(packet["worktree"]["status"], "dirty")
             self.assertNotIn(
                 "DIRTY_WORKTREE_SENTINEL",
                 json.dumps(packet, sort_keys=True),
             )
 
-    def test_deadline_is_capped_and_stored_as_absolute_value(self):
+    def test_deadline_boundaries_have_no_hidden_minimum(self):
+        expected_evidence = {1: 1001.0, 60: 1060.0, 61: 1001.0, 300: 1180.0}
+        for seconds in (1, 60, 61, 300):
+            with self.subTest(seconds=seconds), materialized_repo(
+                "contract-compliant-overengineered"
+            ) as repo, tempfile.TemporaryDirectory() as temporary:
+                clock = FakeClock()
+                result = self.runtime(
+                    Path(temporary),
+                    clock=clock,
+                ).advance(
+                    self.module.StartAudit(
+                        self.target(repo),
+                        deadline_seconds=seconds,
+                    )
+                )
+
+                self.assertIsInstance(result, self.module.NeedJudgment)
+                packet = packet_of(result)
+                self.assertEqual(packet["deadline"]["absolute"], 1000 + seconds)
+                self.assertEqual(
+                    packet["deadline"]["evidence"],
+                    expected_evidence[seconds],
+                )
+
         with materialized_repo(
             "contract-compliant-overengineered"
         ) as repo, tempfile.TemporaryDirectory() as temporary:
-            clock = FakeClock()
             result = self.runtime(
                 Path(temporary),
-                clock=clock,
+                clock=FakeClock(),
             ).advance(
                 self.module.StartAudit(
                     self.target(repo),
                     deadline_seconds=999,
                 )
             )
-            clock.value = 9000.0
-
-            state = self.module.SessionStore(Path(temporary)).load(
-                result.session
-            )
-            self.assertEqual(state["absolute_deadline"], 1300.0)
             self.assertEqual(packet_of(result)["deadline"]["absolute"], 1300.0)
 
     def test_generation_is_external_content_addressed_and_read_only(self):
@@ -312,6 +395,10 @@ class AuditRuntimeStartTests(unittest.TestCase):
                     stat.S_IMODE((generation / name).stat().st_mode),
                     0o400,
                 )
+            self.assertEqual(
+                stat.S_IMODE((run / "key").stat().st_mode),
+                0o400,
+            )
 
     def test_wrong_generation_digest_or_manifest_is_rejected(self):
         with materialized_repo(
@@ -369,6 +456,220 @@ class AuditRuntimeStartTests(unittest.TestCase):
             with self.assertRaises(self.module.SessionIntegrityError):
                 self.module.SessionStore(root).load(result.session)
 
+    def test_unkeyed_coordinated_generation_is_not_an_issued_session(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = self.runtime(root).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            run_id, prior_digest = result.session.split(".", 1)
+            packet = {"schema_version": 1, "kind": "forged"}
+            packet_bytes = canonical(packet)
+            state = {
+                "schema_version": 1,
+                "phase": "code",
+                "target": "primary",
+                "absolute_deadline": 1300.0,
+                "nonce": "1" * 32,
+                "response_name": f"{'2' * 32}.json",
+                "packet_sha256": hashlib.sha256(packet_bytes).hexdigest(),
+            }
+            state_bytes = canonical(state)
+            digest = hashlib.sha256(state_bytes).hexdigest()
+            generation = (
+                root / run_id / "generations" / digest
+            )
+            generation.mkdir()
+            (generation / "state.json").write_bytes(state_bytes)
+            (generation / "packet.json").write_bytes(packet_bytes)
+            (generation / "manifest.json").write_bytes(
+                canonical(
+                    {
+                        "schema_version": 1,
+                        "state_sha256": digest,
+                        "packet_sha256": hashlib.sha256(
+                            packet_bytes
+                        ).hexdigest(),
+                    }
+                )
+            )
+            for path in generation.iterdir():
+                path.chmod(0o400)
+
+            with self.assertRaises(self.module.SessionIntegrityError):
+                self.module.SessionStore(root).load(f"{run_id}.{digest}")
+            self.assertNotEqual(prior_digest, digest)
+
+    def test_appended_generation_is_hmac_chained_to_its_predecessor(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.runtime(root).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            store = self.module.SessionStore(root)
+            state = store.load(first.session)
+            state["nonce"] = "a" * 32
+            state["response_name"] = f"{'b' * 32}.json"
+            second = store.append(
+                first.session,
+                state,
+                {"schema_version": 1, "kind": "next"},
+            )
+            run_id, first_digest = first.session.split(".", 1)
+            _, second_digest = second.token.split(".", 1)
+            manifest = json.loads(
+                (
+                    root
+                    / run_id
+                    / "generations"
+                    / second_digest
+                    / "manifest.json"
+                ).read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(
+                manifest["previous_generation_sha256"],
+                first_digest,
+            )
+            self.assertRegex(manifest["hmac_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(store.load(second.token)["nonce"], "a" * 32)
+            self.assertEqual(store.load(first.session)["phase"], "code")
+
+    def test_session_rejects_replaced_internal_directories(self):
+        for component, operation in (
+            ("generations", "load"),
+            ("claims", "claim"),
+            ("inbox", "load"),
+        ):
+            with self.subTest(component=component), materialized_repo(
+                "contract-compliant-overengineered"
+            ) as repo, tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result = self.runtime(root).advance(
+                    self.module.StartAudit(self.target(repo))
+                )
+                run_id = result.session.split(".", 1)[0]
+                run = root / run_id
+                outside = root / f"outside-{component}"
+                (run / component).rename(outside)
+                (run / component).symlink_to(
+                    outside,
+                    target_is_directory=True,
+                )
+                store = self.module.SessionStore(root)
+
+                with self.assertRaises(self.module.SessionIntegrityError):
+                    getattr(store, operation)(result.session)
+                if component == "claims":
+                    self.assertEqual(list(outside.iterdir()), [])
+
+    def test_state_retains_private_freshness_guards(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            narrative = repo / "review-summary.md"
+            narrative.write_bytes(b"opaque narrative bytes\n")
+            report = (
+                repo
+                / ".notes/feature-proj-123/contract/v1/check-report.md"
+            )
+            report.write_bytes(b"opaque report bytes\n")
+            result = self.runtime(Path(temporary)).advance(
+                self.module.StartAudit(
+                    self.target(repo, narrative_paths=(narrative,))
+                )
+            )
+            state = self.module.SessionStore(Path(temporary)).load(
+                result.session
+            )
+            packet = packet_of(result)
+
+            self.assertEqual(
+                state["target_identity"],
+                {
+                    "repository_root": str(repo.resolve()),
+                    "branch": "feature/proj-123",
+                    "ticket": "PROJ-123",
+                },
+            )
+            for key in (
+                "repository_root",
+                "branch_directory",
+                "selected_root",
+                "current_sha256",
+                "approval_path",
+                "approval_sha256",
+                "contract_path",
+                "contract_sha256",
+                "ledger_path",
+                "ledger_present",
+                "base_sha",
+                "head_sha",
+            ):
+                self.assertIn(key, state["authority_guard"])
+            self.assertEqual(
+                state["ledger_guard"]["sha256"],
+                hashlib.sha256(
+                    Path(state["authority_guard"]["ledger_path"]).read_bytes()
+                ).hexdigest(),
+            )
+            self.assertEqual(
+                state["report_guard"]["sha256"],
+                hashlib.sha256(b"opaque report bytes\n").hexdigest(),
+            )
+            self.assertEqual(
+                state["narrative_guards"][0]["sha256"],
+                hashlib.sha256(
+                    (repo / state["narrative_guards"][0]["path"]).read_bytes()
+                ).hexdigest(),
+            )
+            self.assertIn("plan.md", state["deferred_narrative_paths"])
+            self.assertIn(
+                str(narrative.resolve()),
+                {
+                    item["path"]
+                    for item in state["narrative_guards"]
+                },
+            )
+            self.assertEqual(
+                {
+                    item["path"]: item["sha256"]
+                    for item in state["narrative_guards"]
+                }[str(narrative.resolve())],
+                hashlib.sha256(b"opaque narrative bytes\n").hexdigest(),
+            )
+            self.assertIn("initial_status_sha256", state)
+            self.assertIn("source_guards", state)
+            self.assertNotIn(str(repo.resolve()), json.dumps(packet))
+            self.assertNotIn("review-summary.md", json.dumps(packet))
+
+    def test_contract_buffer_must_match_resolved_authority_digest(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            def replace_after_resolution(path, branch, ticket):
+                authority = self.module.resolve_authority(path, branch, ticket)
+                contract = Path(authority["contract_path"])
+                contract.write_bytes(
+                    contract.read_bytes().replace(
+                        b"without adding new structure",
+                        b"with unapproved replacement text",
+                    )
+                )
+                return authority
+
+            result = self.runtime(
+                Path(temporary),
+                authority_resolver=replace_after_resolution,
+            ).advance(self.module.StartAudit(self.target(repo)))
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "CONTRACT_INVALID")
+
     def test_authority_failure_preserves_report_and_creates_no_session(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -408,6 +709,61 @@ class AuditRuntimeStartTests(unittest.TestCase):
 
             self.assertEqual(continued.code, "CONTINUE_UNAVAILABLE")
             self.assertEqual(compound.code, "COMPOUND_UNAVAILABLE")
+
+    def test_unavailable_continue_does_not_claim_a_valid_generation(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.runtime(root).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            runtime = self.runtime(root)
+            stopped = runtime.advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            store = self.module.SessionStore(root)
+
+            self.assertEqual(stopped.code, "CONTINUE_UNAVAILABLE")
+            store.claim(started.session)
+
+    def test_public_envelope_mappings_are_recursively_immutable(self):
+        closed = {"nested": {"values": [1, 2]}}
+        attestation = {"nested": {"values": [3, 4]}}
+        judgment = self.module.NeedJudgment(
+            session="s",
+            target="primary",
+            kind="code",
+            packet_path=Path("/packet"),
+            packet_sha256="a" * 64,
+            response_path=Path("/response"),
+            next_command=("continue",),
+            nonce="b" * 32,
+            closed_target=closed,
+        )
+        complete = self.module.AuditComplete(
+            verdict="PASS",
+            route=("qa-ticket",),
+            report_path=Path("/report"),
+            report_sha256="c" * 64,
+            mutation_attestation=attestation,
+        )
+        closed["nested"]["values"].append(9)
+        attestation["nested"]["values"].append(9)
+
+        self.assertEqual(
+            judgment.closed_target["nested"]["values"],
+            (1, 2),
+        )
+        self.assertEqual(
+            complete.mutation_attestation["nested"]["values"],
+            (3, 4),
+        )
+        with self.assertRaises(TypeError):
+            judgment.closed_target["new"] = "value"
 
 
 if __name__ == "__main__":

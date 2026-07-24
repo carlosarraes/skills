@@ -1,12 +1,16 @@
 """Deep public facade for contract-audit policy and runtime orchestration."""
 
+import hashlib
+import os
 import re
 import secrets
+import stat
 import tempfile
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from audit_evidence import (
     AuthorityError,
@@ -39,6 +43,48 @@ from audit_session import (
     SessionStore,
 )
 from audit_validation import validate_code_judgment
+
+
+def _deep_freeze(value):
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _deep_freeze(item) for key, item in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_deep_freeze(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_deep_freeze(item) for item in value)
+    return value
+
+
+def _guard_path(path: Path) -> dict[str, object]:
+    path = Path(path)
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return {
+            "path": str(path),
+            "exists": False,
+            "kind": "absent",
+            "sha256": None,
+        }
+    if stat.S_ISREG(metadata.st_mode):
+        content = path.read_bytes()
+        kind = "file"
+    elif stat.S_ISLNK(metadata.st_mode):
+        content = os.fsencode(path.readlink())
+        kind = "symlink"
+    else:
+        content = (
+            f"{stat.S_IFMT(metadata.st_mode)}:{metadata.st_size}"
+        ).encode("ascii")
+        kind = "other"
+    return {
+        "path": str(path),
+        "exists": True,
+        "kind": kind,
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
 
 
 @dataclass(frozen=True)
@@ -75,6 +121,16 @@ class NeedJudgment:
     a_closure_digest: str | None = None
     closed_target: Mapping[str, object] | None = None
 
+    def __post_init__(self):
+        if self.closed_target is not None:
+            if not isinstance(self.closed_target, Mapping):
+                raise TypeError("closed_target must be a mapping or None")
+            object.__setattr__(
+                self,
+                "closed_target",
+                _deep_freeze(self.closed_target),
+            )
+
 
 @dataclass(frozen=True)
 class AuditComplete:
@@ -83,6 +139,15 @@ class AuditComplete:
     report_path: Path
     report_sha256: str
     mutation_attestation: Mapping[str, object]
+
+    def __post_init__(self):
+        if not isinstance(self.mutation_attestation, Mapping):
+            raise TypeError("mutation_attestation must be a mapping")
+        object.__setattr__(
+            self,
+            "mutation_attestation",
+            _deep_freeze(self.mutation_attestation),
+        )
 
 
 @dataclass(frozen=True)
@@ -107,7 +172,9 @@ class AuditRuntime:
         nonce_factory=None,
     ):
         default_root = Path(tempfile.gettempdir()) / "contract-audit-sessions"
-        self.session_root = Path(session_root or default_root).resolve()
+        self.session_root = Path(
+            os.path.abspath(session_root or default_root)
+        )
         self.clock = clock
         self.authority_resolver = authority_resolver
         self.git_runner = git_runner or LocalGitRunner(clock)
@@ -168,17 +235,58 @@ class AuditRuntime:
             return self._stopped("AUTHORITY_INVALID", error)
         try:
             repository_root = Path(authority["repository_root"]).resolve()
+            resolved_session_root = self.session_root.resolve(strict=False)
             if (
-                self.session_root == repository_root
-                or self.session_root.is_relative_to(repository_root)
+                resolved_session_root == repository_root
+                or resolved_session_root.is_relative_to(repository_root)
             ):
                 return self._stopped(
                     "SESSION_LOCATION_INVALID",
                     "session storage must be outside the target repository",
                 )
-            contract = parse_contract(
-                Path(authority["contract_path"]).read_bytes()
+            contract_bytes = Path(authority["contract_path"]).read_bytes()
+            contract_buffer_sha256 = hashlib.sha256(
+                contract_bytes
+            ).hexdigest()
+            if not secrets.compare_digest(
+                contract_buffer_sha256,
+                authority["contract_sha256"],
+            ):
+                raise ContractParseError(
+                    "approved contract changed after authority resolution"
+                )
+            contract = parse_contract(contract_bytes)
+            current_path = (
+                Path(authority["selected_root"]) / "current.json"
             )
+            current_guard = _guard_path(current_path)
+            approval_guard = _guard_path(
+                Path(authority["approval_path"])
+            )
+            if (
+                current_guard["sha256"] != authority["current_sha256"]
+                or approval_guard["sha256"]
+                != authority["approval_sha256"]
+            ):
+                raise ContractParseError(
+                    "authority artifacts changed after resolution"
+                )
+            ledger_guard = _guard_path(Path(authority["ledger_path"]))
+            if ledger_guard["exists"] != authority["ledger_present"]:
+                raise ContractParseError(
+                    "ledger presence changed after authority resolution"
+                )
+            report_path = (
+                Path(authority["selected_root"])
+                / f"v{authority['active_version']}"
+                / "check-report.md"
+            )
+            report_guard = _guard_path(report_path)
+            authority_guard = {
+                **authority,
+                "current_path": str(current_path),
+                "report_path": str(report_path),
+            }
         except (ContractParseError, KeyError, OSError, ValueError) as error:
             return self._stopped("CONTRACT_INVALID", error)
         try:
@@ -245,7 +353,35 @@ class AuditRuntime:
             "absolute_deadline": absolute_deadline,
             "nonce": nonce,
             "response_name": f"{self.nonce_factory()}.json",
-            "authority": packet["authority"],
+            "target_identity": {
+                "repository_root": str(repository_root),
+                "branch": target.branch,
+                "ticket": target.ticket,
+            },
+            "authority_guard": authority_guard,
+            "contract_buffer_sha256": contract_buffer_sha256,
+            "current_guard": current_guard,
+            "approval_guard": approval_guard,
+            "ledger_guard": ledger_guard,
+            "report_guard": report_guard,
+            "deferred_narrative_paths": captured[
+                "deferred_narrative_paths"
+            ],
+            "narrative_guards": [
+                _guard_path(repository_root / path)
+                for path in captured["deferred_narrative_paths"]
+            ],
+            "initial_status_bytes_b64": captured[
+                "initial_status_bytes_b64"
+            ],
+            "initial_status_sha256": captured[
+                "initial_status_sha256"
+            ],
+            "recorded_range": {
+                "base_sha": authority["base_sha"],
+                "head_sha": authority["head_sha"],
+            },
+            "source_guards": captured["source_guards"],
         }
         try:
             generation = SessionStore(self.session_root).create(state, packet)

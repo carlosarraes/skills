@@ -1,5 +1,7 @@
 """Strict approved-contract parsing and deterministic Git-object evidence."""
 
+import base64
+import hashlib
 import importlib.util
 import io
 import re
@@ -10,6 +12,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+from audit_paths import AuditPathError, PathPolicy, parse_name_status_z
 
 
 CONTRACT_STATE = (
@@ -67,17 +71,6 @@ STOPWORDS = frozenset(
 )
 QUERY_TOKEN_CAP = 128
 REUSE_RESULT_CAP = 2 * 1024 * 1024
-KNOWN_NARRATIVE_NAMES = frozenset(
-    {
-        "check-report.md",
-        "audit-report.md",
-        "implementation-summary.md",
-        "plan.md",
-        "pr-description.md",
-        "pull-request.md",
-        "validation.md",
-    }
-)
 
 
 class AuthorityError(RuntimeError):
@@ -304,75 +297,9 @@ def _require(result: CommandResult, operation: str) -> bytes:
     return result.stdout
 
 
-def _inventory(raw: bytes) -> list[dict[str, str]]:
-    fields = raw.decode("utf-8", "surrogateescape").split("\0")
-    if fields and fields[-1] == "":
-        fields.pop()
-    result = []
-    index = 0
-    while index < len(fields):
-        status = fields[index]
-        index += 1
-        if status[:1] in {"R", "C"}:
-            if index + 1 >= len(fields):
-                raise EvidenceError("malformed Git name inventory")
-            old_path, path = fields[index : index + 2]
-            index += 2
-            result.append(
-                {"status": status, "old_path": old_path, "path": path}
-            )
-        else:
-            if index >= len(fields):
-                raise EvidenceError("malformed Git name inventory")
-            result.append({"status": status, "path": fields[index]})
-            index += 1
-    return result
-
-
-def _is_deferred(
-    path: str,
-    authority: dict,
-    narrative_paths: tuple[Path, ...],
-) -> bool:
-    repo = Path(authority["repository_root"])
-    contract_prefixes = (
-        f".notes/{authority['branch_directory']}/contract/",
-        f"ai_docs/{authority['branch_directory']}/contract/",
-    )
-    if path.startswith(contract_prefixes):
-        return True
-    supplied = set()
-    for value in narrative_paths:
-        absolute = value if value.is_absolute() else repo / value
-        try:
-            supplied.add(absolute.resolve().relative_to(repo).as_posix())
-        except ValueError:
-            continue
-    pure = Path(path)
-    return (
-        path in supplied
-        or pure.name in KNOWN_NARRATIVE_NAMES
-        or path.startswith(".worker-results/")
-    )
-
-
-def _filter_reuse_results(
-    raw: bytes,
-    authority: dict,
-    narrative_paths: tuple[Path, ...],
-) -> str:
-    retained = []
-    for line in raw.decode("utf-8", "replace").splitlines():
-        fields = line.split(":", 3)
-        if len(fields) < 4:
-            continue
-        if not _is_deferred(fields[1], authority, narrative_paths):
-            retained.append(line)
-    return "\n".join(retained) + ("\n" if retained else "")
-
-
-def _archive_blobs(raw: bytes) -> dict[str, str]:
+def _archive_blobs(raw: bytes) -> tuple[dict[str, object], dict[str, str]]:
     blobs = {}
+    guards = {}
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
         for member in archive.getmembers():
             if not member.isfile():
@@ -381,6 +308,7 @@ def _archive_blobs(raw: bytes) -> dict[str, str]:
             if handle is None:
                 continue
             content = handle.read()
+            guards[member.name] = hashlib.sha256(content).hexdigest()
             try:
                 blobs[member.name] = content.decode("utf-8")
             except UnicodeDecodeError:
@@ -388,7 +316,7 @@ def _archive_blobs(raw: bytes) -> dict[str, str]:
                     "encoding": "hex",
                     "content": content.hex(),
                 }
-    return blobs
+    return blobs, guards
 
 
 def _tokens(text: str) -> set[str]:
@@ -426,23 +354,43 @@ def capture_code_evidence(
     repo = Path(authority["repository_root"])
     base = authority["base_sha"]
     head = authority["head_sha"]
-    evidence_deadline = min(clock() + 180.0, absolute_deadline - 60.0)
+    try:
+        policy = PathPolicy.from_authority(authority, narrative_paths)
+    except AuditPathError as error:
+        raise EvidenceError(str(error)) from error
+    evidence_started = clock()
+    available = max(0.0, absolute_deadline - evidence_started)
+    reserve = 60.0 if available > 60.0 else 0.0
+    evidence_deadline = min(
+        evidence_started + 180.0,
+        absolute_deadline - reserve,
+    )
+    status_bytes = _require(
+        runner.run(
+            ["status", "--porcelain=v1", "--untracked-files=all"],
+            cwd=repo,
+            deadline=evidence_deadline,
+        ),
+        "initial worktree disclosure",
+    )
     inventory_result = runner.run(
         ["diff", "--name-status", "--find-renames", "-z", f"{base}..{head}"],
         cwd=repo,
         deadline=evidence_deadline,
     )
-    inventory = _inventory(_require(inventory_result, "name inventory"))
-    included = [
-        item for item in inventory
-        if not _is_deferred(item["path"], authority, narrative_paths)
-    ]
+    inventory_bytes = _require(inventory_result, "name inventory")
+    try:
+        inventory = parse_name_status_z(inventory_bytes)
+        included = policy.filter_changed(inventory)
+    except AuditPathError as error:
+        raise EvidenceError(str(error)) from error
     included_paths = [
-        item["path"] for item in included if not item["status"].startswith("D")
+        item.path for item in included if not item.status.startswith("D")
     ]
-    path_args = [item["path"] for item in included]
+    path_args = [item.path for item in included]
     diff = b""
     blobs = {}
+    blob_guards = {}
     if path_args:
         diff = _require(
             runner.run(
@@ -460,7 +408,7 @@ def capture_code_evidence(
             "implementation diff",
         )
     if included_paths:
-        blobs = _archive_blobs(
+        blobs, blob_guards = _archive_blobs(
             _require(
                 runner.run(
                     ["archive", "--format=tar", head, "--", *included_paths],
@@ -492,7 +440,19 @@ def capture_code_evidence(
         | _tokens(contract.reuse_query_text)
         | _tokens(" ".join(public_names))
     )[:QUERY_TOKEN_CAP]
-    grep_args = ["grep", "-n", "-I", "-F"]
+    tree_bytes = _require(
+        runner.run(
+            ["ls-tree", "-r", "-z", "--name-only", head],
+            cwd=repo,
+            deadline=evidence_deadline,
+        ),
+        "recorded-HEAD path identities",
+    )
+    denied_paths = frozenset(
+        item.path for item in inventory if not policy.accepts_changed(item)
+    )
+    allowed_paths = policy.allowed_head_paths(tree_bytes, denied_paths)
+    grep_args = ["grep", "-n", "-I", "-F", "-z"]
     for token in query:
         grep_args.extend(("-e", token))
     grep_args.extend((head, "--"))
@@ -503,18 +463,28 @@ def capture_code_evidence(
         output_limit=REUSE_RESULT_CAP,
     )
     reuse_truncated = reuse_result.truncated or reuse_result.timed_out
+    try:
+        matches = policy.parse_grep_z(
+            reuse_result.stdout,
+            head,
+            allowed_paths,
+            allow_incomplete_tail=reuse_truncated,
+        )
+    except AuditPathError as error:
+        raise EvidenceError(str(error)) from error
     changed_paths = []
     for index, item in enumerate(included, 1):
         changed_paths.append(
             {
                 "path_id": f"P{index}",
-                **item,
-                "head_blob": blobs.get(item["path"]),
+                **item.as_packet_value(),
+                "head_blob": blobs.get(item.path),
             }
         )
+    packet_inventory = [item.as_packet_value() for item in included]
     evidence = {
         "inventory:NAME-1": {
-            "entries": inventory,
+            "entries": packet_inventory,
             "scope": {"base": base, "head": head},
         },
         "source:CAPTURE-1": {
@@ -525,11 +495,7 @@ def capture_code_evidence(
         "reuse:SEARCH-1": {
             "query": query,
             "scope": {"commit": head, "tree": "full"},
-            "results": _filter_reuse_results(
-                reuse_result.stdout,
-                authority,
-                narrative_paths,
-            ),
+            "results": [item.as_packet_value() for item in matches],
             "truncated": reuse_truncated,
         },
     }
@@ -539,18 +505,43 @@ def capture_code_evidence(
             "section": clause.section,
             "capture_refs": ["source:CAPTURE-1", "reuse:SEARCH-1"],
         }
-    status_result = runner.run(
-        ["status", "--porcelain=v1", "--untracked-files=all"],
-        cwd=repo,
-        deadline=absolute_deadline,
-    )
-    status = _require(status_result, "worktree disclosure").decode(
-        "utf-8", "replace"
-    )
+    status = status_bytes.decode("utf-8", "replace")
     return {
         "changed_paths": changed_paths,
         "evidence": evidence,
         "evidence_deadline": evidence_deadline,
         "reuse_truncated": reuse_truncated,
-        "worktree": {"dirty": bool(status), "status": status},
+        "worktree": {
+            "dirty": bool(status),
+            "status": "dirty" if status else "clean",
+        },
+        "initial_status_bytes_b64": base64.b64encode(
+            status_bytes
+        ).decode("ascii"),
+        "initial_status_sha256": hashlib.sha256(
+            status_bytes
+        ).hexdigest(),
+        "source_guards": {
+            "inventory_sha256": hashlib.sha256(
+                inventory_bytes
+            ).hexdigest(),
+            "diff_sha256": hashlib.sha256(diff).hexdigest(),
+            "head_blob_sha256": blob_guards,
+            "tree_paths_sha256": hashlib.sha256(tree_bytes).hexdigest(),
+            "reuse_result_sha256": hashlib.sha256(
+                reuse_result.stdout
+            ).hexdigest(),
+            "base_sha": base,
+            "head_sha": head,
+        },
+        "deferred_narrative_paths": sorted(
+            set(policy.narrative_paths)
+            | set(policy.deferred_head_narratives(tree_bytes))
+            | {
+                item.path
+                for item in inventory
+                if not policy.accepts_changed(item)
+                and not policy.is_contract_artifact(item.path)
+            }
+        ),
     }
