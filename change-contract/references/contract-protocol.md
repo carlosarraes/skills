@@ -187,10 +187,20 @@ Recommended next skill: `<ordered route>`
 
 Assign one clause status per stable clause ID:
 
+- Judge each clause's exact approved predicate; do not substitute a broader or
+  narrower proxy. For example, a prohibition on a class hierarchy is not a
+  prohibition on every private class. Implementation path, expected surface,
+  reuse, simplicity, and complexity-budget facts do not alter an Outcome/B
+  clause status unless they change its approved behavior, public contract, or
+  risk boundary; they aggregate through dedicated axes.
 - For positive clauses (O/B/I/C/R/A), `MET` means Git-object or acceptance
   evidence proves the approved predicate; `UNMET` means determinate evidence
   proves it false or missing; `EXCEEDED` means it is met but shipped behavior,
   contract, risk, or responsibility goes beyond its approved boundary.
+- Emit one explicit `A-<B-id>` row for every B. `MET` requires that evidence
+  demonstrates the exact mapped B predicate. An adjacent behavior, happy path,
+  or non-boundary example does not prove it; missing or non-demonstrative
+  evidence is `INDETERMINATE`.
 - For non-goals (N), `MET` means the excluded behavior is absent; `UNMET` means
   it is present; `EXCEEDED` requires evidence that the implementation actively
   imposes an additional restriction on existing or approved behavior; ordinary
@@ -218,6 +228,11 @@ Assign one clause status per stable clause ID:
 
 Assign ledger status independently:
 
+- Verify D status from complete factual fields, commit chronology, and
+  replay-probe evidence. A compatible helper that exists before the affected
+  implementation commit qualifies as pre-existing, even when created by the
+  same author or created after contract approval. Motive or authorship
+  speculation alone cannot make a D entry `CONTRADICTED`.
 - `VERIFIED` means every required D field is complete and Git-object or command
   evidence confirms its affected clauses, discovered fact, actual approach,
   timing, and bounded classification.
@@ -245,13 +260,20 @@ while simplicity and drift remain visible.
   clause or mapped acceptance proof is `INDETERMINATE`.
 - Contract fidelity `PASS`: every fidelity-owned clause is determinate and
   satisfied.
+- YAGNI requires an evidenced unearned added construct. Correctness defects,
+  missing tests, deletions, unexpected surface, and complexity-budget excess
+  alone do not establish YAGNI. A budget excess affects YAGNI only when the
+  added construct is proven unearned.
 - YAGNI `FAIL`: any proven unearned item adds a module, runtime dependency,
-  configuration, public interface, violates a numeric complexity budget of
-  zero, or two or more localized items are proven unearned.
+  configuration, or public interface, or two or more localized items are
+  proven unearned.
 - YAGNI `WARNING`: no `FAIL` condition exists, and either exactly one localized
   item is proven unearned or one or more questionable localized items (or any
   other questionable item) exist. YAGNI `PASS`: no proven or questionable item
   exists.
+- Every changed responsibility needs recorded full-HEAD full-tree search
+  evidence before Reuse can be `PASS`; missing search evidence cannot yield
+  `PASS`.
 - Reuse `FAIL`: a compatible current helper, component, service, or platform
   feature is demonstrably duplicated or bypassed. Reuse `WARNING`:
   compatibility remains indeterminate or only a near-duplicate exists. Reuse

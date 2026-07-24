@@ -208,6 +208,133 @@ class CheckContractSkillTests(unittest.TestCase):
             "`git show <full-head>:<path>`",
         )
 
+    def test_inspection_is_bounded_static_and_d_probes_are_isolated(self):
+        step_two = self.skill[
+            self.skill.index("### Step 2:"):
+            self.skill.index("### Step 3:")
+        ]
+        step_five = self.skill[
+            self.skill.index("### Step 5:"):
+            self.skill.index("### Step 6:")
+        ]
+        for phrase in (
+            "one bounded static inspection pass",
+            "`git diff --name-status --find-renames <base>..<full-head>`",
+            "Do not rerun a completed read or search",
+            "Never run general target tests",
+            "never import or execute target code",
+        ):
+            self.assertIn(normalized(phrase), normalized(step_two))
+        for phrase in (
+            "D-stated replay probe",
+            "complete stated probe",
+            "disposable temporary tree outside the target repository",
+            "`git archive <full-head>`",
+            "`PYTHONDONTWRITEBYTECODE=1`",
+            "remove the temporary tree",
+            "never mutate the target",
+        ):
+            self.assertIn(normalized(phrase), normalized(step_five))
+
+    def test_compound_a_hard_stop_is_a_strict_phase_boundary(self):
+        required = (
+            "For a compound A-then-B request",
+            "hash A's existing report sentinel as opaque bytes without parsing",
+            "resolve A",
+            "attest failed authority, zero writes, and unchanged sentinel bytes",
+            "never access or mutate A again",
+            "before beginning B",
+            "after any B repository action starts",
+            "resolve B independently",
+        )
+        for phrase in required:
+            self.assertIn(normalized(phrase), self.flat_skill)
+        self.assert_ordered(
+            self.flat_skill,
+            *[normalized(phrase) for phrase in required],
+        )
+
+    def test_code_first_inventory_defers_all_narrative_contents(self):
+        step_two = self.skill[
+            self.skill.index("### Step 2:"):
+            self.skill.index("### Step 3:")
+        ]
+        required = (
+            "inventory names first",
+            "`git diff --name-status --find-renames <base>..<full-head>`",
+            "path-filtered Git-object operations",
+            "implementation source and tests only",
+            "defer the contents of contract artifacts, the ledger, reports, "
+            "worker summaries, PR narratives, and other author narratives",
+            "Step 5",
+        )
+        for phrase in required:
+            self.assertIn(normalized(phrase), normalized(step_two))
+        self.assert_ordered(
+            normalized(step_two),
+            *[normalized(phrase) for phrase in required],
+        )
+
+    def test_acceptance_rows_prove_exact_predicates_without_axis_leakage(self):
+        for phrase in (
+            "Emit one explicit `A-<B-id>` row for every B",
+            "evidence demonstrates the exact mapped B predicate",
+            "An adjacent behavior, happy path, or non-boundary example",
+            "missing or non-demonstrative evidence is `INDETERMINATE`",
+            "Judge each clause's exact approved predicate",
+            "a prohibition on a class hierarchy is not a prohibition on every "
+            "private class",
+            "Implementation path, expected surface, reuse, simplicity, and "
+            "complexity-budget facts do not alter an Outcome/B clause status",
+            "dedicated axes",
+        ):
+            self.assertIn(phrase, self.flat_check_protocol)
+
+    def test_yagni_requires_an_evidenced_unearned_added_construct(self):
+        required = (
+            "YAGNI requires an evidenced unearned added construct",
+            "Correctness defects, missing tests, deletions, unexpected surface, "
+            "and complexity-budget excess alone do not establish YAGNI",
+            "A budget excess affects YAGNI only when the added construct is "
+            "proven unearned",
+        )
+        for phrase in required:
+            self.assertIn(phrase, self.flat_check_protocol)
+        self.assertNotIn(
+            "violates a numeric complexity budget of zero",
+            self.flat_check_protocol,
+        )
+
+    def test_reuse_pass_requires_full_head_full_tree_search_evidence(self):
+        step_four = self.skill[
+            self.skill.index("### Step 4:"):
+            self.skill.index("### Step 5:")
+        ]
+        for phrase in (
+            "recorded full-HEAD full-tree search",
+            "every changed responsibility",
+            "before Reuse can be `PASS`",
+            "missing search evidence cannot yield `PASS`",
+            "compatible helper",
+            "duplicated or bypassed",
+            "Reuse `FAIL`",
+        ):
+            source = step_four if "full-tree" in phrase else self.check_protocol
+            self.assertIn(normalized(phrase), normalized(source))
+
+    def test_ledger_verification_is_factual_and_chronological(self):
+        for phrase in (
+            "complete factual fields, commit chronology, and replay-probe "
+            "evidence",
+            "A compatible helper that exists before the affected "
+            "implementation commit qualifies as pre-existing",
+            "same author",
+            "created after contract approval",
+            "Motive or authorship speculation alone cannot make a D entry "
+            "`CONTRADICTED`",
+        ):
+            self.assertIn(phrase, self.flat_check_protocol)
+
     def test_skill_does_not_duplicate_protocol_owned_enumerations(self):
         self.assertIn(
             "protocol-defined clause status",

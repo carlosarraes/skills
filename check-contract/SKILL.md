@@ -1,6 +1,6 @@
 ---
 name: check-contract
-description: Use when the user explicitly asks to audit or check an approved change contract against the current branch implementation.
+description: Use only when explicitly asked to audit an approved change contract against the current branch implementation.
 disable-model-invocation: true
 ---
 
@@ -12,14 +12,19 @@ repository mutation is atomic replacement of the still-active
 post results. Do not commit. Do not push. Do not approve anything. Do not invoke
 the recommended skill. Routes are advisory only.
 
+For a compound A-then-B request, hash A's existing report sentinel as opaque
+bytes without parsing, then resolve A. On hard stop, attest failed authority,
+zero writes, and unchanged sentinel bytes; never access or mutate A
+again—before beginning B or after any B repository action starts. Then resolve
+B independently without carrying A evidence.
+
 ### Step 1: Resolve and verify authority
 
 Resolve the ticket and full branch. Resolve `<check-contract-skill-dir>` as the
 absolute directory containing this loaded `SKILL.md`, then its sibling
 `<change-contract-skill-dir>`. Read the sibling protocol completely at
 `<change-contract-skill-dir>/references/contract-protocol.md` before authority
-resolution; it exclusively owns storage, vocabulary, aggregation, stable IDs,
-precedence, and routes.
+resolution; it owns all check semantics.
 
 From any path inside the target repository, run:
 
@@ -39,29 +44,36 @@ must be true absence across both roots and is also a hard stop.
 
 For approved state, snapshot active version, approval version, branch, ticket,
 approval bytes and approval SHA-256, contract SHA-256, full base, full HEAD,
-ancestry, paths, and worktree state. Record dirty state as a report limitation.
-Also guard source, contract, ledger, and `git status --porcelain=v1` hashes.
+ancestry, paths, and worktree state. Guard source, contract, ledger, and
+`git status --porcelain=v1` hashes.
 Guard the prior report's existence and bytes too. Hard-stop true absence or any
 authority failure before implementation narrative is read; preserve any
 existing report.
 
-**Complete when:** one canonical repository, approved immutable identity, full
-audit range, ancestry, worktree disclosure, and guards are recorded.
+**Complete when:** immutable authority and guards are recorded.
 
 ### Step 2: Derive code-as-shipped first
 
-From the canonical root, run `git diff <base>..<full-head>` and inventory its
-renames, separating contract artifacts from implementation. Read every
-code-as-shipped byte—including changed source/tests and enough surrounding
-code—from the recorded Git object with `git show <full-head>:<path>`. All later
-code reads and searches use that full-HEAD tree, never worktree files. A dirty
-worktree is disclosed only as a non-authoritative limitation. Use source
-Git-object IDs as the source guards. Account for public contracts, side
-effects, persisted state, and integrations with `file:line` evidence. Do not
-read the ledger, report, supplied summary, or PR narrative yet.
+From the canonical root, inventory names first with
+`git diff --name-status --find-renames <base>..<full-head>` and separate
+renames, contract artifacts, and narratives from implementation. In one
+bounded static inspection pass, use path-filtered Git-object operations on the
+`git diff <base>..<full-head>` range only as
+`git diff <base>..<full-head> -- <implementation-source/test-paths>` to read
+implementation source and tests only: every code-as-shipped byte in changed
+source/tests and enough surrounding code from the recorded Git object via
+`git show <full-head>:<path>`. Do not rerun a completed read or search.
+Later reads and searches use recorded full-HEAD objects, never worktree files.
+Never run general target tests; never import or execute target code. After
+implementation reads, defer the contents of contract artifacts, the ledger,
+reports, worker summaries, PR narratives, and other author narratives until
+Step 5. Do not read
+the ledger, report, supplied summary, or PR narrative yet. A dirty worktree is
+a non-authoritative limitation; use source Git-object IDs as guards. Account
+for public contracts, side effects, persisted state, and integrations with
+`file:line` evidence.
 
-**Complete when:** the code-first behavior and exact implementation surface are
-evidenced independently of claims.
+**Complete when:** code-first behavior and surface are evidenced.
 
 ### Step 3: Classify contract fidelity
 
@@ -70,32 +82,35 @@ expected-surface, complexity-budget, and acceptance-evidence clause. Check each
 `A-<B-id>` against its behavior and aggregate Contract fidelity only by the
 protocol.
 
-**Complete when:** every clause family has a stable ID, status, evidence, and
-reason, and Contract fidelity is derived.
+**Complete when:** clauses are evidenced; fidelity is derived.
 
 ### Step 4: Audit YAGNI and reuse
 
-Search the recorded full-HEAD tree for existing helpers, components, services,
-and platform features. Judge every new abstraction, dependency, configuration,
-module, public interface, layer/wrapper, defensive branch, touched
-responsibility, duplicate, and implementation-coupled test as earned or
-unearned. Correctness requirements are not bloat. Derive YAGNI and Reuse only
-by protocol rules.
+Perform a recorded full-HEAD full-tree search with `git grep` for existing
+helpers, components, services, and platform features for every changed
+responsibility.
+Judge every new abstraction, dependency, configuration, module, public
+interface, layer/wrapper, defensive branch, duplicate, and
+implementation-coupled test as earned or unearned. Correctness requirements are
+not bloat. Derive YAGNI and Reuse only by protocol rules.
 
-**Complete when:** every changed responsibility has evidenced reuse/no-reuse
-and earned/unearned decisions and both audit axes are derived.
+**Complete when:** responsibilities and both axes are evidenced.
 
 ### Step 5: Reconcile ledger and narrative
 
 Only now read the ledger and supplied summary or PR claims; a missing ledger or
-narrative means empty and is never created. Verify each D entry, assign its
-Ledger status, classify every deviation documented or undocumented, generate
-sorted D/U/F IDs, and compare every claim with the code-first account. Apply
-the protocol's exhaustive verdict precedence and route table. Derive both
-Documented drift and Undocumented drift.
+narrative means empty and is never created. Verify D entries, classify
+deviations, generate sorted D/U/F IDs, and compare claims with the code-first
+account. Apply protocol precedence and routes; derive Documented drift and
+Undocumented drift.
 
-**Complete when:** drift fields, ordered findings, exact verdict, and ID-citing
-route are deterministically derived.
+For a D-stated replay probe only, create a disposable temporary tree outside
+the target repository, materialize recorded HEAD with
+`git archive <full-head>` using `tar -x -C <outside-temp-dir>`, run the complete
+stated probe there under `PYTHONDONTWRITEBYTECODE=1`, then remove the temporary
+tree; never mutate the target. Otherwise run no target code.
+
+**Complete when:** drift, findings, verdict, and ID-citing route are derived.
 
 ### Step 6: Replace report and route
 
@@ -104,8 +119,7 @@ absolute `resolve-consumer --allow-missing-ledger` command. Require equality of
 the canonical root, full HEAD, active version, approval bytes and SHA-256,
 contract SHA-256, full base, branch/ticket identity, and ancestry. Recheck all
 guarded hashes for source, contract, ledger, status, and the prior report. Any
-authority failure or freshness mismatch aborts and must preserve the previous
-report.
+authority failure or freshness mismatch aborts; preserve the previous report.
 
 Atomically create or replace only
 `<selected-root>/v<active-version>/check-report.md`; verify no other
@@ -135,5 +149,4 @@ D/deviation ID, status, evidence, and documentation state. The route cites
 stable finding IDs and relevant U/D IDs when present; otherwise it uses the
 protocol's explicit-none form.
 
-**Complete when:** the active report alone is atomically replaced from a fresh,
-unchanged authority snapshot and its mutation attestation is verified.
+**Complete when:** only the active report is replaced and attested.
