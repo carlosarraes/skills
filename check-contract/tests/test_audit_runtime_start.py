@@ -1,11 +1,14 @@
 import hashlib
 import importlib
+import io
 import json
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 
 from runtime_fixtures import materialized_repo, packet_of
@@ -67,6 +70,19 @@ class RecordingRunner:
 class ExplodingRunner:
     def run(self, args, *, cwd, deadline, output_limit=None):
         raise AssertionError("evidence capture ran before contract validation")
+
+
+@dataclass
+class MutableLeaf:
+    value: int
+
+
+class MutableInt(int):
+    pass
+
+
+class MutableString(str):
+    pass
 
 
 class AuditRuntimeStartTests(unittest.TestCase):
@@ -400,6 +416,98 @@ class AuditRuntimeStartTests(unittest.TestCase):
                 0o400,
             )
 
+    def test_append_rejects_an_existing_regular_response_file(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.runtime(root).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            store = self.module.SessionStore(root)
+            state = store.load(first.session)
+            state["nonce"] = "a" * 32
+            state["response_name"] = f"{'b' * 32}.json"
+            run_id = first.session.split(".", 1)[0]
+            response = root / run_id / "inbox" / state["response_name"]
+            response.write_bytes(b"pre-existing response\n")
+            generations = root / run_id / "generations"
+            before = {path.name for path in generations.iterdir()}
+
+            with self.assertRaises(self.module.SessionIntegrityError):
+                store.append(
+                    first.session,
+                    state,
+                    {"schema_version": 1, "kind": "next"},
+                )
+
+            self.assertEqual(response.read_bytes(), b"pre-existing response\n")
+            self.assertEqual(
+                {path.name for path in generations.iterdir()},
+                before,
+            )
+
+    def test_append_rejects_a_response_name_used_by_its_predecessor(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.runtime(root).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            store = self.module.SessionStore(root)
+            state = store.load(first.session)
+            state["nonce"] = "a" * 32
+            run_id = first.session.split(".", 1)[0]
+            generations = root / run_id / "generations"
+            before = {path.name for path in generations.iterdir()}
+
+            with self.assertRaises(self.module.SessionIntegrityError):
+                store.append(
+                    first.session,
+                    state,
+                    {"schema_version": 1, "kind": "next"},
+                )
+
+            self.assertEqual(
+                {path.name for path in generations.iterdir()},
+                before,
+            )
+
+    def test_append_rejects_a_response_symlink_without_touching_its_target(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.runtime(root).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            store = self.module.SessionStore(root)
+            state = store.load(first.session)
+            state["nonce"] = "a" * 32
+            state["response_name"] = f"{'b' * 32}.json"
+            run_id = first.session.split(".", 1)[0]
+            target = repo / "response-target.json"
+            target.write_bytes(b"target sentinel\n")
+            response = root / run_id / "inbox" / state["response_name"]
+            response.symlink_to(target)
+            generations = root / run_id / "generations"
+            before = {path.name for path in generations.iterdir()}
+
+            with self.assertRaises(self.module.SessionIntegrityError):
+                store.append(
+                    first.session,
+                    state,
+                    {"schema_version": 1, "kind": "next"},
+                )
+
+            self.assertTrue(response.is_symlink())
+            self.assertEqual(target.read_bytes(), b"target sentinel\n")
+            self.assertEqual(
+                {path.name for path in generations.iterdir()},
+                before,
+            )
+
     def test_wrong_generation_digest_or_manifest_is_rejected(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -539,6 +647,14 @@ class AuditRuntimeStartTests(unittest.TestCase):
             self.assertEqual(store.load(second.token)["nonce"], "a" * 32)
             self.assertEqual(store.load(first.session)["phase"], "code")
 
+    def test_session_trust_and_response_consumption_boundaries_are_explicit(self):
+        session_doc = sys.modules["audit_session"].__doc__
+
+        self.assertIn("same effective user", session_doc)
+        self.assertIn("does not protect", session_doc)
+        self.assertIn("exact issued response name", session_doc)
+        self.assertIn("O_NOFOLLOW", session_doc)
+
     def test_session_rejects_replaced_internal_directories(self):
         for component, operation in (
             ("generations", "load"),
@@ -646,6 +762,59 @@ class AuditRuntimeStartTests(unittest.TestCase):
             self.assertIn("source_guards", state)
             self.assertNotIn(str(repo.resolve()), json.dumps(packet))
             self.assertNotIn("review-summary.md", json.dumps(packet))
+
+    def test_changed_symlink_is_captured_as_link_target_bytes(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            link = repo / "src" / "price-link.py"
+            link.symlink_to("pricing.py")
+            git(repo, "add", str(link.relative_to(repo)))
+            git(repo, "commit", "-m", "feat: add price module link")
+
+            result = self.runtime(Path(temporary)).advance(
+                self.module.StartAudit(self.target(repo))
+            )
+            packet = packet_of(result)
+            state = self.module.SessionStore(Path(temporary)).load(
+                result.session
+            )
+            changed = {
+                item["path"]: item for item in packet["changed_paths"]
+            }
+
+            self.assertEqual(
+                changed["src/price-link.py"]["head_blob"],
+                {
+                    "type": "symlink",
+                    "target": {
+                        "encoding": "utf-8",
+                        "content": "pricing.py",
+                    },
+                },
+            )
+            self.assertEqual(
+                state["source_guards"]["head_blob_sha256"][
+                    "src/price-link.py"
+                ],
+                hashlib.sha256(b"pricing.py").hexdigest(),
+            )
+
+    def test_recorded_head_rejects_unsupported_entry_types(self):
+        archive_bytes = io.BytesIO()
+        with tarfile.open(fileobj=archive_bytes, mode="w:") as archive:
+            entry = tarfile.TarInfo("src/device")
+            entry.type = tarfile.FIFOTYPE
+            archive.addfile(entry)
+
+        with self.assertRaisesRegex(
+            self.module.EvidenceError,
+            "unsupported recorded-HEAD Git entry type",
+        ):
+            sys.modules["audit_evidence"]._archive_blobs(
+                archive_bytes.getvalue(),
+                ["src/device"],
+            )
 
     def test_contract_buffer_must_match_resolved_authority_digest(self):
         with materialized_repo(
@@ -764,6 +933,65 @@ class AuditRuntimeStartTests(unittest.TestCase):
         )
         with self.assertRaises(TypeError):
             judgment.closed_target["new"] = "value"
+
+    def test_public_envelopes_accept_only_immutable_json_like_leaves(self):
+        accepted = self.module.NeedJudgment(
+            session="s",
+            target="primary",
+            kind="code",
+            packet_path=Path("/packet"),
+            packet_sha256="a" * 64,
+            response_path=Path("/response"),
+            next_command=("continue",),
+            nonce="b" * 32,
+            closed_target={
+                "none": None,
+                "bool": True,
+                "int": 1,
+                "float": 1.25,
+                "str": "value",
+                "sequence": [False, 2],
+            },
+        )
+        self.assertEqual(accepted.closed_target["float"], 1.25)
+
+        unsupported = (
+            bytearray(b"mutable"),
+            MutableLeaf(1),
+            object(),
+            float("inf"),
+            float("-inf"),
+            float("nan"),
+            b"bytes",
+            {"set"},
+            Path("/mutable-or-domain-object"),
+            MutableInt(1),
+            MutableString("value"),
+        )
+        for leaf in unsupported:
+            with self.subTest(leaf=type(leaf).__name__), self.assertRaises(
+                TypeError
+            ):
+                self.module.NeedJudgment(
+                    session="s",
+                    target="primary",
+                    kind="code",
+                    packet_path=Path("/packet"),
+                    packet_sha256="a" * 64,
+                    response_path=Path("/response"),
+                    next_command=("continue",),
+                    nonce="b" * 32,
+                    closed_target={"leaf": leaf},
+                )
+
+        with self.assertRaises(TypeError):
+            self.module.AuditComplete(
+                verdict="PASS",
+                route=("qa-ticket",),
+                report_path=Path("/report"),
+                report_sha256="c" * 64,
+                mutation_attestation={1: "non-string key"},
+            )
 
 
 if __name__ == "__main__":

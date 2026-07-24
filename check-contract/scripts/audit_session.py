@@ -1,4 +1,15 @@
-"""Authenticated append-only storage for immutable audit generations."""
+"""Authenticated local storage for immutable audit generations.
+
+The HMAC chain detects accidental corruption, stale generations, and
+token-only or unkeyed forgery. Because its key and data are owned by the same
+effective user, it does not protect against deliberate coordinated filesystem
+tampering by that same effective user.
+
+This slice only issues absent response paths. Later response creation and
+consumption must use the exact issued response name. It must operate through
+the inbox directory descriptor with O_NOFOLLOW; a lexical path check is not
+sufficient.
+"""
 
 import hashlib
 import hmac
@@ -294,6 +305,36 @@ class SessionStore:
         ):
             raise SessionIntegrityError("packet schema is invalid")
 
+    def _response_name(self, state: Mapping[str, object]) -> str:
+        response_name = state.get("response_name")
+        if (
+            not isinstance(response_name, str)
+            or RESPONSE_RE.fullmatch(response_name) is None
+        ):
+            raise SessionIntegrityError("state has an invalid response name")
+        return response_name
+
+    def _require_response_absent(
+        self,
+        inbox: int,
+        response_name: str,
+    ) -> None:
+        try:
+            os.stat(
+                response_name,
+                dir_fd=inbox,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return
+        except OSError as error:
+            raise SessionIntegrityError(
+                "cannot verify issued response path"
+            ) from error
+        raise SessionIntegrityError(
+            "issued response name already exists in the inbox"
+        )
+
     def _resolved_run_paths(
         self,
         directories,
@@ -333,17 +374,28 @@ class SessionStore:
         if state_value.get("schema_version") != 1:
             raise SessionIntegrityError("state schema version is invalid")
         state_value["packet_sha256"] = packet_digest
-        response_name = state_value.get("response_name")
-        if (
-            not isinstance(response_name, str)
-            or RESPONSE_RE.fullmatch(response_name) is None
-        ):
-            raise SessionIntegrityError("state has an invalid response name")
+        response_name = self._response_name(state_value)
         self._validate_values(state_value, packet_value)
         state_bytes = _canonical_json(state_value)
         state_digest = _digest(state_bytes)
         temporary_name = f".{state_digest}-{secrets.token_hex(8)}"
+        issued_response_names = set()
+        if previous_digest is not None:
+            self._load_verified(
+                run_id,
+                previous_digest,
+                verify_previous=True,
+                response_names=issued_response_names,
+            )
+        if response_name in issued_response_names:
+            raise SessionIntegrityError(
+                "response name was already issued in this generation chain"
+            )
         with self._run_directories(run_id) as directories:
+            self._require_response_absent(
+                directories["inbox"],
+                response_name,
+            )
             key = self._key(directories["run"])
             manifest = self._manifest_value(
                 key,
@@ -412,7 +464,10 @@ class SessionStore:
         expected_digest: str,
         *,
         verify_previous: bool,
+        response_names: set[str] | None = None,
     ) -> dict:
+        if response_names is None:
+            response_names = set()
         with self._run_directories(run_id) as directories:
             generation = self._open_directory(
                 expected_digest,
@@ -491,14 +546,12 @@ class SessionStore:
                 raise SessionIntegrityError(
                     "generation authentication failed"
                 )
-            response_name = state.get("response_name")
-            if (
-                not isinstance(response_name, str)
-                or RESPONSE_RE.fullmatch(response_name) is None
-            ):
+            response_name = self._response_name(state)
+            if response_name in response_names:
                 raise SessionIntegrityError(
-                    "generation response name is invalid"
+                    "generation chain reuses an issued response name"
                 )
+            response_names.add(response_name)
             self._resolved_run_paths(
                 directories,
                 expected_digest,
@@ -509,6 +562,7 @@ class SessionStore:
                 run_id,
                 previous,
                 verify_previous=True,
+                response_names=response_names,
             )
         return state
 
@@ -542,6 +596,23 @@ class SessionStore:
         packet: Mapping[str, object],
     ) -> SessionGeneration:
         run_id, digest = self._parse_token(token)
+        response_name = self._response_name(state)
+        issued_response_names = set()
+        self._load_verified(
+            run_id,
+            digest,
+            verify_previous=True,
+            response_names=issued_response_names,
+        )
+        if response_name in issued_response_names:
+            raise SessionIntegrityError(
+                "response name was already issued in this generation chain"
+            )
+        with self._run_directories(run_id) as directories:
+            self._require_response_absent(
+                directories["inbox"],
+                response_name,
+            )
         self.claim(token)
         return self._write_generation(run_id, state, packet, digest)
 

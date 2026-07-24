@@ -1,6 +1,7 @@
 """Deep public facade for contract-audit policy and runtime orchestration."""
 
 import hashlib
+import math
 import os
 import re
 import secrets
@@ -46,15 +47,24 @@ from audit_validation import validate_code_judgment
 
 
 def _deep_freeze(value):
+    if value is None or type(value) in (bool, int, str):
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise TypeError("public envelope floats must be finite")
+        return value
     if isinstance(value, Mapping):
-        return MappingProxyType(
-            {key: _deep_freeze(item) for key, item in value.items()}
-        )
+        frozen = {}
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError("public envelope mapping keys must be strings")
+            frozen[key] = _deep_freeze(item)
+        return MappingProxyType(frozen)
     if isinstance(value, (list, tuple)):
         return tuple(_deep_freeze(item) for item in value)
-    if isinstance(value, (set, frozenset)):
-        return frozenset(_deep_freeze(item) for item in value)
-    return value
+    raise TypeError(
+        "public envelope contains an unsupported mutable or domain value"
+    )
 
 
 def _guard_path(path: Path) -> dict[str, object]:

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import importlib.util
 import io
+import os
 import re
 import subprocess
 import tarfile
@@ -297,25 +298,63 @@ def _require(result: CommandResult, operation: str) -> bytes:
     return result.stdout
 
 
-def _archive_blobs(raw: bytes) -> tuple[dict[str, object], dict[str, str]]:
+def _encoded_bytes(content: bytes) -> dict[str, str]:
+    try:
+        return {
+            "encoding": "utf-8",
+            "content": content.decode("utf-8"),
+        }
+    except UnicodeDecodeError:
+        return {
+            "encoding": "hex",
+            "content": content.hex(),
+        }
+
+
+def _archive_blobs(
+    raw: bytes,
+    expected_paths: list[str],
+) -> tuple[dict[str, object], dict[str, str]]:
     blobs = {}
     guards = {}
+    expected = set(expected_paths)
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
         for member in archive.getmembers():
-            if not member.isfile():
+            if member.name not in expected:
                 continue
-            handle = archive.extractfile(member)
-            if handle is None:
-                continue
-            content = handle.read()
-            guards[member.name] = hashlib.sha256(content).hexdigest()
-            try:
-                blobs[member.name] = content.decode("utf-8")
-            except UnicodeDecodeError:
+            if member.name in blobs:
+                raise EvidenceError(
+                    "duplicate recorded-HEAD archive entry"
+                )
+            if member.isfile():
+                handle = archive.extractfile(member)
+                if handle is None:
+                    raise EvidenceError(
+                        "recorded-HEAD file content is unavailable"
+                    )
+                content = handle.read()
+                encoded = _encoded_bytes(content)
+                blobs[member.name] = (
+                    encoded["content"]
+                    if encoded["encoding"] == "utf-8"
+                    else encoded
+                )
+            elif member.issym():
+                content = os.fsencode(member.linkname)
                 blobs[member.name] = {
-                    "encoding": "hex",
-                    "content": content.hex(),
+                    "type": "symlink",
+                    "target": _encoded_bytes(content),
                 }
+            else:
+                raise EvidenceError(
+                    "unsupported recorded-HEAD Git entry type"
+                )
+            guards[member.name] = hashlib.sha256(content).hexdigest()
+    missing = expected - set(blobs)
+    if missing:
+        raise EvidenceError(
+            "recorded-HEAD archive omitted an implementation entry"
+        )
     return blobs, guards
 
 
@@ -416,7 +455,8 @@ def capture_code_evidence(
                     deadline=evidence_deadline,
                 ),
                 "recorded-HEAD source capture",
-            )
+            ),
+            included_paths,
         )
     diff_text = diff.decode("utf-8", "replace")
     changed_hunks = "\n".join(
