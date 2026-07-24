@@ -85,7 +85,10 @@ Claude Code isolated behavioral evals, skill-creator benchmark viewer
 |---|---|
 | `change-contract/references/contract-check-rules.json` | Executable enums, namespace ownership, aggregation, precedence, routes, and report schema version |
 | `change-contract/references/contract-protocol.md` | Human semantics and link to the executable rule pack |
-| `check-contract/scripts/audit_runtime.py` | Deep continuation runtime, private phase machine, evidence capture, policy application, publication |
+| `check-contract/scripts/audit_domain.py` | Frozen policy/domain types and strict v1 rule-pack loading |
+| `check-contract/scripts/audit_validation.py` | Closed response parsing, namespace enforcement, and derived deviation coverage |
+| `check-contract/scripts/audit_policy.py` | Pure aggregation, precedence, stable findings, and conditional routes |
+| `check-contract/scripts/audit_runtime.py` | Small public facade extended by the continuation runtime, phase machine, evidence capture, and publication |
 | `check-contract/scripts/check_contract.py` | Thin `start`/`continue` JSON CLI |
 | `check-contract/tests/runtime_fixtures.py` | Temporary-repository and response builders used only by runtime tests |
 | `check-contract/tests/test_audit_policy.py` | Pure rule/aggregation and evidence-namespace regressions |
@@ -246,6 +249,9 @@ git commit -m "test: clarify check-contract behavioral outcomes"
 
 - Create: `change-contract/references/contract-check-rules.json`
 - Create: `check-contract/scripts/audit_runtime.py`
+- Create: `check-contract/scripts/audit_domain.py`
+- Create: `check-contract/scripts/audit_validation.py`
+- Create: `check-contract/scripts/audit_policy.py`
 - Create: `check-contract/tests/test_audit_policy.py`
 - Modify: `change-contract/references/contract-protocol.md`
 
@@ -372,7 +378,11 @@ class AuditDecision:
     undocumented_drift: str
     verdict: str
     route: tuple[str, ...]
-    finding_ids: tuple[str, ...]
+    findings: tuple[Finding, ...]
+
+    @property
+    def finding_ids(self) -> tuple[str, ...]:
+        return tuple(item.finding_id for item in self.findings)
 
 
 def aggregate(code, reconciliation, rules):
@@ -389,7 +399,7 @@ def aggregate(code, reconciliation, rules):
     )
 ```
 
-The validator must require:
+The validator and policy kernel must require:
 
 - exactly the runtime-issued clause IDs and changed-path IDs;
 - only closed enum values;
@@ -399,10 +409,22 @@ The validator must require:
 - no aggregate, verdict, route, report-path, or mutation fields; and
 - no extra JSON keys.
 
-- [ ] **Step 5: Make the protocol point to executable truth**
+They also derive `U*` deviations from every non-`MET` expected-surface,
+complexity-budget, and changed-path surface fact so response omission cannot
+produce a false PASS. Findings retain source identity/path/line/reason, sort by
+protocol order, and receive `F*` only after sorting.
 
-Keep the human-readable semantics in
-`contract-protocol.md`, but replace duplicated enum/precedence tables with:
+- [ ] **Step 5: Split focused policy responsibilities behind the facade**
+
+Keep `audit_runtime.py` as the public re-export seam. Put frozen domain/rule
+loading in `audit_domain.py`, response parsing in `audit_validation.py`, and
+pure aggregation/finding construction in `audit_policy.py`. Do not duplicate
+validation helpers or introduce runtime/provider behavior.
+
+- [ ] **Step 6: Make the protocol point to executable truth**
+
+Keep the human-readable vocabulary and precedence explanation in
+`contract-protocol.md` so existing consumers remain green, and add:
 
 ```markdown
 `contract-check-rules.json` is the executable source of truth for closed
@@ -411,23 +433,27 @@ report schema version. This section explains those rules; consumers must load
 and validate the JSON rather than scraping Markdown.
 ```
 
-- [ ] **Step 6: Run policy and existing protocol suites**
+- [ ] **Step 7: Run policy and existing protocol suites**
 
 Run:
 
 ```text
 python -m unittest discover -s check-contract/tests -p 'test_audit_policy.py' -v
+python -m unittest discover -s check-contract/tests -p 'test_*.py' -v
 python -m unittest discover -s change-contract/tests -p 'test_*.py' -v
 python -m unittest discover -s exec-ticket/tests -p 'test_*.py' -v
 ```
 
 Expected: all tests PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```text
 git add change-contract/references/contract-check-rules.json \
   change-contract/references/contract-protocol.md \
+  check-contract/scripts/audit_domain.py \
+  check-contract/scripts/audit_validation.py \
+  check-contract/scripts/audit_policy.py \
   check-contract/scripts/audit_runtime.py \
   check-contract/tests/test_audit_policy.py
 git commit -m "feat: add deterministic contract audit policy"
