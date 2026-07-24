@@ -186,6 +186,28 @@ class AuditRuntimeStartTests(unittest.TestCase):
                 [item["path"] for item in packet["changed_paths"]],
                 ["src/checkout.py", "src/pricing.py", "tests/test_checkout.py"],
             )
+            rules = self.module.load_rules(self.module.RULES_PATH)
+            allowed = [
+                evidence_id
+                for evidence_id in packet["evidence_ids"]
+                if evidence_id.partition(":")[0]
+                in rules.fidelity_evidence_namespaces
+            ]
+            fidelity_ids = [
+                clause_id
+                for clause_id in packet["clause_ids"]
+                if self.module.clause_family(clause_id)
+                in rules.fidelity_families
+            ]
+            self.assertEqual(
+                packet["fidelity_evidence_ids"],
+                {clause_id: allowed for clause_id in fidelity_ids},
+            )
+            self.assertIn("behavior:O1", packet["fidelity_evidence_ids"]["O1"])
+            self.assertNotIn(
+                "source:CAPTURE-1",
+                packet["fidelity_evidence_ids"]["O1"],
+            )
 
     def test_shared_ai_docs_authority_filters_both_contract_roots(self):
         with materialized_repo(

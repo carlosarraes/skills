@@ -10,6 +10,7 @@ from audit_domain import (
     Deviation,
     PathAssessment,
     SurfaceJudgment,
+    RulePack,
     clause_family,
     load_rules,
     require_exact_keys,
@@ -44,6 +45,23 @@ DEFAULT_RULES_PATH = (
     / "references"
     / "contract-check-rules.json"
 )
+
+
+def allowed_clause_evidence_ids(
+    clause_id: str,
+    issued_evidence_ids: tuple[str, ...] | list[str],
+    rules: RulePack,
+) -> tuple[str, ...]:
+    issued = tuple(issued_evidence_ids)
+    if clause_family(clause_id) not in rules.fidelity_families:
+        return issued
+    namespaces = set(rules.fidelity_evidence_namespaces)
+    return tuple(
+        evidence_id
+        for evidence_id in issued
+        if evidence_id.partition(":")[0] in namespaces
+    )
+
 
 def _runtime_ids(packet, key, label):
     packet = require_object(packet, "packet")
@@ -114,20 +132,22 @@ def _parse_clause(clause_id, value, issued, rules):
         raise AuditInputError(
             f"{location}.contract_boundary_changed must be boolean"
         )
-    namespaces = (
-        set(rules.fidelity_evidence_namespaces)
-        if clause_family(clause_id) in rules.fidelity_families
-        else None
+    allowed = allowed_clause_evidence_ids(clause_id, issued, rules)
+    evidence_ids = _evidence(
+        value["evidence_ids"],
+        issued,
+        f"{location}.evidence_ids",
     )
+    invalid = sorted(set(evidence_ids) - set(allowed))
+    if invalid:
+        raise AuditInputError(
+            f"{location}.evidence_ids violates fidelity evidence namespace ownership: "
+            f"{invalid}"
+        )
     return ClauseJudgment(
         clause_id=clause_id,
         status=status,
-        evidence_ids=_evidence(
-            value["evidence_ids"],
-            issued,
-            f"{location}.evidence_ids",
-            namespaces,
-        ),
+        evidence_ids=evidence_ids,
         reason=_text(value["reason"], location),
         contract_boundary_changed=boundary,
     )

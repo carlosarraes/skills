@@ -41,6 +41,7 @@ from audit_domain import (
     ReconciliationJudgment,
     RulePack,
     SurfaceJudgment,
+    clause_family,
     load_rules,
     require_exact_keys,
 )
@@ -60,7 +61,7 @@ from audit_session import (
     SessionIntegrityError,
     SessionStore,
 )
-from audit_validation import validate_code_judgment
+from audit_validation import allowed_clause_evidence_ids, validate_code_judgment
 from audit_reconciliation import (
     ReconciliationError,
     collect_guarded_narratives,
@@ -1610,6 +1611,23 @@ class AuditRuntime:
             )
         except (EvidenceError, OSError, ValueError) as error:
             return self._stopped("EVIDENCE_FAILURE", error, target_name)
+        rules = load_rules(RULES_PATH)
+        issued_evidence_ids = tuple(captured["evidence"])
+        fidelity_clause_ids = tuple(
+            clause.clause_id
+            for clause in contract.clauses
+            if clause_family(clause.clause_id) in rules.fidelity_families
+        )
+        fidelity_evidence_ids = {
+            clause_id: list(
+                allowed_clause_evidence_ids(
+                    clause_id,
+                    issued_evidence_ids,
+                    rules,
+                )
+            )
+            for clause_id in fidelity_clause_ids
+        }
         clauses = [
             {
                 "clause_id": clause.clause_id,
@@ -1646,6 +1664,7 @@ class AuditRuntime:
             ],
             "evidence": captured["evidence"],
             "evidence_ids": list(captured["evidence"]),
+            "fidelity_evidence_ids": fidelity_evidence_ids,
             "reuse_coverage_indeterminate": captured["reuse_truncated"],
         }
         if closed_target is not None:

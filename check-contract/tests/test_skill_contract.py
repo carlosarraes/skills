@@ -115,6 +115,19 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertIn(phrase, self.flat_skill)
 
+    def test_fidelity_evidence_uses_runtime_map_and_reasons_stay_bounded(self):
+        for phrase in (
+            "For each fidelity clause, choose evidence only from "
+            "`fidelity_evidence_ids[clause_id]`",
+            "one short sentence per reason",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+        for duplicated_policy in (
+            "behavior | public-contract | risk | acceptance",
+            "source evidence is forbidden for fidelity",
+        ):
+            self.assertNotIn(duplicated_policy, self.flat_skill)
+
     def test_reconciliation_response_is_exact_and_probe_bounded(self):
         for phrase in (
             "match the packet's `response_schema` exactly",

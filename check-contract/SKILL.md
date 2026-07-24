@@ -43,6 +43,8 @@ approve.
    item has `kind`, `evidence_ids`, and `reason`. Each deviation has `path_id`,
    `line`, `description`, `evidence_ids`, and `reason`. Use only runtime-issued
    evidence IDs and no extra keys.
+   For each fidelity clause, choose evidence only from
+   `fidelity_evidence_ids[clause_id]`. Use one short sentence per reason.
 
    Status is `MET | UNMET | EXCEEDED | INDETERMINATE`. YAGNI item kind is
    `UNEARNED_LOCAL | UNEARNED_MODULE | UNEARNED_RUNTIME_DEPENDENCY | UNEARNED_CONFIGURATION | UNEARNED_PUBLIC_INTERFACE | QUESTIONABLE_LOCAL | QUESTIONABLE_OTHER`;

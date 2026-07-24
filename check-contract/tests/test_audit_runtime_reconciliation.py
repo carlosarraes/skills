@@ -243,6 +243,34 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             for path in (Path(root) / run / "generations").iterdir()
         )
 
+    def test_iteration4_fidelity_failure_is_explained_by_issued_map(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            started = self.start(repo, Path(temporary))
+            packet = packet_of(started)
+            judgment = valid_code_judgment(packet)
+            judgment["clauses"]["O1"]["evidence_ids"] = [
+                "source:CAPTURE-1"
+            ]
+            write_response(
+                started.response_path,
+                code_response(started, judgment=judgment),
+            )
+
+            stopped = self.runtime(Path(temporary)).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+
+            self.assertEqual(stopped.code, "RESPONSE_INVALID")
+            self.assertNotIn(
+                "source:CAPTURE-1",
+                packet["fidelity_evidence_ids"]["O1"],
+            )
+
     def test_valid_code_response_issues_guarded_reconciliation_packet(self):
         with materialized_repo(
             "documented-drift"
