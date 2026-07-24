@@ -147,15 +147,20 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, self.skill)
 
-    def test_compound_request_uses_one_runtime_session(self):
+    def test_compound_request_uses_latest_token_in_one_logical_session(self):
         for phrase in (
             "For a compound A-then-B request",
             "pass both targets to the one `start` command",
             "`--then-repo`, `--then-branch`, and `--then-ticket`",
-            "use the returned `session` for both continuations",
-            "never start a second runtime session",
+            "keep one logical runtime session",
+            "use the latest returned `session` for each `continue`",
+            "never run a second `start` command",
         ):
             self.assertIn(phrase, self.flat_skill)
+        self.assertNotIn(
+            "use the returned `session` for both continuations",
+            self.flat_skill,
+        )
 
     def test_safety_boundary_is_report_only_and_immutable(self):
         for phrase in (

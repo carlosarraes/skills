@@ -25,9 +25,9 @@ approve.
    ```
 
    For a compound A-then-B request, pass both targets to the one `start`
-   command with `--then-repo`, `--then-branch`, and `--then-ticket`; use the
-   returned `session` for both continuations and never start a second runtime
-   session.
+   command with `--then-repo`, `--then-branch`, and `--then-ticket`; keep one
+   logical runtime session, use the latest returned `session` for each
+   `continue`, and never run a second `start` command.
 
 2. If the result is `NeedJudgment` with kind `code`, read only its runtime-issued
    code packet at `packet_path`. At `response_path`, write exactly one UTF-8
