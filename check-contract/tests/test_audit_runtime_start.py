@@ -860,22 +860,18 @@ class AuditRuntimeStartTests(unittest.TestCase):
             self.assertTrue(result.zero_target_writes)
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
-    def test_unsupported_transitions_stop_explicitly(self):
+    def test_unknown_continuation_stops_explicitly(self):
         with tempfile.TemporaryDirectory() as temporary:
             runtime = self.runtime(Path(temporary))
             continued = runtime.advance(
                 self.module.ContinueAudit("opaque", Path(temporary) / "r.json")
             )
-            compound = runtime.advance(
-                self.module.StartAudit(
-                    self.module.AuditTarget(Path("/a"), "a", "A"),
-                    then=self.module.AuditTarget(Path("/b"), "b", "B"),
-                )
-            )
 
             self.assertIsInstance(continued, self.module.AuditStopped)
+            self.assertEqual(continued.code, "SESSION_INVALID")
+            self.assertEqual(continued.target, "session")
+            self.assertTrue(continued.prior_report_preserved)
             self.assertTrue(continued.zero_target_writes)
-            self.assertEqual(compound.code, "COMPOUND_UNAVAILABLE")
 
     def test_public_envelope_mappings_are_recursively_immutable(self):
         closed = {"nested": {"values": [1, 2]}}
