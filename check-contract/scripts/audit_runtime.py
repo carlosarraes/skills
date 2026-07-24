@@ -1,5 +1,6 @@
 """Deep public facade for contract-audit policy and runtime orchestration."""
 
+import base64
 import hashlib
 import json
 import math
@@ -19,6 +20,8 @@ from audit_evidence import (
     ContractParseError,
     EvidenceError,
     LocalGitRunner,
+    REUSE_RESULT_CAP,
+    _archive_blobs,
     capture_code_evidence,
     parse_contract,
     resolve_authority,
@@ -38,8 +41,17 @@ from audit_domain import (
     RulePack,
     SurfaceJudgment,
     load_rules,
+    require_exact_keys,
 )
 from audit_policy import aggregate
+from audit_report import (
+    ReportError,
+    capture_target_state,
+    mutation_attestation,
+    publish_atomic,
+    render_report,
+    restore_report,
+)
 from audit_session import (
     ClaimedResponseError,
     GenerationConsumedError,
@@ -52,8 +64,24 @@ from audit_reconciliation import (
     ReconciliationError,
     collect_guarded_narratives,
     qa_head_references,
+    read_guarded_bytes,
     reconciliation_response_schema,
 )
+from probe_runner import ProbeObservation, run_probe
+
+
+RULES_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "change-contract"
+    / "references"
+    / "contract-check-rules.json"
+)
+
+
+class _CloseError(RuntimeError):
+    def __init__(self, code, reason):
+        super().__init__(str(reason))
+        self.code = code
 
 
 def _deep_freeze(value):
@@ -585,6 +613,469 @@ class AuditRuntime:
             accepted = accepted or unique_head
         return accepted, {"candidates": candidates}
 
+    def _restore_code_judgment(self, value):
+        return CodeJudgment(
+            clauses=tuple(
+                ClauseJudgment(**item) for item in value["clauses"]
+            ),
+            path_assessments=tuple(
+                PathAssessment(
+                    path_id=item["path_id"],
+                    surface=SurfaceJudgment(**item["surface"]),
+                    yagni_items=tuple(
+                        AxisItem(**axis) for axis in item["yagni_items"]
+                    ),
+                    reuse_items=tuple(
+                        AxisItem(**axis) for axis in item["reuse_items"]
+                    ),
+                )
+                for item in value["path_assessments"]
+            ),
+            deviations=tuple(
+                Deviation(**item) for item in value["deviations"]
+            ),
+        )
+
+    def _response_evidence(self, value, issued, location, *, optional=False):
+        if (
+            type(value) is not list
+            or any(type(item) is not str or not item for item in value)
+            or len(value) != len(set(value))
+            or (not optional and not value)
+        ):
+            raise AuditInputError(
+                f"{location} must cite unique issued evidence IDs"
+            )
+        unknown = sorted(set(value) - issued)
+        if unknown:
+            raise AuditInputError(
+                f"{location} cites evidence outside issued IDs: {unknown}"
+            )
+        return tuple(value)
+
+    def _validate_reconciliation(self, state, value):
+        value = require_exact_keys(
+            value,
+            {
+                "ledger_entries",
+                "deviation_matches",
+                "contract_obsolete",
+                "probe_id",
+            },
+            "reconciliation judgment",
+        )
+        issued_evidence = set(state["reconciliation_evidence_ids"])
+        issued_ledger = {
+            item["ledger_id"]: item for item in state["ledger_entries"]
+        }
+        ledger_values = value["ledger_entries"]
+        if type(ledger_values) is not dict or set(ledger_values) != set(
+            issued_ledger
+        ):
+            raise AuditInputError(
+                "reconciliation must contain exactly the issued D IDs"
+            )
+        details = {}
+        for ledger_id in issued_ledger:
+            location = f"reconciliation judgment.ledger_entries.{ledger_id}"
+            item = require_exact_keys(
+                ledger_values[ledger_id],
+                {"status", "evidence_ids", "reason"},
+                location,
+            )
+            if item["status"] not in {
+                "VERIFIED",
+                "QUESTIONABLE",
+                "CONTRADICTED",
+            }:
+                raise AuditInputError(
+                    f"{location}.status is not a closed enum value"
+                )
+            reason = item["reason"]
+            if not isinstance(reason, str) or not reason.strip():
+                raise AuditInputError(f"{location}.reason must be non-empty")
+            details[ledger_id] = {
+                "status": item["status"],
+                "evidence_ids": self._response_evidence(
+                    item["evidence_ids"],
+                    issued_evidence,
+                    f"{location}.evidence_ids",
+                ),
+                "reason": reason.strip(),
+            }
+        raw_matches = value["deviation_matches"]
+        if type(raw_matches) is not list:
+            raise AuditInputError(
+                "reconciliation judgment.deviation_matches must be a list"
+            )
+        deviation_ids = {
+            item["deviation_id"] for item in state["code_judgment"]["deviations"]
+        }
+        matches = []
+        matched = set()
+        for index, raw in enumerate(raw_matches):
+            match = require_exact_keys(
+                raw,
+                {"deviation_id", "ledger_id"},
+                f"reconciliation judgment.deviation_matches[{index}]",
+            )
+            deviation_id = match["deviation_id"]
+            ledger_id = match["ledger_id"]
+            if deviation_id not in deviation_ids:
+                raise AuditInputError(
+                    "deviation match cites an unissued deviation ID"
+                )
+            if ledger_id not in issued_ledger:
+                raise AuditInputError(
+                    "deviation match cites an unissued ledger ID"
+                )
+            if deviation_id in matched:
+                raise AuditInputError(
+                    "deviation match duplicates a deviation ID"
+                )
+            matched.add(deviation_id)
+            matches.append(DeviationMatch(deviation_id, ledger_id))
+        obsolete = require_exact_keys(
+            value["contract_obsolete"],
+            {"value", "evidence_ids", "reason"},
+            "reconciliation judgment.contract_obsolete",
+        )
+        if type(obsolete["value"]) is not bool:
+            raise AuditInputError("contract_obsolete.value must be boolean")
+        reason = obsolete["reason"]
+        if not isinstance(reason, str) or not reason.strip():
+            raise AuditInputError("contract_obsolete.reason must be non-empty")
+        obsolete_evidence = self._response_evidence(
+            obsolete["evidence_ids"],
+            issued_evidence,
+            "contract_obsolete.evidence_ids",
+            optional=not obsolete["value"],
+        )
+        probe_id = value["probe_id"]
+        if probe_id is not None and (
+            type(probe_id) is not str
+            or probe_id not in state["issued_probes"]
+        ):
+            raise AuditInputError(
+                "probe_id must be null or one runtime-issued probe ID"
+            )
+        return {
+            "ledger_entries": details,
+            "deviation_matches": tuple(matches),
+            "contract_obsolete": obsolete["value"],
+            "contract_obsolete_evidence_ids": obsolete_evidence,
+            "contract_obsolete_reason": reason.strip(),
+            "probe_id": probe_id,
+        }
+
+    def _execute_probe(self, state, probe_id):
+        if probe_id is None:
+            return None
+        try:
+            return run_probe(
+                probe_id=probe_id,
+                descriptor=state["issued_probes"][probe_id],
+                repository_root=Path(
+                    state["target_identity"]["repository_root"]
+                ),
+                recorded_head=state["recorded_range"]["head_sha"],
+                disposable_root=self.session_root,
+                git_runner=self.git_runner,
+                clock=self.clock,
+                absolute_deadline=state["absolute_deadline"],
+            )
+        except (EvidenceError, OSError, TypeError, ValueError) as error:
+            return ProbeObservation(
+                probe_id=probe_id,
+                success=False,
+                timed_out=False,
+                exit_code=None,
+                reason="probe execution failed before observation",
+            )
+
+    def _effective_reconciliation(self, state, details, observation):
+        selected = details["probe_id"]
+        effective = []
+        for issued in state["ledger_entries"]:
+            ledger_id = issued["ledger_id"]
+            status = details["ledger_entries"][ledger_id]["status"]
+            required_probe = issued["probe_id"]
+            if required_probe is not None and status == "VERIFIED":
+                probe_verified = (
+                    selected == required_probe
+                    and observation is not None
+                    and observation.success
+                )
+                if not probe_verified:
+                    status = "QUESTIONABLE"
+            effective.append(LedgerEntry(ledger_id, status))
+        details["effective_ledger_entries"] = tuple(effective)
+        return ReconciliationJudgment(
+            ledger_entries=tuple(effective),
+            deviation_matches=details["deviation_matches"],
+            contract_obsolete=details["contract_obsolete"],
+            acceptance_qa_exists=state["acceptance_qa_exists"],
+        )
+
+    def _git_bytes(
+        self,
+        args,
+        state,
+        operation,
+        *,
+        output_limit=None,
+        allow_truncated=False,
+    ):
+        result = self.git_runner.run(
+            args,
+            cwd=state["target_identity"]["repository_root"],
+            deadline=state["absolute_deadline"],
+            output_limit=output_limit,
+        )
+        if result.timed_out:
+            raise _CloseError(
+                "FRESHNESS_FAILED",
+                f"{operation} timed out during final freshness",
+            )
+        if result.truncated and not allow_truncated:
+            raise _CloseError(
+                "FRESHNESS_FAILED",
+                f"{operation} was truncated during final freshness",
+            )
+        return result
+
+    def _require_content_guard(self, expected):
+        identity = {
+            key: value for key, value in expected.items() if key != "sha256"
+        }
+        try:
+            content, actual = read_guarded_bytes(identity)
+        except ReconciliationError as error:
+            raise _CloseError("FRESHNESS_FAILED", error) from error
+        if actual != expected:
+            raise _CloseError(
+                "FRESHNESS_FAILED",
+                f"guarded narrative changed: {expected['path']}",
+            )
+        return content
+
+    def _verify_source_guards(self, state):
+        guards = state["source_guards"]
+        inputs = state["source_guard_inputs"]
+        base = guards["base_sha"]
+        head = guards["head_sha"]
+        inventory = self._git_bytes(
+            ["diff", "--name-status", "--find-renames", "-z", f"{base}..{head}"],
+            state,
+            "source inventory",
+        ).stdout
+        if hashlib.sha256(inventory).hexdigest() != guards[
+            "inventory_sha256"
+        ]:
+            raise _CloseError(
+                "FRESHNESS_FAILED", "source inventory guard changed"
+            )
+        diff_args = [
+            "diff",
+            "--find-renames",
+            "--no-ext-diff",
+            f"{base}..{head}",
+            "--",
+            *inputs["changed_paths"],
+        ]
+        diff = (
+            self._git_bytes(diff_args, state, "source diff").stdout
+            if inputs["changed_paths"]
+            else b""
+        )
+        if hashlib.sha256(diff).hexdigest() != guards["diff_sha256"]:
+            raise _CloseError("FRESHNESS_FAILED", "source diff guard changed")
+        if inputs["head_paths"]:
+            archive = self._git_bytes(
+                [
+                    "archive",
+                    "--format=tar",
+                    head,
+                    "--",
+                    *inputs["head_paths"],
+                ],
+                state,
+                "source archive",
+            ).stdout
+            try:
+                _, blob_guards = _archive_blobs(
+                    archive, inputs["head_paths"]
+                )
+            except EvidenceError as error:
+                raise _CloseError("FRESHNESS_FAILED", error) from error
+        else:
+            blob_guards = {}
+        if blob_guards != guards["head_blob_sha256"]:
+            raise _CloseError("FRESHNESS_FAILED", "source blob guards changed")
+        tree = self._git_bytes(
+            ["ls-tree", "-r", "-z", "--name-only", head],
+            state,
+            "source tree",
+        ).stdout
+        if hashlib.sha256(tree).hexdigest() != guards["tree_paths_sha256"]:
+            raise _CloseError("FRESHNESS_FAILED", "source tree guard changed")
+        grep_args = ["grep", "-n", "-I", "-F", "-z"]
+        for token in inputs["reuse_query"]:
+            grep_args.extend(("-e", token))
+        grep_args.extend((head, "--"))
+        reuse = self._git_bytes(
+            grep_args,
+            state,
+            "reuse search",
+            output_limit=REUSE_RESULT_CAP,
+            allow_truncated=True,
+        )
+        if (
+            reuse.truncated != inputs["reuse_truncated"]
+            or hashlib.sha256(reuse.stdout).hexdigest()
+            != guards["reuse_result_sha256"]
+        ):
+            raise _CloseError(
+                "FRESHNESS_FAILED", "reuse evidence guard changed"
+            )
+
+    def _verify_freshness(self, state):
+        if self.clock() > state["absolute_deadline"]:
+            raise _CloseError(
+                "DEADLINE_EXPIRED",
+                "audit deadline expired before final freshness",
+            )
+        repo = Path(state["target_identity"]["repository_root"])
+        try:
+            authority = self.authority_resolver(
+                repo,
+                state["target_identity"]["branch"],
+                state["target_identity"]["ticket"],
+            )
+        except (AuthorityError, OSError, ValueError) as error:
+            raise _CloseError("FRESHNESS_FAILED", error) from error
+        current_path = Path(authority["selected_root"]) / "current.json"
+        report_path = (
+            Path(authority["selected_root"])
+            / f"v{authority['active_version']}"
+            / "check-report.md"
+        )
+        fresh_authority = {
+            **authority,
+            "current_path": str(current_path),
+            "report_path": str(report_path),
+        }
+        if fresh_authority != state["authority_guard"]:
+            raise _CloseError(
+                "FRESHNESS_FAILED", "approved authority changed"
+            )
+        head = self._git_bytes(
+            ["rev-parse", "--verify", "HEAD"],
+            state,
+            "HEAD",
+        ).stdout.decode("ascii", "strict").strip()
+        if head != state["recorded_range"]["head_sha"]:
+            raise _CloseError("FRESHNESS_FAILED", "HEAD changed")
+        contract_path = Path(authority["contract_path"])
+        if _guard_path(contract_path)["sha256"] != state[
+            "contract_buffer_sha256"
+        ]:
+            raise _CloseError(
+                "FRESHNESS_FAILED", "approved contract bytes changed"
+            )
+        if _guard_path(current_path) != state["current_guard"]:
+            raise _CloseError(
+                "FRESHNESS_FAILED", "current authority pointer changed"
+            )
+        if _guard_path(Path(authority["approval_path"])) != state[
+            "approval_guard"
+        ]:
+            raise _CloseError(
+                "FRESHNESS_FAILED", "approval artifact changed"
+            )
+        content_guards = state["narrative_content_guards"]
+        self._require_content_guard(content_guards["ledger"])
+        prior_report = self._require_content_guard(content_guards["report"])
+        for guard in content_guards["narratives"]:
+            self._require_content_guard(guard)
+        status = self._git_bytes(
+            ["status", "--porcelain=v1", "--untracked-files=all"],
+            state,
+            "worktree status",
+        ).stdout
+        if status != base64.b64decode(state["initial_status_bytes_b64"]):
+            raise _CloseError(
+                "FRESHNESS_FAILED", "worktree status changed"
+            )
+        self._verify_source_guards(state)
+        if self.clock() > state["absolute_deadline"]:
+            raise _CloseError(
+                "DEADLINE_EXPIRED",
+                "audit deadline expired during final freshness",
+            )
+        return report_path, prior_report
+
+    def _close_reconciliation(self, state, packet, judgment_value):
+        details = self._validate_reconciliation(state, judgment_value)
+        observation = self._execute_probe(state, details["probe_id"])
+        code = self._restore_code_judgment(state["code_judgment"])
+        reconciliation = self._effective_reconciliation(
+            state, details, observation
+        )
+        decision = aggregate(code, reconciliation, load_rules(RULES_PATH))
+        repository_root = Path(
+            state["target_identity"]["repository_root"]
+        )
+        report_relative = Path(
+            state["authority_guard"]["report_path"]
+        ).relative_to(repository_root).as_posix()
+        report = render_report(
+            authority=state["authority_guard"],
+            worktree_status=state["worktree_status"],
+            code_judgment=code,
+            reconciliation_details=details,
+            decision=decision,
+            probe_observation=observation,
+            report_relative_path=report_relative,
+        )
+        report_path, prior_report = self._verify_freshness(state)
+        before = capture_target_state(repository_root)
+        if self.clock() > state["absolute_deadline"]:
+            raise _CloseError(
+                "DEADLINE_EXPIRED",
+                "audit deadline expired before report publication",
+            )
+        try:
+            report_sha256 = publish_atomic(report_path, report)
+            after = capture_target_state(repository_root)
+            attestation = mutation_attestation(
+                before, after, report_relative
+            )
+            if not attestation["only_active_report_changed"]:
+                raise ReportError(
+                    "final target mutation set is not the active report only"
+                )
+        except BaseException as error:
+            current = (
+                report_path.read_bytes() if report_path.exists() else None
+            )
+            if current != prior_report:
+                restore_report(report_path, prior_report)
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                raise
+            if isinstance(error, ReportError):
+                raise
+            raise ReportError(
+                f"report attestation failed: {type(error).__name__}"
+            ) from error
+        return AuditComplete(
+            verdict=decision.verdict,
+            route=decision.route,
+            report_path=report_path,
+            report_sha256=report_sha256,
+            mutation_attestation=attestation,
+        )
+
     def _continue(self, request):
         store = SessionStore(self.session_root)
         lease = None
@@ -594,7 +1085,7 @@ class AuditRuntime:
         except (SessionIntegrityError, OSError, ValueError) as error:
             return self._stopped("SESSION_INVALID", error, "session")
         try:
-            if state["phase"] != "code":
+            if state["phase"] not in {"code", "reconciliation"}:
                 try:
                     lease = store.claim_lease(request.session)
                 except GenerationConsumedError:
@@ -620,9 +1111,10 @@ class AuditRuntime:
                     request.session,
                     state,
                     "OUT_OF_PHASE",
-                    "generation is not in the code-judgment phase",
+                    "generation is not in an open judgment phase",
                     lease,
                 )
+            response_absent = not os.path.lexists(request.response_path)
             try:
                 lease, raw = store.claim_and_read(
                     request.session,
@@ -636,11 +1128,17 @@ class AuditRuntime:
                 )
             except ClaimedResponseError as error:
                 lease = error.lease
+                code = (
+                    "OUT_OF_PHASE"
+                    if state["phase"] == "reconciliation"
+                    and response_absent
+                    else "RESPONSE_INVALID"
+                )
                 return self._stop_after_claim(
                     store,
                     request.session,
                     state,
-                    "RESPONSE_INVALID",
+                    code,
                     error,
                     lease,
                 )
@@ -671,6 +1169,12 @@ class AuditRuntime:
                     request.session,
                     state,
                 )
+                if state["phase"] == "reconciliation":
+                    return self._close_reconciliation(
+                        state,
+                        packet,
+                        judgment_value,
+                    )
                 code_judgment = validate_code_judgment(
                     packet,
                     judgment_value,
@@ -681,6 +1185,33 @@ class AuditRuntime:
                     request.session,
                     state,
                     "RESPONSE_INVALID",
+                    error,
+                    lease,
+                )
+            except _CloseError as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    error.code,
+                    error,
+                    lease,
+                )
+            except ReportError as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "PUBLICATION_FAILED",
+                    error,
+                    lease,
+                )
+            except (AuthorityError, ContractParseError) as error:
+                return self._stop_after_claim(
+                    store,
+                    request.session,
+                    state,
+                    "FRESHNESS_FAILED",
                     error,
                     lease,
                 )
@@ -895,11 +1426,26 @@ class AuditRuntime:
             "initial_status_sha256": captured[
                 "initial_status_sha256"
             ],
+            "worktree_status": captured["worktree"]["status"],
             "recorded_range": {
                 "base_sha": authority["base_sha"],
                 "head_sha": authority["head_sha"],
             },
             "source_guards": captured["source_guards"],
+            "source_guard_inputs": {
+                "changed_paths": [
+                    item["path"] for item in captured["changed_paths"]
+                ],
+                "head_paths": [
+                    item["path"]
+                    for item in captured["changed_paths"]
+                    if not item["status"].startswith("D")
+                ],
+                "reuse_query": captured["evidence"][
+                    "reuse:SEARCH-1"
+                ]["query"],
+                "reuse_truncated": captured["reuse_truncated"],
+            },
         }
         try:
             generation = SessionStore(self.session_root).create(state, packet)
