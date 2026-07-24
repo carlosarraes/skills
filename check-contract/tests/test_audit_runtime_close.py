@@ -367,6 +367,47 @@ class AuditRuntimeCloseTests(unittest.TestCase):
             )
             self.assertIn("timeout", probe_calls[0][1])
 
+    def test_probe_target_mutation_is_detected_before_report_publication(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            report = self.report_path(repo)
+            report.write_bytes(b"PRIOR REPORT SENTINEL\n")
+            root = Path(temporary)
+            runtime, issued = self.issue_reconciliation(repo, root)
+            mutation = repo / "__pycache__/probe-owned.pyc"
+
+            def mutating_probe(**kwargs):
+                mutation.parent.mkdir(parents=True, exist_ok=True)
+                mutation.write_bytes(b"PROBE-OWNED MUTATION\n")
+                return self.module.ProbeObservation(
+                    probe_id=kwargs["probe_id"],
+                    success=True,
+                    timed_out=False,
+                    exit_code=0,
+                    reason="probe observation matched the descriptor",
+                )
+
+            with mock.patch.object(
+                self.module,
+                "run_probe",
+                side_effect=mutating_probe,
+            ):
+                result = self.close(
+                    runtime,
+                    issued,
+                    reconciliation_response(issued, probe_id="Q1"),
+                )
+
+            self.assertTrue(mutation.exists())
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "MUTATION_DETECTED")
+            self.assertIn("mutation", result.reason)
+            self.assertEqual(
+                report.read_bytes(),
+                b"PRIOR REPORT SENTINEL\n",
+            )
+
     def test_every_freshness_guard_preserves_the_prior_report(self):
         class MutableAuthority:
             def __init__(self, resolver):

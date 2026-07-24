@@ -1016,6 +1016,10 @@ class AuditRuntime:
         return report_path, prior_report
 
     def _close_reconciliation(self, state, packet, judgment_value):
+        repository_root = Path(
+            state["target_identity"]["repository_root"]
+        )
+        initial_target_state = capture_target_state(repository_root)
         details = self._validate_reconciliation(state, judgment_value)
         observation = self._execute_probe(state, details["probe_id"])
         code = self._restore_code_judgment(state["code_judgment"])
@@ -1023,9 +1027,6 @@ class AuditRuntime:
             state, details, observation
         )
         decision = aggregate(code, reconciliation, load_rules(RULES_PATH))
-        repository_root = Path(
-            state["target_identity"]["repository_root"]
-        )
         report_relative = Path(
             state["authority_guard"]["report_path"]
         ).relative_to(repository_root).as_posix()
@@ -1039,7 +1040,11 @@ class AuditRuntime:
             report_relative_path=report_relative,
         )
         report_path, prior_report = self._verify_freshness(state)
-        before = capture_target_state(repository_root)
+        if capture_target_state(repository_root) != initial_target_state:
+            raise _CloseError(
+                "MUTATION_DETECTED",
+                "target mutation detected before report publication",
+            )
         if self.clock() > state["absolute_deadline"]:
             raise _CloseError(
                 "DEADLINE_EXPIRED",
@@ -1049,7 +1054,7 @@ class AuditRuntime:
             report_sha256 = publish_atomic(report_path, report)
             after = capture_target_state(repository_root)
             attestation = mutation_attestation(
-                before, after, report_relative
+                initial_target_state, after, report_relative
             )
             if not attestation["only_active_report_changed"]:
                 raise ReportError(
