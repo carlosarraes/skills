@@ -12,7 +12,7 @@ COMMON_VALID_AUDIT_ASSERTIONS = [
 
 A_SLICE = slice(0, 4)
 AB_SLICE = slice(4, 5)
-B_SLICE = slice(5, 19)
+B_SLICE = slice(5, 20)
 
 EXPECTED_ASSERTIONS = {
     "contract-compliant-overengineered": [
@@ -49,8 +49,8 @@ EXPECTED_ASSERTIONS = {
 
 
 def split_compound_outcomes(expectations: list[bool]) -> dict[str, bool]:
-    if len(expectations) != 19:
-        raise ValueError("compound expectation count must be 19")
+    if len(expectations) != 20:
+        raise ValueError("compound expectation count must be 20")
     target_a = all(expectations[A_SLICE])
     boundary = all(expectations[AB_SLICE])
     target_b = all(expectations[B_SLICE])

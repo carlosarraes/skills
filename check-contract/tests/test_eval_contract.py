@@ -102,10 +102,30 @@ class EvalContractTests(unittest.TestCase):
             {"expectations": list[bool], "return": dict[str, bool]},
         )
         outcomes = ASSERTIONS.split_compound_outcomes(
-            [True, True, True, True, False] + [True] * 14
+            [True, True, True, True, False] + [True] * 15
         )
         self.assertTrue(outcomes["target_a_pass"])
         self.assertTrue(outcomes["target_b_pass"])
+        self.assertFalse(outcomes["compound_pass"])
+
+    def test_compound_outcomes_cover_canonical_v2_vector(self):
+        assertions = ASSERTIONS.EXPECTED_ASSERTIONS["contract-violated-summary"]
+        self.assertEqual(len(assertions), 20)
+
+        expectations = [True] * len(assertions)
+        self.assertEqual(
+            ASSERTIONS.split_compound_outcomes(expectations),
+            {
+                "target_a_pass": True,
+                "target_b_pass": True,
+                "compound_pass": True,
+            },
+        )
+
+        expectations[-1] = False
+        outcomes = ASSERTIONS.split_compound_outcomes(expectations)
+        self.assertTrue(outcomes["target_a_pass"])
+        self.assertFalse(outcomes["target_b_pass"])
         self.assertFalse(outcomes["compound_pass"])
 
     def test_delivery_and_mutation_scope_are_distinct_assertions(self):
