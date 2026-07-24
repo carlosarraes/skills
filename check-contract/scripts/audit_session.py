@@ -370,30 +370,6 @@ class _DescriptorCloseAttempt:
         self.completed_successfully = False
 
 
-@contextmanager
-def _defer_sigint():
-    if threading.current_thread() is not threading.main_thread():
-        yield
-        return
-    previous_handler = signal.getsignal(signal.SIGINT)
-    deferred = []
-
-    def defer(signum, frame):
-        deferred.append((signum, frame))
-
-    signal.signal(signal.SIGINT, defer)
-    try:
-        yield
-    finally:
-        signal.signal(signal.SIGINT, previous_handler)
-        if deferred and previous_handler != signal.SIG_IGN:
-            signum, frame = deferred[0]
-            if previous_handler == signal.SIG_DFL:
-                signal.raise_signal(signum)
-            else:
-                previous_handler(signum, frame)
-
-
 def _record_consumed_slot(ownership) -> None:
     _CONSUMED_DESCRIPTOR_OWNERSHIPS.add(ownership)
     _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
@@ -405,39 +381,38 @@ def _consume_owned_slot(ownership) -> bool:
         return True
     if ownership in _QUARANTINED_DESCRIPTOR_OWNERSHIPS:
         return False
-    with _defer_sigint():
-        _QUARANTINED_DESCRIPTOR_OWNERSHIPS.add(ownership)
-        attempt = _DescriptorCloseAttempt(ownership[0])
-        previous_attempt = getattr(
-            _CLOSE_ATTEMPT_LOCAL,
-            "current",
-            None,
-        )
-        _CLOSE_ATTEMPT_LOCAL.current = attempt
-        try:
-            _close_owned_descriptor(ownership[0])
-        except OSError:
-            if attempt.completed_successfully:
-                _record_consumed_slot(ownership)
-                raise
-            _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
-            return False
-        except BaseException:
-            if attempt.completed_successfully:
-                _record_consumed_slot(ownership)
-            else:
-                _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(
-                    ownership
-                )
-            raise
-        else:
+    _QUARANTINED_DESCRIPTOR_OWNERSHIPS.add(ownership)
+    attempt = _DescriptorCloseAttempt(ownership[0])
+    previous_attempt = getattr(
+        _CLOSE_ATTEMPT_LOCAL,
+        "current",
+        None,
+    )
+    _CLOSE_ATTEMPT_LOCAL.current = attempt
+    try:
+        _close_owned_descriptor(ownership[0])
+    except OSError:
+        if attempt.completed_successfully:
             _record_consumed_slot(ownership)
-            return True
-        finally:
-            if previous_attempt is None:
-                del _CLOSE_ATTEMPT_LOCAL.current
-            else:
-                _CLOSE_ATTEMPT_LOCAL.current = previous_attempt
+            raise
+        _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
+        return False
+    except BaseException:
+        if attempt.completed_successfully:
+            _record_consumed_slot(ownership)
+        else:
+            _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(
+                ownership
+            )
+        raise
+    else:
+        _record_consumed_slot(ownership)
+        return True
+    finally:
+        if previous_attempt is None:
+            del _CLOSE_ATTEMPT_LOCAL.current
+        else:
+            _CLOSE_ATTEMPT_LOCAL.current = previous_attempt
 
 
 def _forget_owned_record(kind: str, ownership) -> bool:
@@ -451,22 +426,27 @@ def _forget_owned_record(kind: str, ownership) -> bool:
     return True
 
 
-def _close_pending_ownership(kind: str, ownership) -> bool:
-    try:
-        with _ownership_cleanup(kind, ownership) as admission:
-            closed = _close_owned_record(kind, ownership)
-            if not closed:
-                admission.retain()
-            return closed
-    except SessionBusyError:
-        return False
-
-
 def _queue_cleanup(kind: str, ownership) -> None:
     _CLEANUP_QUEUE.put((kind, ownership))
 
 
+def _block_all_blockable_signals():
+    if not (
+        hasattr(signal, "pthread_sigmask")
+        and hasattr(signal, "valid_signals")
+    ):
+        raise RuntimeError("POSIX signal masking is unavailable")
+    blocked = set(signal.valid_signals())
+    blocked.discard(signal.SIGKILL)
+    blocked.discard(signal.SIGSTOP)
+    return signal.pthread_sigmask(signal.SIG_BLOCK, blocked)
+
+
 def _background_pending_cleanup() -> None:
+    try:
+        _block_all_blockable_signals()
+    except (OSError, RuntimeError, ValueError):
+        return
     retry_delay = 0.001
     while True:
         kind, ownership = _CLEANUP_QUEUE.get()
@@ -517,6 +497,8 @@ def _background_pending_cleanup() -> None:
 
 
 def _schedule_pending_cleanup(kind: str, ownership) -> None:
+    pending, _ = _ownership_state(kind)
+    pending.add(ownership)
     _queue_cleanup(kind, ownership)
     _ensure_cleanup_worker()
 
@@ -686,7 +668,10 @@ class ClaimLease:
         self.digest = digest
         self._descriptor = descriptor
         self.closed = True
-        cleanup_ownership = None
+        cleanup_ownership = _claim_constructor_ownership(
+            owner,
+            descriptor,
+        )
         try:
             with _audit_fd_lifecycle(), _ownership_publication():
                 if not isinstance(owner, SessionStore):
@@ -699,6 +684,10 @@ class ClaimLease:
                 if ownership is None:
                     raise SessionIntegrityError(
                         "claim descriptor was not opened by this store"
+                    )
+                if ownership is not cleanup_ownership:
+                    raise SessionIntegrityError(
+                        "claim descriptor ownership changed during binding"
                     )
                 ownerships = [
                     candidate
@@ -721,10 +710,22 @@ class ClaimLease:
             if cleanup_ownership is not None:
                 self._descriptor = -1
                 self.closed = True
-                _schedule_pending_cleanup(
-                    "lease",
-                    cleanup_ownership,
-                )
+                try:
+                    if (
+                        owner._tracked_claim_ownerships.get(
+                            descriptor
+                        )
+                        is cleanup_ownership
+                    ):
+                        owner._tracked_claim_ownerships.pop(
+                            descriptor,
+                            None,
+                        )
+                finally:
+                    _schedule_pending_cleanup(
+                        "lease",
+                        cleanup_ownership,
+                    )
             raise
 
     def close(self) -> None:
@@ -735,26 +736,30 @@ class ClaimLease:
         ownership = (descriptor, token)
         self._descriptor = -1
         self.closed = True
-        closed = False
-        try:
-            with (
-                _audit_fd_lifecycle(),
-                _ownership_cleanup("lease", ownership) as admission,
-            ):
-                closed = _close_owned_record("lease", ownership)
-                if not closed:
-                    admission.retain()
-        except SessionBusyError:
-            pass
-        finally:
-            if not closed:
-                _schedule_pending_cleanup("lease", ownership)
+        _schedule_pending_cleanup("lease", ownership)
 
     def __del__(self):
         try:
             self.close()
         except BaseException:
             pass
+
+
+def _claim_constructor_ownership(owner, descriptor):
+    if not isinstance(owner, SessionStore):
+        return None
+    ownership = owner._tracked_claim_ownerships.get(descriptor)
+    if ownership is None:
+        return None
+    try:
+        if (
+            ownership[0] != descriptor
+            or ownership not in _TRACKED_LEASE_OWNERSHIPS
+        ):
+            return None
+    except (IndexError, TypeError):
+        return None
+    return ownership
 
 
 def _before_fork() -> None:
@@ -818,17 +823,15 @@ def _after_fork_child() -> None:
     inherited_quarantines = set(
         _QUARANTINED_DESCRIPTOR_OWNERSHIPS
     )
+    previous_signal_mask = None
+    signals_blocked = False
     failed_leases = set(_TRACKED_LEASE_OWNERSHIPS)
     failed_transactions = set(
         _TRACKED_TRANSACTION_OWNERSHIPS
     )
     try:
-        for reference in _LEASE_REFS.values():
-            lease = reference()
-            if lease is not None:
-                lease._descriptor = -1
-                lease._creator_pid = -1
-                lease.closed = True
+        previous_signal_mask = _block_all_blockable_signals()
+        signals_blocked = True
         failed_leases = _close_child_snapshot(
             _TRACKED_LEASE_OWNERSHIPS
         )
@@ -836,30 +839,47 @@ def _after_fork_child() -> None:
             _TRACKED_TRANSACTION_OWNERSHIPS
         )
     finally:
-        _SUCCESSOR_LOCKS_GUARD = threading.Lock()
-        _SUCCESSOR_LOCKS = {}
-        _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
-        _DESCRIPTOR_OWNERSHIP_GATE = _DescriptorOwnershipGate()
-        _TRACKED_LEASE_OWNERSHIPS = failed_leases
-        _LEASE_REFS = {}
-        _TRACKED_TRANSACTION_OWNERSHIPS = failed_transactions
-        _PENDING_LEASE_CLOSE_FDS = set(failed_leases)
-        _PENDING_TRANSACTION_CLOSE_FDS = set(
-            failed_transactions
-        )
-        _CONSUMED_DESCRIPTOR_OWNERSHIPS = set()
-        _QUARANTINED_DESCRIPTOR_OWNERSHIPS = (
-            inherited_quarantines
-            & (failed_leases | failed_transactions)
-        )
-        _CLEANUP_QUEUE = queue.SimpleQueue()
-        _CLEANUP_THREAD = None
-        _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
-        _CLOSE_ATTEMPT_LOCAL = threading.local()
-        for ownership in failed_leases:
-            _queue_cleanup("lease", ownership)
-        for ownership in failed_transactions:
-            _queue_cleanup("transaction", ownership)
+        try:
+            for reference in _LEASE_REFS.values():
+                lease = reference()
+                if lease is not None:
+                    lease._descriptor = -1
+                    lease._creator_pid = -1
+                    lease.closed = True
+            _SUCCESSOR_LOCKS_GUARD = threading.Lock()
+            _SUCCESSOR_LOCKS = {}
+            _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
+            _DESCRIPTOR_OWNERSHIP_GATE = (
+                _DescriptorOwnershipGate()
+            )
+            _TRACKED_LEASE_OWNERSHIPS = failed_leases
+            _LEASE_REFS = {}
+            _TRACKED_TRANSACTION_OWNERSHIPS = (
+                failed_transactions
+            )
+            _PENDING_LEASE_CLOSE_FDS = set(failed_leases)
+            _PENDING_TRANSACTION_CLOSE_FDS = set(
+                failed_transactions
+            )
+            _CONSUMED_DESCRIPTOR_OWNERSHIPS = set()
+            _QUARANTINED_DESCRIPTOR_OWNERSHIPS = (
+                inherited_quarantines
+                & (failed_leases | failed_transactions)
+            )
+            _CLEANUP_QUEUE = queue.SimpleQueue()
+            _CLEANUP_THREAD = None
+            _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
+            _CLOSE_ATTEMPT_LOCAL = threading.local()
+            for ownership in failed_leases:
+                _queue_cleanup("lease", ownership)
+            for ownership in failed_transactions:
+                _queue_cleanup("transaction", ownership)
+        finally:
+            if signals_blocked:
+                signal.pthread_sigmask(
+                    signal.SIG_SETMASK,
+                    previous_signal_mask,
+                )
 
 
 if hasattr(os, "register_at_fork"):
@@ -971,20 +991,7 @@ class SessionStore:
         )
         if ownership is None:
             return
-        closed = False
-        try:
-            with (
-                _audit_fd_lifecycle(),
-                _ownership_cleanup("lease", ownership) as admission,
-            ):
-                closed = _close_owned_record("lease", ownership)
-                if not closed:
-                    admission.retain()
-        except SessionBusyError:
-            pass
-        finally:
-            if not closed:
-                _schedule_pending_cleanup("lease", ownership)
+        _schedule_pending_cleanup("lease", ownership)
 
     def _open_base(self, *, create: bool) -> int:
         self._require_current_process()
@@ -1780,29 +1787,10 @@ class SessionStore:
                 ) from error
             yield
         finally:
-            closed = False
-            try:
-                with (
-                    _audit_fd_lifecycle(),
-                    _ownership_cleanup(
-                        "transaction",
-                        ownership,
-                    ) as admission,
-                ):
-                    closed = _close_owned_record(
-                        "transaction",
-                        ownership,
-                    )
-                    if not closed:
-                        admission.retain()
-            except SessionBusyError:
-                pass
-            finally:
-                if not closed:
-                    _schedule_pending_cleanup(
-                        "transaction",
-                        ownership,
-                    )
+            _schedule_pending_cleanup(
+                "transaction",
+                ownership,
+            )
 
     def claim_lease(self, token: str) -> ClaimLease:
         run_id, digest = self._parse_token(token)
