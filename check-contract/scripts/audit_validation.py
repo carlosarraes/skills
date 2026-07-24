@@ -83,7 +83,7 @@ def _text(value, location, label="non-empty reason"):
     return value.strip()
 
 
-def _evidence(value, issued, location, namespaces=None):
+def _evidence(value, issued, location):
     if (
         not isinstance(value, list)
         or any(not isinstance(item, str) or not item for item in value)
@@ -98,15 +98,6 @@ def _evidence(value, issued, location, namespaces=None):
             f"{location} cites evidence outside the issued evidence IDs: "
             f"{unknown}"
         )
-    if namespaces is not None:
-        invalid = [
-            item for item in value if item.partition(":")[0] not in namespaces
-        ]
-        if invalid:
-            raise AuditInputError(
-                f"{location} violates fidelity evidence namespace ownership: "
-                f"{sorted(invalid)}"
-            )
     return tuple(value)
 
 

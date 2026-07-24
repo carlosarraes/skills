@@ -1,6 +1,7 @@
 import dataclasses
 import importlib
 import importlib.util
+import inspect
 import json
 import sys
 import tempfile
@@ -229,6 +230,17 @@ class AuditPolicyTests(unittest.TestCase):
             self.module.AuditInputError, "evidence namespace"
         ):
             self.module.validate_code_judgment(self.packet, response)
+
+    def test_fidelity_namespace_policy_has_one_shared_derivation(self):
+        validation = importlib.import_module("audit_validation")
+        self.assertNotIn(
+            "namespaces",
+            inspect.signature(validation._evidence).parameters,
+        )
+        self.assertEqual(
+            inspect.getsource(validation).count('partition(":")[0]'),
+            1,
+        )
 
     def test_validator_requires_exact_runtime_ids_and_closed_shapes(self):
         mutations = {}
