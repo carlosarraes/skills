@@ -1595,6 +1595,233 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertEqual(packet_of(result)["kind"], "reconciliation")
             self.assertEqual(len(os.listdir("/proc/self/fd")), before_fds - 1)
 
+    def test_lease_pending_handoff_cannot_miss_parent_cleanup(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            descriptor = lease._descriptor
+            session_module = sys.modules["audit_session"]
+            original_pending = session_module._PENDING_LEASE_CLOSE_FDS
+            add_paused = threading.Event()
+            release_add = threading.Event()
+
+            class PausingSet(set):
+                def add(self, value):
+                    add_paused.set()
+                    if not release_add.wait(2):
+                        raise AssertionError("pending add was not released")
+                    return super().add(value)
+
+            session_module._PENDING_LEASE_CLOSE_FDS = PausingSet(
+                original_pending
+            )
+            session_module._before_fork()
+            closer = threading.Thread(target=lease.close)
+            closer.start()
+            self.assertTrue(add_paused.wait(1))
+            session_module._after_fork_parent()
+            release_add.set()
+            closer.join(timeout=1)
+            pending = session_module._PENDING_LEASE_CLOSE_FDS
+            session_module._PENDING_LEASE_CLOSE_FDS = original_pending
+
+            self.assertFalse(closer.is_alive())
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+            self.assertEqual(pending, set())
+            self.assertEqual(session_module._TRACKED_LEASE_FDS, set())
+
+    def test_transaction_pending_handoff_cannot_miss_parent_cleanup(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            session_module = sys.modules["audit_session"]
+            original_pending = (
+                session_module._PENDING_TRANSACTION_CLOSE_FDS
+            )
+            transaction_entered = threading.Event()
+            exit_transaction = threading.Event()
+            add_paused = threading.Event()
+            release_add = threading.Event()
+            captured = []
+
+            class PausingSet(set):
+                def add(self, value):
+                    add_paused.set()
+                    if not release_add.wait(2):
+                        raise AssertionError("pending add was not released")
+                    return super().add(value)
+
+            def hold_transaction():
+                with store._successor_transaction_lock(lease):
+                    captured.extend(
+                        session_module._TRACKED_TRANSACTION_FDS
+                    )
+                    transaction_entered.set()
+                    exit_transaction.wait(2)
+
+            worker = threading.Thread(target=hold_transaction)
+            worker.start()
+            self.assertTrue(transaction_entered.wait(1))
+            session_module._PENDING_TRANSACTION_CLOSE_FDS = PausingSet(
+                original_pending
+            )
+            session_module._before_fork()
+            exit_transaction.set()
+            self.assertTrue(add_paused.wait(1))
+            session_module._after_fork_parent()
+            release_add.set()
+            worker.join(timeout=1)
+            pending = session_module._PENDING_TRANSACTION_CLOSE_FDS
+            session_module._PENDING_TRANSACTION_CLOSE_FDS = original_pending
+            lease.close()
+
+            self.assertFalse(worker.is_alive())
+            with self.assertRaises(OSError):
+                os.fstat(captured[0])
+            self.assertEqual(pending, set())
+            self.assertEqual(
+                session_module._TRACKED_TRANSACTION_FDS,
+                set(),
+            )
+
+    def test_concurrent_pending_drainers_close_one_fd_exactly_once(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        token = object()
+        session_module._TRACKED_LEASE_FDS.add(descriptor)
+        session_module._LEASE_FD_TOKENS[descriptor] = token
+        session_module._PENDING_LEASE_CLOSE_FDS.add(
+            (descriptor, token)
+        )
+        barrier = threading.Barrier(2)
+        original_pending = session_module._PENDING_LEASE_CLOSE_FDS
+
+        class RacySet(set):
+            def __bool__(self):
+                barrier.wait(timeout=1)
+                return super().__bool__()
+
+        session_module._PENDING_LEASE_CLOSE_FDS = RacySet(
+            original_pending
+        )
+        errors = []
+
+        def drain():
+            try:
+                session_module._drain_pending_descriptor_closes()
+            except Exception as error:
+                errors.append(error)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            list(executor.map(lambda _: drain(), range(2)))
+        pending = session_module._PENDING_LEASE_CLOSE_FDS
+        session_module._PENDING_LEASE_CLOSE_FDS = original_pending
+
+        self.assertEqual(errors, [])
+        self.assertEqual(pending, set())
+        self.assertNotIn(descriptor, session_module._TRACKED_LEASE_FDS)
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_audit_lifecycle_never_drains_unrelated_pending_close(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            descriptor = lease._descriptor
+            token = lease._tracking_token
+            session_module = sys.modules["audit_session"]
+            close_called = threading.Event()
+            original_close = session_module.os.close
+
+            def observed_close(value):
+                if value == descriptor:
+                    close_called.set()
+                return original_close(value)
+
+            session_module._PENDING_LEASE_CLOSE_FDS.add(
+                (descriptor, token)
+            )
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                observed_close,
+            ):
+                before = time.monotonic()
+                with session_module._audit_fd_lifecycle():
+                    pass
+                elapsed = time.monotonic() - before
+                self.assertFalse(close_called.is_set())
+                session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                    (descriptor, token)
+                )
+                lease.close()
+
+            self.assertLess(elapsed, 0.75)
+            self.assertTrue(close_called.is_set())
+
+    def test_stale_cleanup_cannot_unregister_a_reused_tracked_fd(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        stale_token = object()
+        replacement_token = object()
+        session_module._TRACKED_LEASE_FDS.add(descriptor)
+        session_module._LEASE_FD_TOKENS[descriptor] = stale_token
+        session_module._PENDING_LEASE_CLOSE_FDS.add(
+            (descriptor, stale_token)
+        )
+        original_close_owned = session_module._close_owned_descriptor
+        replacement = []
+
+        def close_then_reuse(value):
+            original_close_owned(value)
+            reused = os.open(
+                "/dev/null",
+                os.O_RDONLY | os.O_CLOEXEC,
+            )
+            self.assertEqual(reused, value)
+            replacement.append(reused)
+            session_module._TRACKED_LEASE_FDS.add(reused)
+            session_module._LEASE_FD_TOKENS[reused] = replacement_token
+
+        with mock.patch.object(
+            session_module,
+            "_close_owned_descriptor",
+            close_then_reuse,
+        ):
+            self.assertTrue(
+                session_module._close_one_pending_descriptor()
+            )
+
+        self.assertEqual(replacement, [descriptor])
+        self.assertIn(descriptor, session_module._TRACKED_LEASE_FDS)
+        self.assertIs(
+            session_module._LEASE_FD_TOKENS[descriptor],
+            replacement_token,
+        )
+        os.fstat(descriptor)
+        os.close(descriptor)
+        session_module._TRACKED_LEASE_FDS.discard(descriptor)
+        session_module._LEASE_FD_TOKENS.pop(descriptor, None)
+
     def test_dropped_unclosed_lease_is_finalized_and_recoverable(self):
         with materialized_repo(
             "contract-compliant-overengineered"

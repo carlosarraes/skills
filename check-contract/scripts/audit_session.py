@@ -32,6 +32,7 @@ import fcntl
 import errno
 import ctypes
 import threading
+import time
 import weakref
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -52,8 +53,10 @@ TRANSACTION_MARKER = b"transaction-v1\n"
 _SUCCESSOR_LOCKS_GUARD = threading.Lock()
 _SUCCESSOR_LOCKS = {}
 _TRACKED_LEASE_FDS = set()
+_LEASE_FD_TOKENS = {}
 _LEASE_REFS = {}
 _TRACKED_TRANSACTION_FDS = set()
+_TRANSACTION_FD_TOKENS = {}
 _PENDING_LEASE_CLOSE_FDS = set()
 _PENDING_TRANSACTION_CLOSE_FDS = set()
 
@@ -68,7 +71,7 @@ class _ForkLifecycleGate:
         self._fork_pending = False
 
     def try_enter_audit(self) -> bool:
-        if not self._metadata.acquire(blocking=False):
+        if not self._metadata.acquire(timeout=0.005):
             return False
         try:
             if self._fork_pending:
@@ -92,10 +95,15 @@ class _ForkLifecycleGate:
             while self._readers:
                 self._drained.wait()
 
-    def after_parent(self) -> None:
+    def after_parent_begin_cleanup(self) -> None:
         with self._metadata:
             self._fork_pending = False
+            self._readers += 1
             self._drained.notify_all()
+
+    @property
+    def fork_pending(self) -> bool:
+        return self._fork_pending
 
 
 _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
@@ -109,24 +117,68 @@ def _close_owned_descriptor(descriptor: int) -> None:
             raise
 
 
-def _drain_pending_descriptor_closes() -> None:
-    while _PENDING_LEASE_CLOSE_FDS:
-        descriptor = _PENDING_LEASE_CLOSE_FDS.pop()
+def _close_one_pending_descriptor() -> bool:
+    try:
+        descriptor, token = _PENDING_LEASE_CLOSE_FDS.pop()
+    except KeyError:
+        descriptor = None
+    if descriptor is not None:
+        if _LEASE_FD_TOKENS.get(descriptor) is not token:
+            return True
         try:
             _close_owned_descriptor(descriptor)
         except Exception:
-            _PENDING_LEASE_CLOSE_FDS.add(descriptor)
+            _PENDING_LEASE_CLOSE_FDS.add((descriptor, token))
             raise
-        _TRACKED_LEASE_FDS.discard(descriptor)
-        _LEASE_REFS.pop(descriptor, None)
-    while _PENDING_TRANSACTION_CLOSE_FDS:
-        descriptor = _PENDING_TRANSACTION_CLOSE_FDS.pop()
-        try:
-            _close_owned_descriptor(descriptor)
-        except Exception:
-            _PENDING_TRANSACTION_CLOSE_FDS.add(descriptor)
-            raise
+        if _LEASE_FD_TOKENS.get(descriptor) is token:
+            _TRACKED_LEASE_FDS.discard(descriptor)
+            _LEASE_FD_TOKENS.pop(descriptor, None)
+            _LEASE_REFS.pop(descriptor, None)
+        return True
+    try:
+        descriptor, token = _PENDING_TRANSACTION_CLOSE_FDS.pop()
+    except KeyError:
+        return False
+    if _TRANSACTION_FD_TOKENS.get(descriptor) is not token:
+        return True
+    try:
+        _close_owned_descriptor(descriptor)
+    except Exception:
+        _PENDING_TRANSACTION_CLOSE_FDS.add((descriptor, token))
+        raise
+    if _TRANSACTION_FD_TOKENS.get(descriptor) is token:
         _TRACKED_TRANSACTION_FDS.discard(descriptor)
+        _TRANSACTION_FD_TOKENS.pop(descriptor, None)
+    return True
+
+
+def _drain_pending_descriptor_closes() -> None:
+    while _close_one_pending_descriptor():
+        pass
+
+
+def _background_pending_cleanup() -> None:
+    while (
+        _PENDING_LEASE_CLOSE_FDS
+        or _PENDING_TRANSACTION_CLOSE_FDS
+    ):
+        if not _FORK_FD_LIFECYCLE_GATE.try_enter_audit():
+            time.sleep(0.001)
+            continue
+        try:
+            _close_one_pending_descriptor()
+        finally:
+            _FORK_FD_LIFECYCLE_GATE.exit_audit()
+
+
+def _schedule_pending_cleanup() -> None:
+    if _FORK_FD_LIFECYCLE_GATE.fork_pending:
+        return
+    threading.Thread(
+        target=_background_pending_cleanup,
+        daemon=True,
+        name="audit-fd-cleanup",
+    ).start()
 
 
 @contextmanager
@@ -134,7 +186,6 @@ def _audit_fd_lifecycle():
     if not _FORK_FD_LIFECYCLE_GATE.try_enter_audit():
         raise SessionBusyError("fork descriptor lifecycle is active")
     try:
-        _drain_pending_descriptor_closes()
         yield
     finally:
         _FORK_FD_LIFECYCLE_GATE.exit_audit()
@@ -234,28 +285,38 @@ class ClaimLease:
         if descriptor not in _TRACKED_LEASE_FDS:
             with _audit_fd_lifecycle():
                 _TRACKED_LEASE_FDS.add(descriptor)
+                _LEASE_FD_TOKENS[descriptor] = object()
+        self._tracking_token = _LEASE_FD_TOKENS[descriptor]
         _LEASE_REFS[descriptor] = weakref.ref(self)
 
     def close(self) -> None:
         if self.closed:
             return
         descriptor = self._descriptor
+        token = self._tracking_token
+        if _LEASE_FD_TOKENS.get(descriptor) is token:
+            _PENDING_LEASE_CLOSE_FDS.add((descriptor, token))
         try:
             with _audit_fd_lifecycle():
                 self._descriptor = -1
                 self.closed = True
-                if descriptor not in _TRACKED_LEASE_FDS:
+                ownership = (descriptor, token)
+                if ownership not in _PENDING_LEASE_CLOSE_FDS:
+                    return
+                _PENDING_LEASE_CLOSE_FDS.remove(ownership)
+                if _LEASE_FD_TOKENS.get(descriptor) is not token:
                     return
                 try:
                     _close_owned_descriptor(descriptor)
                 finally:
-                    _TRACKED_LEASE_FDS.discard(descriptor)
-                    _LEASE_REFS.pop(descriptor, None)
+                    if _LEASE_FD_TOKENS.get(descriptor) is token:
+                        _TRACKED_LEASE_FDS.discard(descriptor)
+                        _LEASE_FD_TOKENS.pop(descriptor, None)
+                        _LEASE_REFS.pop(descriptor, None)
         except SessionBusyError:
             self._descriptor = -1
             self.closed = True
-            if descriptor in _TRACKED_LEASE_FDS:
-                _PENDING_LEASE_CLOSE_FDS.add(descriptor)
+            _schedule_pending_cleanup()
 
     def __del__(self):
         try:
@@ -269,10 +330,11 @@ def _before_fork() -> None:
 
 
 def _after_fork_parent() -> None:
+    _FORK_FD_LIFECYCLE_GATE.after_parent_begin_cleanup()
     try:
         _drain_pending_descriptor_closes()
     finally:
-        _FORK_FD_LIFECYCLE_GATE.after_parent()
+        _FORK_FD_LIFECYCLE_GATE.exit_audit()
 
 
 def _after_fork_child() -> None:
@@ -280,8 +342,10 @@ def _after_fork_child() -> None:
     global _SUCCESSOR_LOCKS
     global _FORK_FD_LIFECYCLE_GATE
     global _TRACKED_LEASE_FDS
+    global _LEASE_FD_TOKENS
     global _LEASE_REFS
     global _TRACKED_TRANSACTION_FDS
+    global _TRANSACTION_FD_TOKENS
     global _PENDING_LEASE_CLOSE_FDS
     global _PENDING_TRANSACTION_CLOSE_FDS
 
@@ -305,8 +369,10 @@ def _after_fork_child() -> None:
     _SUCCESSOR_LOCKS = {}
     _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
     _TRACKED_LEASE_FDS = set()
+    _LEASE_FD_TOKENS = {}
     _LEASE_REFS = {}
     _TRACKED_TRANSACTION_FDS = set()
+    _TRANSACTION_FD_TOKENS = {}
     _PENDING_LEASE_CLOSE_FDS = set()
     _PENDING_TRANSACTION_CLOSE_FDS = set()
 
@@ -384,21 +450,31 @@ class SessionStore:
         with _audit_fd_lifecycle():
             descriptor = self._open_directory(name, dir_fd=dir_fd)
             _TRACKED_LEASE_FDS.add(descriptor)
+            _LEASE_FD_TOKENS[descriptor] = object()
             return descriptor
 
     def _close_tracked_claim_descriptor(self, descriptor: int) -> None:
+        token = _LEASE_FD_TOKENS.get(descriptor)
+        if token is None:
+            return
+        _PENDING_LEASE_CLOSE_FDS.add((descriptor, token))
         try:
             with _audit_fd_lifecycle():
-                if descriptor not in _TRACKED_LEASE_FDS:
+                ownership = (descriptor, token)
+                if ownership not in _PENDING_LEASE_CLOSE_FDS:
+                    return
+                _PENDING_LEASE_CLOSE_FDS.remove(ownership)
+                if _LEASE_FD_TOKENS.get(descriptor) is not token:
                     return
                 try:
                     _close_owned_descriptor(descriptor)
                 finally:
-                    _TRACKED_LEASE_FDS.discard(descriptor)
-                    _LEASE_REFS.pop(descriptor, None)
+                    if _LEASE_FD_TOKENS.get(descriptor) is token:
+                        _TRACKED_LEASE_FDS.discard(descriptor)
+                        _LEASE_FD_TOKENS.pop(descriptor, None)
+                        _LEASE_REFS.pop(descriptor, None)
         except SessionBusyError:
-            if descriptor in _TRACKED_LEASE_FDS:
-                _PENDING_LEASE_CLOSE_FDS.add(descriptor)
+            _schedule_pending_cleanup()
 
     def _open_base(self, *, create: bool) -> int:
         self._require_current_process()
@@ -1138,6 +1214,8 @@ class SessionStore:
                     "claim transaction lock is unavailable or unsafe"
                 ) from error
             _TRACKED_TRANSACTION_FDS.add(descriptor)
+            token = object()
+            _TRANSACTION_FD_TOKENS[descriptor] = token
         try:
             try:
                 metadata = os.fstat(descriptor)
@@ -1168,16 +1246,34 @@ class SessionStore:
                 ) from error
             yield
         finally:
+            _PENDING_TRANSACTION_CLOSE_FDS.add((descriptor, token))
             try:
                 with _audit_fd_lifecycle():
-                    if descriptor in _TRACKED_TRANSACTION_FDS:
-                        try:
-                            _close_owned_descriptor(descriptor)
-                        finally:
-                            _TRACKED_TRANSACTION_FDS.discard(descriptor)
+                    ownership = (descriptor, token)
+                    if ownership in _PENDING_TRANSACTION_CLOSE_FDS:
+                        _PENDING_TRANSACTION_CLOSE_FDS.remove(ownership)
+                        if (
+                            _TRANSACTION_FD_TOKENS.get(descriptor)
+                            is token
+                        ):
+                            try:
+                                _close_owned_descriptor(descriptor)
+                            finally:
+                                if (
+                                    _TRANSACTION_FD_TOKENS.get(
+                                        descriptor
+                                    )
+                                    is token
+                                ):
+                                    _TRACKED_TRANSACTION_FDS.discard(
+                                        descriptor
+                                    )
+                                    _TRANSACTION_FD_TOKENS.pop(
+                                        descriptor,
+                                        None,
+                                    )
             except SessionBusyError:
-                if descriptor in _TRACKED_TRANSACTION_FDS:
-                    _PENDING_TRANSACTION_CLOSE_FDS.add(descriptor)
+                _schedule_pending_cleanup()
 
     def claim_lease(self, token: str) -> ClaimLease:
         run_id, digest = self._parse_token(token)
