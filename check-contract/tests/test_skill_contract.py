@@ -236,6 +236,41 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertIn(phrase, self.flat_check_protocol)
 
+    def test_protocol_disambiguates_absence_and_non_goal_exceeded(self):
+        required = (
+            "For non-goals (N), `MET` means the excluded behavior is absent",
+            "`EXCEEDED` requires evidence that the implementation actively "
+            "imposes an additional restriction on existing or approved "
+            "behavior",
+            "ordinary non-implementation or absence of arbitrary unrequested "
+            "behavior is `MET`, not `EXCEEDED`",
+            "Negative C predicates such as `C1: None` use the non-goal absence "
+            "semantics: `MET` when the declared-absent contract or side effect "
+            "is absent and `UNMET` when it is present",
+            "Family-specific rules take precedence over the general absence "
+            "rule",
+            "N clauses and negative C predicates such as `C1: None` cannot be "
+            "inverted by that general rule",
+            "Proven absence is `UNMET` only for a required positive predicate "
+            "or required item",
+        )
+        for phrase in required:
+            self.assertIn(phrase, self.flat_check_protocol)
+        self.assert_ordered(
+            self.flat_check_protocol,
+            required[0],
+            required[1],
+            required[2],
+            required[3],
+            required[4],
+            required[5],
+            required[6],
+        )
+        self.assertNotIn(
+            "proven absence is `UNMET`.",
+            self.flat_check_protocol,
+        )
+
     def test_protocol_owns_exact_taxonomy_aggregation_and_precedence(self):
         required = (
             "Contract fidelity: `PASS | PARTIAL | FAIL`",

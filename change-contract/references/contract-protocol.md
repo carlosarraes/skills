@@ -192,8 +192,13 @@ Assign one clause status per stable clause ID:
   proves it false or missing; `EXCEEDED` means it is met but shipped behavior,
   contract, risk, or responsibility goes beyond its approved boundary.
 - For non-goals (N), `MET` means the excluded behavior is absent; `UNMET` means
-  it is present; `EXCEEDED` means the implementation also excludes behavior
-  outside the named non-goal.
+  it is present; `EXCEEDED` requires evidence that the implementation actively
+  imposes an additional restriction on existing or approved behavior; ordinary
+  non-implementation or absence of arbitrary unrequested behavior is `MET`, not
+  `EXCEEDED`.
+- Negative C predicates such as `C1: None` use the non-goal absence semantics:
+  `MET` when the declared-absent contract or side effect is absent and `UNMET`
+  when it is present.
 - For expected-surface clauses (S), `MET` means the responsibility shipped in
   the predicted surface; `UNMET` means the responsibility did not ship
   anywhere; `EXCEEDED` means it shipped through additional or different paths
@@ -203,9 +208,13 @@ Assign one clause status per stable clause ID:
   required named item is absent and its present requirement is unsatisfied;
   `EXCEEDED` means the count exceeds the cap or an unapproved item appears in
   that category.
+- Family-specific rules take precedence over the general absence rule. N
+  clauses and negative C predicates such as `C1: None` cannot be inverted by
+  that general rule.
 - `INDETERMINATE` means available evidence cannot establish the applicable
   predicate, path, item, or count. Missing, unreadable, or conflicting evidence
-  is indeterminate; proven absence is `UNMET`.
+  is indeterminate. Proven absence is `UNMET` only for a required positive
+  predicate or required item.
 
 Assign ledger status independently:
 
