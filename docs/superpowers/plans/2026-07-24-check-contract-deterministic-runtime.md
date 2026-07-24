@@ -147,10 +147,20 @@ def test_delivery_and_mutation_scope_are_distinct_assertions(self):
     document = json.loads(EVALS.read_text(encoding="utf-8"))
     for item in document["evals"]:
         assertions = item["assertions"]
-        self.assertTrue(any("active check-report.md is delivered" in value
-                            for value in assertions))
-        self.assertTrue(any("no other target path changes" in value
-                            for value in assertions))
+        self.assertTrue(
+            any(
+                "active contract version's check-report.md is delivered"
+                in value
+                for value in assertions
+            )
+        )
+        self.assertTrue(
+            any(
+                "target path changes except the active contract "
+                "version's check-report.md" in value
+                for value in assertions
+            )
+        )
 ```
 
 - [ ] **Step 2: Run the focused tests and verify RED**
@@ -173,12 +183,12 @@ Define the canonical slices once:
 ```python
 A_SLICE = slice(0, 4)
 AB_SLICE = slice(4, 5)
-B_SLICE = slice(5, 19)
+B_SLICE = slice(5, 20)
 
 
 def split_compound_outcomes(expectations):
-    if len(expectations) != 19:
-        raise ValueError("compound expectation count must be 19")
+    if len(expectations) != 20:
+        raise ValueError("compound expectation count must be 20")
     target_a = all(expectations[A_SLICE])
     boundary = all(expectations[AB_SLICE])
     target_b = all(expectations[B_SLICE])
@@ -335,8 +345,14 @@ The JSON must contain only executable policy data:
     "UNRESOLVED_WITH_SIMPLICITY": ["clean-up"],
     "UNRESOLVED": ["qa-ticket"],
     "SIMPLICITY_ONLY": ["clean-up"],
-    "PASS_WITH_DOCUMENTED_DRIFT": ["qa-ticket"],
-    "PASS": ["qa-ticket"]
+    "PASS_WITH_DOCUMENTED_DRIFT": {
+      "acceptance_qa_exists": ["qa-pr"],
+      "otherwise": ["qa-ticket"]
+    },
+    "PASS": {
+      "acceptance_qa_exists": ["qa-pr"],
+      "otherwise": ["qa-ticket"]
+    }
   },
   "report_schema_version": 1
 }
