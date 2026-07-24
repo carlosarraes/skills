@@ -117,7 +117,7 @@ class _DescriptorOwnershipGate:
         self._metadata = threading.Lock()
         self._publishers = set()
         self._cleanup = None
-        self._writer_intent = None
+        self._writer_intents = {}
 
     def try_enter_publication(self):
         if not self._metadata.acquire(timeout=0.005):
@@ -128,10 +128,7 @@ class _DescriptorOwnershipGate:
                 for publisher in self._publishers
                 if publisher.locked()
             }
-            if (
-                self._writer_intent is not None
-                and self._writer_intent.locked()
-            ):
+            if self._writer_intents:
                 return None
             if self._cleanup is not None and self._cleanup.locked():
                 return None
@@ -142,7 +139,7 @@ class _DescriptorOwnershipGate:
         finally:
             self._metadata.release()
 
-    def try_enter_cleanup(self):
+    def try_enter_cleanup(self, intent_key):
         if not self._metadata.acquire(timeout=0.005):
             return None
         try:
@@ -151,12 +148,10 @@ class _DescriptorOwnershipGate:
                 for publisher in self._publishers
                 if publisher.locked()
             }
-            if (
-                self._writer_intent is None
-                or not self._writer_intent.locked()
-            ):
-                self._writer_intent = threading.Lock()
-                self._writer_intent.acquire()
+            intent_token = self._writer_intents.get(intent_key)
+            if intent_token is None:
+                intent_token = object()
+                self._writer_intents[intent_key] = intent_token
             if self._publishers:
                 return None
             if self._cleanup is not None and self._cleanup.locked():
@@ -164,7 +159,7 @@ class _DescriptorOwnershipGate:
             cleanup = threading.Lock()
             cleanup.acquire()
             self._cleanup = cleanup
-            return cleanup, self._writer_intent
+            return cleanup, intent_key, intent_token
         finally:
             self._metadata.release()
 
@@ -172,15 +167,19 @@ class _DescriptorOwnershipGate:
     def exit_publication(token) -> None:
         token.release()
 
-    @staticmethod
     def exit_cleanup(
+        gate,
         cleanup,
+        intent_key,
         writer_intent,
         *,
         retain_intent: bool,
     ) -> None:
-        if not retain_intent:
-            writer_intent.release()
+        if (
+            not retain_intent
+            and gate._writer_intents.get(intent_key) is writer_intent
+        ):
+            del gate._writer_intents[intent_key]
         cleanup.release()
 
 
@@ -215,11 +214,14 @@ class _CleanupAdmission:
 
 
 @contextmanager
-def _ownership_cleanup():
-    admission_tokens = _DESCRIPTOR_OWNERSHIP_GATE.try_enter_cleanup()
+def _ownership_cleanup(kind: str, ownership):
+    intent_key = (kind, ownership)
+    admission_tokens = _DESCRIPTOR_OWNERSHIP_GATE.try_enter_cleanup(
+        intent_key
+    )
     if admission_tokens is None:
         raise SessionBusyError("descriptor ownership registry is active")
-    cleanup, writer_intent = admission_tokens
+    cleanup, intent_key, writer_intent = admission_tokens
     admission = _CleanupAdmission()
     try:
         yield admission
@@ -229,6 +231,7 @@ def _ownership_cleanup():
     finally:
         _DESCRIPTOR_OWNERSHIP_GATE.exit_cleanup(
             cleanup,
+            intent_key,
             writer_intent,
             retain_intent=admission.retain_intent,
         )
@@ -250,15 +253,64 @@ def _close_owned_record(kind: str, ownership) -> bool:
     pending, tracked = _ownership_state(kind)
     pending.add(ownership)
     if ownership not in tracked:
-        pending.discard(ownership)
-        if kind == "lease":
-            _LEASE_REFS.pop(ownership[1], None)
-        return True
+        return _forget_owned_record(kind, ownership)
     try:
-        _close_owned_descriptor(ownership[0])
-    except Exception:
+        guard = os.dup(ownership[0])
+    except OSError as error:
+        if error.errno == errno.EBADF:
+            return _forget_owned_record(kind, ownership)
         return False
-    tracked.remove(ownership)
+    try:
+        try:
+            _close_owned_descriptor(ownership[0])
+        except Exception:
+            if _same_open_file_description(
+                guard,
+                ownership[0],
+            ):
+                return False
+            return _forget_owned_record(kind, ownership)
+        return _forget_owned_record(kind, ownership)
+    finally:
+        try:
+            os.close(guard)
+        except OSError:
+            pass
+
+
+def _same_open_file_description(guard: int, candidate: int) -> bool:
+    original_flags = None
+    try:
+        original_flags = fcntl.fcntl(guard, fcntl.F_GETFL)
+        observations = []
+        for enabled in (True, False):
+            probe_flags = (
+                original_flags | os.O_NONBLOCK
+                if enabled
+                else original_flags & ~os.O_NONBLOCK
+            )
+            fcntl.fcntl(guard, fcntl.F_SETFL, probe_flags)
+            candidate_flags = fcntl.fcntl(
+                candidate,
+                fcntl.F_GETFL,
+            )
+            observations.append(
+                bool(candidate_flags & os.O_NONBLOCK)
+            )
+        return observations == [True, False]
+    except OSError:
+        return False
+    finally:
+        if original_flags is not None:
+            try:
+                fcntl.fcntl(guard, fcntl.F_SETFL, original_flags)
+            except OSError:
+                pass
+
+
+def _forget_owned_record(kind: str, ownership) -> bool:
+    pending, tracked = _ownership_state(kind)
+    tracked.discard(ownership)
     pending.discard(ownership)
     if kind == "lease":
         _LEASE_REFS.pop(ownership[1], None)
@@ -266,11 +318,14 @@ def _close_owned_record(kind: str, ownership) -> bool:
 
 
 def _close_pending_ownership(kind: str, ownership) -> bool:
-    with _ownership_cleanup() as admission:
-        closed = _close_owned_record(kind, ownership)
-        if not closed:
-            admission.retain()
-        return closed
+    try:
+        with _ownership_cleanup(kind, ownership) as admission:
+            closed = _close_owned_record(kind, ownership)
+            if not closed:
+                admission.retain()
+            return closed
+    except SessionBusyError:
+        return False
 
 
 def _queue_cleanup(kind: str, ownership) -> None:
@@ -281,28 +336,37 @@ def _background_pending_cleanup() -> None:
     retry_delay = 0.001
     while True:
         kind, ownership = _CLEANUP_QUEUE.get()
-        reader = _FORK_FD_LIFECYCLE_GATE.try_enter_audit()
-        if reader is None:
-            time.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 0.05)
-            _queue_cleanup(kind, ownership)
-            continue
+        crashed = None
+        closed = False
         try:
-            try:
-                with _ownership_cleanup() as admission:
-                    closed = _close_owned_record(kind, ownership)
-                    if not closed:
-                        admission.retain()
-            except Exception:
-                closed = False
-        finally:
-            _FORK_FD_LIFECYCLE_GATE.exit_audit(reader)
+            reader = _FORK_FD_LIFECYCLE_GATE.try_enter_audit()
+            if reader is not None:
+                try:
+                    try:
+                        with _ownership_cleanup(
+                            kind,
+                            ownership,
+                        ) as admission:
+                            closed = _close_owned_record(
+                                kind,
+                                ownership,
+                            )
+                            if not closed:
+                                admission.retain()
+                    except Exception:
+                        closed = False
+                finally:
+                    _FORK_FD_LIFECYCLE_GATE.exit_audit(reader)
+        except BaseException as error:
+            crashed = error
         if closed:
             retry_delay = 0.001
             continue
+        _queue_cleanup(kind, ownership)
+        if crashed is not None and _handoff_cleanup_worker():
+            raise crashed
         time.sleep(retry_delay)
         retry_delay = min(retry_delay * 2, 0.05)
-        _queue_cleanup(kind, ownership)
 
 
 def _schedule_pending_cleanup(kind: str, ownership) -> None:
@@ -323,18 +387,44 @@ def _ensure_cleanup_worker() -> bool:
             and _CLEANUP_THREAD.is_alive()
         ):
             return True
-        for _ in range(2):
-            worker = threading.Thread(
-                target=_background_pending_cleanup,
-                daemon=True,
-                name="audit-fd-cleanup",
+        return _start_cleanup_worker_locked()
+    finally:
+        _CLEANUP_SUPERVISOR_LOCK.release()
+
+
+def _start_cleanup_worker_locked() -> bool:
+    global _CLEANUP_THREAD
+    for _ in range(2):
+        worker = threading.Thread(
+            target=_background_pending_cleanup,
+            daemon=True,
+            name="audit-fd-cleanup",
+        )
+        _CLEANUP_THREAD = worker
+        try:
+            worker.start()
+        except RuntimeError:
+            _CLEANUP_THREAD = None
+            continue
+        return True
+    return False
+
+
+def _handoff_cleanup_worker() -> bool:
+    global _CLEANUP_THREAD
+    current = threading.current_thread()
+    if not _CLEANUP_SUPERVISOR_LOCK.acquire(timeout=0.005):
+        return False
+    try:
+        if _CLEANUP_THREAD is not current:
+            return bool(
+                _CLEANUP_THREAD is not None
+                and _CLEANUP_THREAD.is_alive()
             )
-            try:
-                worker.start()
-            except RuntimeError:
-                continue
-            _CLEANUP_THREAD = worker
+        _CLEANUP_THREAD = None
+        if _start_cleanup_worker_locked():
             return True
+        _CLEANUP_THREAD = current
         return False
     finally:
         _CLEANUP_SUPERVISOR_LOCK.release()
@@ -474,7 +564,7 @@ class ClaimLease:
         try:
             with (
                 _audit_fd_lifecycle(),
-                _ownership_cleanup() as admission,
+                _ownership_cleanup("lease", ownership) as admission,
             ):
                 closed = _close_owned_record("lease", ownership)
                 if not closed:
@@ -651,7 +741,7 @@ class SessionStore:
         try:
             with (
                 _audit_fd_lifecycle(),
-                _ownership_cleanup() as admission,
+                _ownership_cleanup("lease", ownership) as admission,
             ):
                 closed = _close_owned_record("lease", ownership)
                 if not closed:
@@ -1448,7 +1538,10 @@ class SessionStore:
             try:
                 with (
                     _audit_fd_lifecycle(),
-                    _ownership_cleanup() as admission,
+                    _ownership_cleanup(
+                        "transaction",
+                        ownership,
+                    ) as admission,
                 ):
                     closed = _close_owned_record(
                         "transaction",

@@ -2329,16 +2329,296 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
     def test_cleanup_release_handoff_keeps_publication_excluded(self):
         session_module = sys.modules["audit_session"]
         gate = session_module._DescriptorOwnershipGate()
-        cleanup, writer_intent = gate.try_enter_cleanup()
+        first_key = ("lease", (10_000_010, object()))
+        second_key = ("lease", (10_000_011, object()))
+        cleanup, intent_key, intent_token = gate.try_enter_cleanup(
+            first_key
+        )
 
-        writer_intent.release()
+        self.assertEqual(intent_key, first_key)
+        self.assertIs(gate._writer_intents[first_key], intent_token)
+        del gate._writer_intents[first_key]
         self.assertIsNone(gate.try_enter_publication())
-        self.assertIsNone(gate.try_enter_cleanup())
+        self.assertIsNone(gate.try_enter_cleanup(second_key))
         cleanup.release()
 
-        self.assertTrue(gate._writer_intent.locked())
+        self.assertIn(second_key, gate._writer_intents)
         self.assertIsNone(gate.try_enter_publication())
-        gate._writer_intent.release()
+        gate._writer_intents.clear()
+
+    def test_unrelated_cleanup_cannot_release_ambiguous_close_intent(self):
+        session_module = sys.modules["audit_session"]
+        ambiguous = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        unrelated = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        ambiguous_ownership = (ambiguous, object())
+        unrelated_ownership = (unrelated, object())
+        original_close = session_module.os.close
+        ambiguous_attempted = threading.Event()
+        allow_ambiguous_close = threading.Event()
+
+        def fail_before_close(value):
+            if value == ambiguous:
+                ambiguous_attempted.set()
+                if not allow_ambiguous_close.is_set():
+                    raise OSError(errno.EIO, "close not attempted")
+            return original_close(value)
+
+        session_module._TRACKED_LEASE_OWNERSHIPS.update(
+            {ambiguous_ownership, unrelated_ownership}
+        )
+        try:
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                fail_before_close,
+            ):
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ambiguous_ownership,
+                )
+                self.assertTrue(ambiguous_attempted.wait(1))
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    unrelated_ownership,
+                )
+                deadline = time.monotonic() + 1
+                while (
+                    unrelated_ownership
+                    in session_module._TRACKED_LEASE_OWNERSHIPS
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail("unrelated cleanup did not finish")
+                    time.sleep(0.005)
+
+                self.assertIn(
+                    ambiguous_ownership,
+                    session_module._PENDING_LEASE_CLOSE_FDS,
+                )
+                self.assertIsNone(
+                    session_module._DESCRIPTOR_OWNERSHIP_GATE
+                    .try_enter_publication()
+                )
+                allow_ambiguous_close.set()
+                deadline = time.monotonic() + 1
+                while (
+                    ambiguous_ownership
+                    in session_module._TRACKED_LEASE_OWNERSHIPS
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail("ambiguous cleanup did not recover")
+                    time.sleep(0.005)
+
+            publisher = (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                .try_enter_publication()
+            )
+            self.assertIsNotNone(publisher)
+            (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                .exit_publication(publisher)
+            )
+        finally:
+            allow_ambiguous_close.set()
+            for ownership in (
+                ambiguous_ownership,
+                unrelated_ownership,
+            ):
+                session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                    ownership
+                )
+                session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                    ownership
+                )
+            (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                ._writer_intents.clear()
+            )
+            for descriptor in (ambiguous, unrelated):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    def test_close_then_error_is_resolved_before_fd_reuse(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        ownership = (descriptor, object())
+        original_close = session_module.os.close
+        attempts = 0
+
+        def close_then_error(value):
+            nonlocal attempts
+            if value == descriptor:
+                attempts += 1
+                original_close(value)
+                raise OSError(errno.EIO, "close completed")
+            return original_close(value)
+
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        try:
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                close_then_error,
+            ):
+                self.assertTrue(
+                    session_module._close_pending_ownership(
+                        "lease",
+                        ownership,
+                    )
+                )
+
+            replacement = os.open(
+                "/dev/null",
+                os.O_RDONLY | os.O_CLOEXEC,
+            )
+            self.assertEqual(replacement, descriptor)
+            session_module._schedule_pending_cleanup(
+                "lease",
+                ownership,
+            )
+            time.sleep(0.05)
+            os.fstat(replacement)
+            os.close(replacement)
+        finally:
+            session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                ownership
+            )
+            session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                ownership
+            )
+            (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                ._writer_intents.clear()
+            )
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+    def test_close_error_cannot_retry_same_inode_untracked_reuse(self):
+        session_module = sys.modules["audit_session"]
+        with tempfile.TemporaryDirectory() as temporary:
+            store = self.module.SessionStore(Path(temporary))
+            descriptor = store._open_directory(temporary)
+            ownership = (descriptor, object())
+            original_close = session_module.os.close
+            replacement = []
+
+            def close_reopen_same_directory(value):
+                if value == descriptor and not replacement:
+                    original_close(value)
+                    replacement.append(
+                        store._open_directory(temporary)
+                    )
+                    raise OSError(
+                        errno.EIO,
+                        "close completed before error",
+                    )
+                return original_close(value)
+
+            session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+            try:
+                with mock.patch.object(
+                    session_module.os,
+                    "close",
+                    close_reopen_same_directory,
+                ):
+                    self.assertTrue(
+                        session_module._close_pending_ownership(
+                            "lease",
+                            ownership,
+                        )
+                    )
+
+                self.assertEqual(replacement, [descriptor])
+                original_metadata = os.stat(temporary)
+                replacement_metadata = os.fstat(replacement[0])
+                self.assertEqual(
+                    (
+                        replacement_metadata.st_dev,
+                        replacement_metadata.st_ino,
+                    ),
+                    (
+                        original_metadata.st_dev,
+                        original_metadata.st_ino,
+                    ),
+                )
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                time.sleep(0.05)
+                os.fstat(replacement[0])
+                publisher = (
+                    session_module._DESCRIPTOR_OWNERSHIP_GATE
+                    .try_enter_publication()
+                )
+                self.assertIsNotNone(publisher)
+                (
+                    session_module._DESCRIPTOR_OWNERSHIP_GATE
+                    .exit_publication(publisher)
+                )
+            finally:
+                session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                    ownership
+                )
+                session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                    ownership
+                )
+                (
+                    session_module._DESCRIPTOR_OWNERSHIP_GATE
+                    ._writer_intents.clear()
+                )
+                for value in replacement or [descriptor]:
+                    try:
+                        os.close(value)
+                    except OSError:
+                        pass
+
+    def test_stale_job_cannot_release_another_jobs_intent(self):
+        session_module = sys.modules["audit_session"]
+        gate = session_module._DescriptorOwnershipGate()
+        unresolved = ("lease", (10_000_020, object()))
+        stale = ("lease", (10_000_021, object()))
+
+        cleanup, key, token = gate.try_enter_cleanup(unresolved)
+        gate.exit_cleanup(
+            cleanup,
+            key,
+            token,
+            retain_intent=True,
+        )
+        cleanup, key, token = gate.try_enter_cleanup(stale)
+        gate.exit_cleanup(
+            cleanup,
+            key,
+            token,
+            retain_intent=False,
+        )
+
+        self.assertIn(unresolved, gate._writer_intents)
+        self.assertNotIn(stale, gate._writer_intents)
+        self.assertIsNone(gate.try_enter_publication())
+        cleanup, key, token = gate.try_enter_cleanup(unresolved)
+        gate.exit_cleanup(
+            cleanup,
+            key,
+            token,
+            retain_intent=False,
+        )
+        publisher = gate.try_enter_publication()
+        self.assertIsNotNone(publisher)
+        gate.exit_publication(publisher)
 
     def test_stale_exact_cleanup_job_cannot_close_reused_descriptor(self):
         session_module = sys.modules["audit_session"]
@@ -2565,6 +2845,86 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         self.assertGreaterEqual(attempts, 2)
         with self.assertRaises(OSError):
             os.fstat(descriptor)
+
+    def test_cleanup_worker_system_exit_handoffs_and_restarts(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        token = object()
+        ownership = (descriptor, token)
+        original_close_record = session_module._close_owned_record
+        crashed_worker = None
+        attempts = 0
+
+        def crash_once(kind, value):
+            nonlocal attempts, crashed_worker
+            if value == ownership:
+                attempts += 1
+                if attempts == 1:
+                    crashed_worker = threading.current_thread()
+                    raise SystemExit("injected cleanup worker crash")
+            return original_close_record(kind, value)
+
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        try:
+            with mock.patch.object(
+                session_module,
+                "_close_owned_record",
+                crash_once,
+            ):
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                deadline = time.monotonic() + 1
+                while (
+                    ownership
+                    in session_module._TRACKED_LEASE_OWNERSHIPS
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail(
+                            "crashed cleanup worker lost its exact job"
+                        )
+                    time.sleep(0.005)
+
+            self.assertGreaterEqual(attempts, 2)
+            self.assertIsNotNone(crashed_worker)
+            crashed_worker.join(timeout=1)
+            self.assertFalse(crashed_worker.is_alive())
+            self.assertIsNot(
+                session_module._CLEANUP_THREAD,
+                crashed_worker,
+            )
+            self.assertTrue(session_module._CLEANUP_THREAD.is_alive())
+            self.assertNotIn(
+                ownership,
+                session_module._PENDING_LEASE_CLOSE_FDS,
+            )
+            publisher = (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                .try_enter_publication()
+            )
+            self.assertIsNotNone(publisher)
+            (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                .exit_publication(publisher)
+            )
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+        finally:
+            (
+                session_module._DESCRIPTOR_OWNERSHIP_GATE
+                ._writer_intents.clear()
+            )
+            session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                ownership
+            )
+            session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                ownership
+            )
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
 
     @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
     def test_child_cleanup_start_failure_can_be_retried(self):
@@ -3143,7 +3503,10 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             )
             session_module = sys.modules["audit_session"]
 
-            with session_module._ownership_cleanup():
+            with session_module._ownership_cleanup(
+                "lease",
+                (10_000_012, object()),
+            ):
                 before = time.monotonic()
                 result = self.runtime(root).advance(
                     self.module.ContinueAudit(
