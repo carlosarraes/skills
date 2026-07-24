@@ -919,7 +919,7 @@ git commit -m "feat: reconcile contract narratives after code"
 - Consumes: a reconciliation `NeedJudgment` and exact response envelope
 - Produces: `AuditComplete` or `AuditStopped`
 
-- [ ] **Step 1: Write failing probe/aggregation tests**
+- [x] **Step 1: Write failing probe/aggregation tests**
 
 Require that a reconciliation judgment:
 
@@ -933,7 +933,7 @@ Require that a reconciliation judgment:
 - removes the disposable tree and creates no target pycache; and
 - makes probe failure an observed `QUESTIONABLE`, never a retry.
 
-- [ ] **Step 2: Write failing freshness/publication tests**
+- [x] **Step 2: Write failing freshness/publication tests**
 
 Cover HEAD, authority, contract, ledger, summary, status, prior-report, packet,
 and source guard drift. Each mismatch preserves the prior report.
@@ -943,7 +943,7 @@ all report sections, exact verdict/route, atomic `os.replace`, and a final
 mutation set containing only the active report. Required validation alone is
 not a YAGNI item.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run:
 
@@ -954,7 +954,7 @@ python -m unittest discover -s check-contract/tests \
 
 Expected: FAIL because reconciliation close/publication does not exist.
 
-- [ ] **Step 4: Implement strict reconciliation validation and probe runner**
+- [x] **Step 4: Implement strict reconciliation validation and probe runner**
 
 The inner judgment contains exactly:
 
@@ -976,7 +976,7 @@ runtime, not the model, supplies `acceptance_qa_exists`. If a selected issued
 probe succeeds, its probe-required D may remain `VERIFIED`; failure or absence
 makes it `QUESTIONABLE`.
 
-- [ ] **Step 5: Implement freshness, deterministic report, and atomic write**
+- [x] **Step 5: Implement freshness, deterministic report, and atomic write**
 
 Rerun shared authority resolution and every byte/hash/status guard immediately
 before publication. Render outside the target, then use
@@ -987,7 +987,7 @@ After replacement, attest that initial target state plus the active report is
 the exact final state. Return `AuditComplete` with policy-owned verdict/route,
 report digest, and immutable mutation attestation.
 
-- [ ] **Step 6: Run scenario and shared suites**
+- [x] **Step 6: Run scenario and shared suites**
 
 Run:
 
@@ -1002,7 +1002,7 @@ git diff --check
 
 Expected: all tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```text
 git add check-contract/scripts/audit_runtime.py \
