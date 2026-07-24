@@ -23,3 +23,11 @@ Iteration 4 uses assertion contract v2. AB1 is compound-only: it contributes
 to `compound_pass`, never `target_b_pass`. Report delivery and mutation scope
 are distinct assertions. Iterations 1-3 retain their original assertions and
 grades and must not be rewritten.
+
+Treatment runs freeze the installed `check-contract` skill and deterministic
+runtime as one reviewed snapshot. The skill starts one runtime session, reads
+only runtime-issued packets, supplies the two closed judgment responses, and
+follows returned continuation commands. Repository inspection, aggregation,
+routing, report publication, retries, and compound A-then-B closure remain
+runtime-owned. Trials never patch the frozen snapshot or replace a behavioral
+failure.

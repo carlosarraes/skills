@@ -6,160 +6,79 @@ disable-model-invocation: true
 
 # Check Contract
 
-Audit shipped code against immutable approved authority. The only permitted
-repository mutation is atomic replacement of the still-active
-`check-report.md`. Do not fix code. Do not edit the contract or ledger. Do not
-post results. Do not commit. Do not push. Do not approve anything. Do not invoke
-the recommended skill. Routes are advisory only.
+Run only when explicitly requested. This is an immutable, report-only audit.
+The runtime may create or replace only the active `check-report.md`; do not fix
+code, do not edit the contract or ledger, and do not post, commit, push, or
+approve.
 
-## Compound A-then-B boundary
+## Closed workflow
 
-For a compound A-then-B request, hash A's existing report sentinel as opaque
-bytes without parsing, then resolve A. On hard stop, complete A's
-failed-authority, zero-write, and sentinel-preservation attestation before any B
-repository action. Then resolve B independently. After any B repository action
-begins, run no command against A, read no A path, and make no later path
-reference to A.
+1. Resolve `<check-contract-skill-dir>` as the absolute directory containing this loaded `SKILL.md`.
+   Always invoke the absolute script path. Run once:
 
-### Step 1: Resolve and verify authority
+   ```bash
+   python <check-contract-skill-dir>/scripts/check_contract.py start \
+     --repo <repo> --branch <full-branch> --ticket <ticket> \
+     [--narrative <path>] \
+     [--then-repo <repo> --then-branch <full-branch> --then-ticket <ticket>] \
+     [--then-narrative <path>] [--deadline-seconds <seconds>]
+   ```
 
-Resolve ticket and full branch. Resolve `<check-contract-skill-dir>` as the
-absolute directory containing this loaded `SKILL.md` and sibling
-`<change-contract-skill-dir>`. Read the sibling protocol completely at
-`<change-contract-skill-dir>/references/contract-protocol.md` before authority
-resolution.
+   For a compound A-then-B request, pass both targets to the one `start`
+   command with `--then-repo`, `--then-branch`, and `--then-ticket`; use the
+   returned `session` for both continuations and never start a second runtime
+   session.
 
-From any path inside the target repository, run:
+2. If the result is `NeedJudgment` with kind `code`, read only its runtime-issued
+   code packet at `packet_path`. At `response_path`, write exactly one UTF-8
+   JSON object with only `schema_version`, `session`, `nonce`, `packet_sha256`,
+   `kind`, and `judgment`; copy the issued envelope values. `kind` is `code`.
 
-```bash
-python <change-contract-skill-dir>/scripts/contract_state.py resolve-consumer \
-  --repo <path-inside-target-repository> \
-  --branch <full-branch> \
-  --ticket <ticket> \
-  --allow-missing-ledger
-```
+   The code response `judgment` has exactly `clauses`, `path_assessments`, and
+   `deviations`. `clauses` contains exactly the runtime-issued clause IDs; each
+   value has `status`, `evidence_ids`, `reason`, and
+   `contract_boundary_changed`. `path_assessments` contains exactly the
+   runtime-issued changed-path IDs; each value has `surface`, `yagni_items`, and
+   `reuse_items`. A `surface` has `status`, `evidence_ids`, and `reason`; each
+   item has `kind`, `evidence_ids`, and `reason`. Each deviation has `path_id`,
+   `line`, `description`, `evidence_ids`, and `reason`. Use only runtime-issued
+   evidence IDs and no extra keys.
 
-Require its canonical `git rev-parse --show-toplevel` root and verified two-root
-result for `.notes/<branch-dir>/contract` and `ai_docs/<branch-dir>/contract`.
-Ambiguous pointers, orphaned state, malformed authority, identity/hash failure,
-non-ancestor base, and `absent` unless true absence spans both roots are hard
-stops.
+   Status is `MET | UNMET | EXCEEDED | INDETERMINATE`. YAGNI item kind is
+   `UNEARNED_LOCAL | UNEARNED_MODULE | UNEARNED_RUNTIME_DEPENDENCY | UNEARNED_CONFIGURATION | UNEARNED_PUBLIC_INTERFACE | QUESTIONABLE_LOCAL | QUESTIONABLE_OTHER`;
+   reuse item kind is
+   `REUSED | NO_REUSE_AVAILABLE | DUPLICATED | BYPASSED | NEAR_DUPLICATE | INDETERMINATE`.
+   Evidence lists are unique, reasons and descriptions are non-empty,
+   `contract_boundary_changed` is boolean, and deviation `line` is a positive
+   integer.
 
-For approved state, snapshot active version/approval version, branch, ticket,
-approval bytes/approval SHA-256, contract SHA-256, full base/full HEAD,
-ancestry, paths, and worktree state.
-Guard source, contract, ledger, prior-report, supplied-narrative, and
-`git status --porcelain=v1` bytes without parsing narratives. Hard-stop true
-absence or any authority failure before implementation narrative is read;
-preserve any existing report.
+3. Run the first `continue` using the exact returned values and absolute script
+   path:
 
-**Complete when:** authority guarded.
+   ```bash
+   python <check-contract-skill-dir>/scripts/check_contract.py continue \
+     --session <session> --response <response_path>
+   ```
 
-### Step 2: Derive code-as-shipped first
+4. If the result is `NeedJudgment` with kind `reconciliation`, read only its
+   runtime-issued reconciliation packet. Write the reconciliation response at
+   `response_path`: match the packet's `response_schema` exactly. `kind` is
+   `reconciliation`; use only runtime-issued evidence IDs, select at most one
+   runtime-issued probe ID, select no probe with `null`, and add no extra keys.
 
-At Step 2 start, record the monotonic start. Set the evidence deadline to start
-plus 180 seconds, shortened to a supplied caller deadline minus a 60-second
-finalization reserve. Then inventory names first in exactly one name inventory
-with
-`git diff --name-status --find-renames <base>..<full-head>`; record renames and
-contract artifacts.
+5. Run the final `continue`:
 
-Before the deadline, run one batched recorded-HEAD implementation read with
-path-filtered Git-object operations:
-`git diff <base>..<full-head> -- <implementation-source/test-paths>` and the
-recorded Git object via batched `git show <full-head>:<path>`. Read
-implementation source and tests
-only—every code-as-shipped byte in changed source/tests and enough surrounding
-code. Run one batched repository-wide responsibility/reuse search with
-`git grep <patterns> <full-head>`; never reread, retry, or issue per-path or
-per-responsibility queries. Never run general target tests; never import or
-execute target code.
-Later implementation/code reads and searches use recorded full-HEAD objects,
-never worktree files.
+   ```bash
+   python <check-contract-skill-dir>/scripts/check_contract.py continue \
+     --session <session> --response <response_path>
+   ```
 
-Do not read the contents of changed contract artifacts, the active ledger,
-prior report, supplied or worker summaries, PR narratives, or other author
-narratives yet. Account for public contracts, side effects, persisted state,
-and integrations with `file:line` evidence. A dirty worktree is a
-non-authoritative limitation; use source Git-object IDs as guards.
+Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as
+returned. A compound transition may return the next target's `NeedJudgment`;
+repeat steps 2–5 with the returned `session`.
 
-When the three batches finish, immediately freeze the code-as-shipped account.
-If the evidence deadline arrives first, stop evidence collection, mark every
-uncollected clause or search result `INDETERMINATE`, then freeze the partial
-account. After either path, read the immutable approved contract body from the
-verified `contract_path` bytes; proceed through Steps 3-6; reserve at least 60
-seconds for Steps 5-6.
-
-**Complete when:** ready for classification.
-
-### Step 3: Classify contract fidelity
-
-Assign protocol-defined clause status to Outcome, every B/N/I/C/R,
-expected-surface, complexity-budget, and acceptance-evidence clause. Check each
-`A-<B-id>` and aggregate Contract fidelity only by protocol.
-
-**Complete when:** fidelity is derived.
-
-### Step 4: Audit YAGNI and reuse
-
-Use the batched recorded full-HEAD full-tree search evidence for every changed
-responsibility. Judge new structures, dependencies, interfaces, branches,
-duplicates, and implementation-coupled tests as earned or unearned.
-Correctness is not bloat. Derive YAGNI and Reuse only by protocol.
-
-**Complete when:** axes are derived.
-
-### Step 5: Reconcile ledger and narrative
-
-Only now read the guarded active ledger, prior report, supplied summary, PR
-claims, and other narratives from their guarded sources. Missing narrative is
-empty and never created. Verify D entries; classify deviations; generate sorted
-D/U/F IDs; compare claims; apply protocol precedence/routes; derive Documented drift
-and Undocumented drift.
-
-For a D-stated replay probe only, materialize `git archive <full-head>` as a
-disposable temporary tree outside the target repository. Run the complete
-stated probe there with `PYTHONDONTWRITEBYTECODE=1`, remove the temporary tree,
-and never mutate the target. Otherwise run no target code.
-
-**Complete when:** verdict is routed.
-
-### Step 6: Replace report and route
-
-Render the complete report outside the repository. Immediately rerun the same
-absolute `resolve-consumer --allow-missing-ledger` command. Require equality of
-the canonical root, full HEAD, active version, approval bytes and SHA-256,
-contract SHA-256, full base, branch/ticket identity, and ancestry. Recheck all
-guarded hashes for source, contract, ledger, status, prior report, and
-supplied-narrative. Any authority failure or freshness mismatch aborts;
-preserve the previous report.
-
-Atomically create or replace only
-`<selected-root>/v<active-version>/check-report.md`; verify no other
-audit-caused final delta, emit the exact verdict and route, and stop.
-
-Report shape:
-
-```markdown
-# Contract Check: <ticket> — v<version>
-
-Audit range: <full-base>..<full-head>
-Worktree state: <clean or limitation>
-Contract SHA-256: <digest>
-
-## Code-first observed behavior
-## Clause-by-clause fidelity
-## YAGNI and reuse
-## Drift reconciliation
-## Ordered findings
-## Verdict and route
-<exact verdict block>
-## Mutation attestation
-```
-
-Clause rows contain ID, status, evidence, and reason. Drift rows contain
-D/deviation ID, status, evidence, and documentation state. The route cites
-stable finding IDs and relevant U/D IDs when present; otherwise it uses the
-protocol's explicit-none form.
-
-**Complete when:** report is attested.
+The runtime owns all other work: do not inspect the target repository directly;
+do not write the report directly; do not calculate aggregates; do not choose
+findings; do not choose the verdict or route; do not retry; and do not invoke a
+recommended skill. The absolute script path is the only executable audit
+interface.
