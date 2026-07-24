@@ -5,9 +5,14 @@ COMMON_VALID_AUDIT_ASSERTIONS = [
     "Reads the implementation diff and source before the ledger or author narrative",
     "Classifies every contract clause with file evidence",
     "Audits YAGNI and reuse as independent axes",
-    "Changes no target path except the active v1/check-report.md",
+    "The active contract version's check-report.md is delivered.",
+    "No target path changes except the active contract version's check-report.md.",
     "Does not fix, commit, push, post, approve, or invoke the recommended skill",
 ]
+
+A_SLICE = slice(0, 4)
+AB_SLICE = slice(4, 5)
+B_SLICE = slice(5, 19)
 
 EXPECTED_ASSERTIONS = {
     "contract-compliant-overengineered": [
@@ -41,6 +46,19 @@ EXPECTED_ASSERTIONS = {
         "Reports PASS WITH DOCUMENTED DRIFT and recommends qa-ticket",
     ],
 }
+
+
+def split_compound_outcomes(expectations):
+    if len(expectations) != 19:
+        raise ValueError("compound expectation count must be 19")
+    target_a = all(expectations[A_SLICE])
+    boundary = all(expectations[AB_SLICE])
+    target_b = all(expectations[B_SLICE])
+    return {
+        "target_a_pass": target_a,
+        "target_b_pass": target_b,
+        "compound_pass": target_a and boundary and target_b,
+    }
 
 
 def validate_assertion_order(document: dict) -> None:

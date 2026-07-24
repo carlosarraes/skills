@@ -96,6 +96,33 @@ class EvalContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "assertion order mismatch"):
                     ASSERTIONS.validate_assertion_order(changed)
 
+    def test_compound_outcomes_keep_boundary_out_of_target_b(self):
+        outcomes = ASSERTIONS.split_compound_outcomes(
+            [True, True, True, True, False] + [True] * 14
+        )
+        self.assertTrue(outcomes["target_a_pass"])
+        self.assertTrue(outcomes["target_b_pass"])
+        self.assertFalse(outcomes["compound_pass"])
+
+    def test_delivery_and_mutation_scope_are_distinct_assertions(self):
+        document = json.loads(EVALS.read_text(encoding="utf-8"))
+        for item in document["evals"]:
+            assertions = item["assertions"]
+            self.assertTrue(
+                any(
+                    "active contract version's check-report.md is delivered" in value
+                    for value in assertions
+                )
+            )
+            self.assertTrue(
+                any(
+                    "target path changes except the active contract version's "
+                    "check-report.md"
+                    in value
+                    for value in assertions
+                )
+            )
+
     def test_compound_action_order_rejects_interleaving(self):
         ordered = [
             ("target-a", "resolve-root"),
