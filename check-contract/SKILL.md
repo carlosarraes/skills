@@ -130,8 +130,9 @@ Render the complete report outside the repository. Immediately rerun the same
 absolute `resolve-consumer --allow-missing-ledger` command. Require equality of
 the canonical root, full HEAD, active version, approval bytes and SHA-256,
 contract SHA-256, full base, branch/ticket identity, and ancestry. Recheck all
-guarded hashes for source, contract, ledger, status, and the prior report. Any
-authority failure or freshness mismatch aborts; preserve the previous report.
+guarded hashes for source, contract, ledger, status, prior report, and
+supplied-narrative. Any authority failure or freshness mismatch aborts;
+preserve the previous report.
 
 Atomically create or replace only
 `<selected-root>/v<active-version>/check-report.md`; verify no other

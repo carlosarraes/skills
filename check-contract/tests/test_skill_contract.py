@@ -613,12 +613,18 @@ class CheckContractSkillTests(unittest.TestCase):
             "ledger",
             "status",
             "prior report",
+            "supplied-narrative",
             "guarded hashes",
             "freshness mismatch",
             "preserve the previous report",
             "no other audit-caused final delta",
         ):
             self.assertIn(normalized(phrase), normalized(step_six))
+        self.assert_ordered(
+            step_six,
+            "supplied-narrative",
+            "Atomically create or replace",
+        )
 
     def test_only_report_mutation_and_routes_are_advisory(self):
         for phrase in (
