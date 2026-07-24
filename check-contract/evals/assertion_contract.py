@@ -48,7 +48,7 @@ EXPECTED_ASSERTIONS = {
 }
 
 
-def split_compound_outcomes(expectations):
+def split_compound_outcomes(expectations: list[bool]) -> dict[str, bool]:
     if len(expectations) != 19:
         raise ValueError("compound expectation count must be 19")
     target_a = all(expectations[A_SLICE])

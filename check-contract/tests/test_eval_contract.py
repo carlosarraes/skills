@@ -97,6 +97,10 @@ class EvalContractTests(unittest.TestCase):
                     ASSERTIONS.validate_assertion_order(changed)
 
     def test_compound_outcomes_keep_boundary_out_of_target_b(self):
+        self.assertEqual(
+            ASSERTIONS.split_compound_outcomes.__annotations__,
+            {"expectations": list[bool], "return": dict[str, bool]},
+        )
         outcomes = ASSERTIONS.split_compound_outcomes(
             [True, True, True, True, False] + [True] * 14
         )
