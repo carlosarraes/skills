@@ -118,7 +118,10 @@ def as_public_dict(result):
         result, (NeedJudgment, AuditComplete, AuditStopped)
     ):
         raise TypeError("runtime returned an unknown result")
-    return {"result": type(result).__name__, **_public_value(result)}
+    public = {"result": type(result).__name__, **_public_value(result)}
+    if isinstance(result, AuditStopped):
+        public["reason"] = "audit stopped"
+    return public
 
 
 def main(argv=None):

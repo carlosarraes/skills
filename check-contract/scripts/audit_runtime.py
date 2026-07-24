@@ -302,6 +302,20 @@ class AuditRuntime:
                 "then must be an AuditTarget",
                 "then",
             )
+        try:
+            primary_identity = self._compound_target_identity(
+                transition.primary
+            )
+            then_identity = self._compound_target_identity(
+                transition.then
+            )
+        except (OSError, TypeError, ValueError) as error:
+            return self._stopped("TARGET_INVALID", error)
+        if primary_identity == then_identity:
+            return self._stopped(
+                "TARGET_INVALID",
+                "compound targets must have distinct identities",
+            )
         if (
             type(transition.deadline_seconds) is not int
             or transition.deadline_seconds <= 0
@@ -361,6 +375,11 @@ class AuditRuntime:
                 str(path) for path in target.narrative_paths
             ],
         }
+
+    @staticmethod
+    def _compound_target_identity(target):
+        repository = Path(target.repo).resolve(strict=False)
+        return (repository, target.branch, target.ticket)
 
     @staticmethod
     def _restore_target(value):
@@ -1359,14 +1378,32 @@ class AuditRuntime:
                     )
                     then_target = self._restore_target(then_value)
                     absolute_deadline = state["absolute_deadline"]
-                    store.tombstone_claimed(
-                        request.session,
-                        self._closed_state(
-                            closed_target,
-                            absolute_deadline,
-                        ),
-                        lease=lease,
-                    )
+                    try:
+                        store.tombstone_claimed(
+                            request.session,
+                            self._closed_state(
+                                closed_target,
+                                absolute_deadline,
+                            ),
+                            lease=lease,
+                        )
+                    except (
+                        SessionIntegrityError,
+                        OSError,
+                        ValueError,
+                    ) as error:
+                        return self._stopped(
+                            "SESSION_FAILURE",
+                            (
+                                "primary report published but closure "
+                                f"sealing failed: {error}"
+                            ),
+                            "primary",
+                            prior_report_preserved=not bool(
+                                state["report_guard"]["exists"]
+                            ),
+                            zero_target_writes=False,
+                        )
                     lease.close()
                     lease = None
                     state = None

@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from runtime_fixtures import materialized_repo, packet_of
 from test_audit_runtime_close import reconciliation_response
@@ -84,6 +85,37 @@ class AuditRuntimeCompoundTests(unittest.TestCase):
                 all(call[1] == then for call in runner.calls)
             )
 
+    def test_identical_primary_and_alias_then_stop_before_primary_work(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            session_root = temporary_root / "sessions"
+            alias = temporary_root / "repo-alias"
+            alias.symlink_to(repo, target_is_directory=True)
+            authority_calls = []
+
+            def authority_resolver(*args):
+                authority_calls.append(args)
+                raise AssertionError("authority resolution must not run")
+
+            result = self.module.AuditRuntime(
+                session_root=session_root,
+                authority_resolver=authority_resolver,
+            ).advance(
+                self.module.StartAudit(
+                    primary=self.target(repo),
+                    then=self.target(alias),
+                )
+            )
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "TARGET_INVALID")
+            self.assertTrue(result.zero_target_writes)
+            self.assertTrue(result.prior_report_preserved)
+            self.assertEqual(authority_calls, [])
+            self.assertFalse(session_root.exists())
+
     def test_published_primary_closes_before_then_and_erases_identity(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -161,6 +193,76 @@ class AuditRuntimeCompoundTests(unittest.TestCase):
             call_repositories = [call[1] for call in runner.calls]
             first_then = call_repositories.index(then)
             self.assertNotIn(primary, call_repositories[first_then:])
+
+    def test_valid_primary_seal_failure_is_run_stop_after_report_write(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as primary, materialized_repo(
+            "contract-violated-summary", "target-b"
+        ) as then, tempfile.TemporaryDirectory() as temporary:
+            session_root = Path(temporary)
+            report = (
+                primary
+                / ".notes/feature-proj-123/contract/v1/check-report.md"
+            )
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(
+                "PRIOR_REPORT_MUST_NOT_BE_RESTORED\n",
+                encoding="utf-8",
+            )
+            runtime = self.module.AuditRuntime(
+                session_root=session_root
+            )
+            started = runtime.advance(
+                self.module.StartAudit(
+                    primary=self.target(primary),
+                    then=self.target(then),
+                )
+            )
+            write_response(
+                started.response_path,
+                code_response(
+                    started,
+                    judgment=valid_code_judgment(packet_of(started)),
+                ),
+            )
+            reconciled = runtime.advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            write_response(
+                reconciled.response_path,
+                reconciliation_response(reconciled),
+            )
+
+            with mock.patch.object(
+                self.module.SessionStore,
+                "tombstone_claimed",
+                side_effect=self.module.SessionIntegrityError(
+                    "injected A sealing failure"
+                ),
+            ):
+                result = runtime.advance(
+                    self.module.ContinueAudit(
+                        reconciled.session,
+                        reconciled.response_path,
+                    )
+                )
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "SESSION_FAILURE")
+            self.assertEqual(result.target, "primary")
+            self.assertIn("injected A sealing failure", result.reason)
+            self.assertFalse(result.zero_target_writes)
+            self.assertFalse(result.prior_report_preserved)
+            self.assertTrue(report.is_file())
+            self.assertNotEqual(
+                report.read_text(encoding="utf-8"),
+                "PRIOR_REPORT_MUST_NOT_BE_RESTORED\n",
+            )
+            self.assertEqual(len(tuple(session_root.iterdir())), 1)
 
 
 if __name__ == "__main__":

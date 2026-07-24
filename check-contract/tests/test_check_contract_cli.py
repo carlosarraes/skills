@@ -172,6 +172,45 @@ class CheckContractCliTests(unittest.TestCase):
             )
             self.assertEqual(completed.stderr, "")
 
+    def test_public_stop_sanitizes_internal_target_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            foreign_cwd = root / "foreign"
+            foreign_cwd.mkdir()
+            missing_repo = root / "PRIVATE_REPO_CAPABILITY"
+            branch = "private/branch-capability"
+            ticket = "PRIVATE-987"
+
+            completed = self.run_cli(
+                foreign_cwd,
+                "start",
+                "--repo",
+                missing_repo,
+                "--branch",
+                branch,
+                "--ticket",
+                ticket,
+                session_root=root / "sessions",
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            public = json.loads(completed.stdout)
+            self.assertEqual(public["result"], "AuditStopped")
+            self.assertEqual(public["code"], "AUTHORITY_INVALID")
+            self.assertEqual(public["reason"], "audit stopped")
+            self.assertNotIn(str(missing_repo), completed.stdout)
+            self.assertNotIn(branch, completed.stdout)
+            self.assertNotIn(ticket, completed.stdout)
+            for capability in (
+                "session",
+                "nonce",
+                "packet_path",
+                "response_path",
+                "next_command",
+            ):
+                self.assertNotIn(capability, public)
+            self.assertEqual(completed.stderr, "")
+
 
 if __name__ == "__main__":
     unittest.main()
