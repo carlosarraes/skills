@@ -790,8 +790,10 @@ git commit -m "feat: freeze contract code evidence sessions"
 
 - Modify: `check-contract/scripts/audit_runtime.py`
 - Modify: `check-contract/scripts/audit_session.py`
+- Modify: `check-contract/scripts/audit_paths.py`
 - Create: `check-contract/scripts/audit_reconciliation.py`
 - Create: `check-contract/tests/test_audit_runtime_reconciliation.py`
+- Modify: `check-contract/tests/test_audit_runtime_start.py`
 
 **Interfaces:**
 
@@ -810,7 +812,7 @@ Both response kinds use this exact envelope:
 
 The second kind is `reconciliation`. Extra/missing keys hard-stop.
 
-- [ ] **Step 1: Write failing one-use/code-first tests**
+- [x] **Step 1: Write failing one-use/code-first tests**
 
 Cover invalid, extra-key, missing-key, wrong-session, wrong-kind,
 wrong-packet, wrong-nonce, duplicate, stale, out-of-phase, and expired
@@ -822,7 +824,7 @@ Task 2 inner judgment. After acceptance, prove ledger, active prior report,
 explicit `narrative_paths`, and implementation-summary paths deferred from the
 name inventory are read from guarded sources.
 
-- [ ] **Step 2: Write failing ledger/reconciliation packet tests**
+- [x] **Step 2: Write failing ledger/reconciliation packet tests**
 
 Require:
 
@@ -834,7 +836,7 @@ Require:
 - `contract_obsolete` and every ledger status cite issued evidence IDs; and
 - the reconciliation packet contains guarded narrative only now.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run:
 
@@ -845,7 +847,7 @@ python -m unittest discover -s check-contract/tests \
 
 Expected: FAIL because `continue` and reconciliation parsing do not exist.
 
-- [ ] **Step 4: Implement claim-before-validation and strict envelopes**
+- [x] **Step 4: Implement claim-before-validation and strict envelopes**
 
 On `ContinueAudit`, verify immutable generation/manifest, atomically claim it,
 then validate the exact response path and envelope. Any error appends a
@@ -857,7 +859,7 @@ operations that require an already-present claim rather than claiming again.
 The caller-supplied response path must lexically equal the issued absolute
 path, but it is never opened directly.
 
-- [ ] **Step 5: Implement narrative guards and reconciliation packet**
+- [x] **Step 5: Implement narrative guards and reconciliation packet**
 
 After valid code judgment only:
 
@@ -877,7 +879,7 @@ whose `@ <sha>` is the recorded HEAD or an unambiguous 7-or-more-character
 prefix of it. Ledger and prior check-report bytes never establish this fact.
 Missing, non-UTF-8, stale-SHA, or marker-only narratives derive false.
 
-- [ ] **Step 6: Run focused and cumulative suites**
+- [x] **Step 6: Run focused and cumulative suites**
 
 Run:
 
@@ -892,7 +894,7 @@ git diff --check
 
 Expected: all tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```text
 git add check-contract/scripts/audit_runtime.py \
