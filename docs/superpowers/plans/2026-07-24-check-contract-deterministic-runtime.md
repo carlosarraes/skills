@@ -789,6 +789,7 @@ git commit -m "feat: freeze contract code evidence sessions"
 **Files:**
 
 - Modify: `check-contract/scripts/audit_runtime.py`
+- Modify: `check-contract/scripts/audit_session.py`
 - Create: `check-contract/scripts/audit_reconciliation.py`
 - Create: `check-contract/tests/test_audit_runtime_reconciliation.py`
 
@@ -849,7 +850,12 @@ Expected: FAIL because `continue` and reconciliation parsing do not exist.
 On `ContinueAudit`, verify immutable generation/manifest, atomically claim it,
 then validate the exact response path and envelope. Any error appends a
 terminal tombstone and returns `AuditStopped`. Never release a claim or accept
-a replacement response.
+a replacement response. The session seam must therefore provide a single
+claim-and-read operation that opens only the issued response name through the
+verified inbox directory descriptor with `O_NOFOLLOW`, plus append/tombstone
+operations that require an already-present claim rather than claiming again.
+The caller-supplied response path must lexically equal the issued absolute
+path, but it is never opened directly.
 
 - [ ] **Step 5: Implement narrative guards and reconciliation packet**
 
@@ -864,6 +870,12 @@ After valid code judgment only:
 6. return `NeedJudgment(kind="reconciliation")`.
 
 Do not execute a probe, aggregate, render, or write a report in this task.
+
+`acceptance_qa_exists` is true only when a guarded supplied/deferred narrative
+contains the exact `<!-- qa-pr-evidence -->` marker and a QA evidence heading
+whose `@ <sha>` is the recorded HEAD or an unambiguous 7-or-more-character
+prefix of it. Ledger and prior check-report bytes never establish this fact.
+Missing, non-UTF-8, stale-SHA, or marker-only narratives derive false.
 
 - [ ] **Step 6: Run focused and cumulative suites**
 
