@@ -3,7 +3,9 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -112,14 +114,23 @@ def _validate_approval(approval: object, version: int) -> dict:
     return approval
 
 
-def _verify_version_dir(version_dir: Path, version: int) -> dict:
+def _verify_version_dir(
+    version_dir: Path,
+    version: int,
+    allow_missing_ledger: bool = False,
+) -> dict:
     contract_path = version_dir / "contract.md"
     approval_path = version_dir / "approval.json"
     ledger_path = version_dir / "execution-ledger.md"
 
-    for path in (contract_path, approval_path, ledger_path):
+    for path in (contract_path, approval_path):
         if not path.is_file():
             raise ContractStateError(f"missing contract artifact: {path}")
+    ledger_present = ledger_path.is_file()
+    if not ledger_present and (
+        ledger_path.exists() or not allow_missing_ledger
+    ):
+        raise ContractStateError(f"missing contract artifact: {ledger_path}")
 
     approval = _validate_approval(
         _read_json(approval_path, "approval"),
@@ -137,6 +148,7 @@ def _verify_version_dir(version_dir: Path, version: int) -> dict:
         "approval_path": str(approval_path),
         "contract_path": str(contract_path),
         "ledger_path": str(ledger_path),
+        "ledger_present": ledger_present,
         "sha256": actual,
         "valid": True,
         "version": version,
@@ -270,13 +282,210 @@ def approve(
                 shutil.rmtree(version_dir, ignore_errors=True)
 
 
-def verify(root: Path, version: int | None = None) -> dict:
+def verify(
+    root: Path,
+    version: int | None = None,
+    allow_missing_ledger: bool = False,
+) -> dict:
     root = Path(root)
     resolved_version = version if version is not None else _active_version(root)
     if type(resolved_version) is not int or resolved_version < 1:
         raise ContractStateError(f"invalid contract version: {resolved_version}")
     version_dir = root / f"v{resolved_version}"
-    return _verify_version_dir(version_dir, resolved_version)
+    return _verify_version_dir(
+        version_dir,
+        resolved_version,
+        allow_missing_ledger,
+    )
+
+
+def _sanitize_branch(full_branch: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9._-]+", "-", full_branch)
+    value = re.sub(r"-+", "-", value).strip("-")
+    if not value or value in {".", ".."}:
+        raise ContractStateError(
+            f"unsafe branch directory for branch: {full_branch!r}"
+        )
+    return value
+
+
+def _has_published_state(root: Path) -> bool:
+    if not root.is_dir():
+        return False
+    for path in root.iterdir():
+        if re.fullmatch(r"\.v[1-9][0-9]*-.+", path.name):
+            continue
+        if re.fullmatch(r"\.current\.json-.+", path.name):
+            continue
+        return True
+    return False
+
+
+def _select_consumer_root(
+    repository_root: Path,
+    branch_directory: str,
+) -> Path | None:
+    roots = (
+        repository_root / ".notes" / branch_directory / "contract",
+        repository_root / "ai_docs" / branch_directory / "contract",
+    )
+    selected = [root for root in roots if (root / "current.json").exists()]
+    if len(selected) == 2:
+        raise ContractStateError(
+            "ambiguous contract authority: current.json exists in both roots"
+        )
+    if selected:
+        return selected[0]
+    if any(_has_published_state(root) for root in roots):
+        raise ContractStateError(
+            "orphaned contract authority: published state has no current.json"
+        )
+    return None
+
+
+def _git(repository: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repository), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise ContractStateError(
+            f"git {' '.join(args)} failed: {detail}"
+        )
+    return result.stdout.strip()
+
+
+def _canonical_repository_root(repo: Path) -> Path:
+    return Path(_git(Path(repo), "rev-parse", "--show-toplevel")).resolve()
+
+
+def _absent_consumer_result(
+    repository_root: Path,
+    branch_directory: str,
+    branch: str,
+    ticket: str,
+    head_sha: str,
+) -> dict:
+    return {
+        "active_version": None,
+        "approval_path": None,
+        "approval_sha256": None,
+        "approval_version": None,
+        "base_is_ancestor": None,
+        "base_sha": None,
+        "branch": branch,
+        "branch_directory": branch_directory,
+        "contract_path": None,
+        "contract_sha256": None,
+        "current_sha256": None,
+        "head_sha": head_sha,
+        "ledger_path": None,
+        "ledger_present": False,
+        "repository_root": str(repository_root),
+        "selected_root": None,
+        "state": "absent",
+        "ticket": ticket,
+    }
+
+
+def resolve_consumer(
+    repo: Path,
+    branch: str,
+    ticket: str,
+    allow_missing_ledger: bool = False,
+) -> dict:
+    repository_root = _canonical_repository_root(Path(repo))
+    branch_directory = _sanitize_branch(branch)
+    selected_root = _select_consumer_root(
+        repository_root,
+        branch_directory,
+    )
+    head_sha = _git(repository_root, "rev-parse", "HEAD")
+    if selected_root is None:
+        return _absent_consumer_result(
+            repository_root,
+            branch_directory,
+            branch,
+            ticket,
+            head_sha,
+        )
+
+    active_version = _active_version(selected_root)
+    verified = verify(
+        selected_root,
+        active_version,
+        allow_missing_ledger,
+    )
+    approval_path = Path(verified["approval_path"])
+    approval = _read_json(approval_path, "approval")
+    if approval["branch"] != branch:
+        raise ContractStateError(
+            f"approval branch mismatch: expected {branch}, "
+            f"got {approval['branch']}"
+        )
+    if approval["ticket"] != ticket:
+        raise ContractStateError(
+            f"approval ticket mismatch: expected {ticket}, "
+            f"got {approval['ticket']}"
+        )
+
+    base_sha = approval["base_sha"]
+    if not re.fullmatch(r"[0-9a-f]{40,64}", base_sha):
+        raise ContractStateError("approval base SHA must be a full commit SHA")
+    resolved_base = _git(
+        repository_root,
+        "rev-parse",
+        "--verify",
+        f"{base_sha}^{{commit}}",
+    )
+    if resolved_base != base_sha:
+        raise ContractStateError("approval base SHA must be a full commit SHA")
+    ancestry = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository_root),
+            "merge-base",
+            "--is-ancestor",
+            base_sha,
+            head_sha,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if ancestry.returncode == 1:
+        raise ContractStateError(
+            f"approval base is not an ancestor of HEAD: {base_sha}"
+        )
+    if ancestry.returncode != 0:
+        detail = ancestry.stderr.strip() or ancestry.stdout.strip()
+        raise ContractStateError(f"git ancestry check failed: {detail}")
+
+    approval_version = approval["version"]
+    return {
+        "active_version": active_version,
+        "approval_path": verified["approval_path"],
+        "approval_sha256": _sha256(approval_path),
+        "approval_version": approval_version,
+        "base_is_ancestor": True,
+        "base_sha": base_sha,
+        "branch": branch,
+        "branch_directory": branch_directory,
+        "contract_path": verified["contract_path"],
+        "contract_sha256": verified["sha256"],
+        "current_sha256": _sha256(selected_root / "current.json"),
+        "head_sha": head_sha,
+        "ledger_path": verified["ledger_path"],
+        "ledger_present": verified["ledger_present"],
+        "repository_root": str(repository_root),
+        "selected_root": str(selected_root),
+        "state": "approved",
+        "ticket": ticket,
+    }
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -295,6 +504,16 @@ def _parser() -> argparse.ArgumentParser:
     verify_parser = commands.add_parser("verify")
     verify_parser.add_argument("--root", type=Path, required=True)
     verify_parser.add_argument("--version", type=int)
+    verify_parser.add_argument("--allow-missing-ledger", action="store_true")
+
+    resolve_parser = commands.add_parser("resolve-consumer")
+    resolve_parser.add_argument("--repo", type=Path, required=True)
+    resolve_parser.add_argument("--branch", required=True)
+    resolve_parser.add_argument("--ticket", required=True)
+    resolve_parser.add_argument(
+        "--allow-missing-ledger",
+        action="store_true",
+    )
     return parser
 
 
@@ -311,8 +530,19 @@ def main() -> int:
                 approved_by=args.approved_by,
                 approved_at=args.approved_at,
             )
+        elif args.command == "verify":
+            result = verify(
+                args.root,
+                args.version,
+                args.allow_missing_ledger,
+            )
         else:
-            result = verify(args.root, args.version)
+            result = resolve_consumer(
+                args.repo,
+                args.branch,
+                args.ticket,
+                args.allow_missing_ledger,
+            )
     except (ContractStateError, json.JSONDecodeError, OSError) as error:
         print(str(error), file=sys.stderr)
         return 1
