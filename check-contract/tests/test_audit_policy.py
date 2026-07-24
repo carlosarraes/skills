@@ -1,5 +1,9 @@
 import dataclasses
+import importlib
 import importlib.util
+import json
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,10 +19,14 @@ RULES = (
 
 
 def load_module():
+    sys.path.insert(0, str(SCRIPT.parent))
     spec = importlib.util.spec_from_file_location("audit_runtime", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
     return module
 
 
@@ -74,7 +82,15 @@ class AuditPolicyTests(unittest.TestCase):
 
     def setUp(self):
         self.packet = {
-            "clause_ids": ["O1", "B1", "I1", "C1", "A-B1", "S1"],
+            "clause_ids": [
+                "O1",
+                "B1",
+                "I1",
+                "C1",
+                "A-B1",
+                "S1",
+                "K-MODULES",
+            ],
             "changed_path_ids": ["P1"],
             "evidence_ids": [
                 "behavior:O1",
@@ -84,6 +100,7 @@ class AuditPolicyTests(unittest.TestCase):
                 "acceptance:A-B1",
                 "surface:P1",
                 "complexity:P1",
+                "complexity:K-MODULES",
                 "reuse:P1",
             ],
         }
@@ -93,6 +110,7 @@ class AuditPolicyTests(unittest.TestCase):
         *,
         owned=None,
         surface="MET",
+        complexity="MET",
         yagni_items=(),
         reuse_items=("REUSED",),
         deviations=(),
@@ -124,6 +142,12 @@ class AuditPolicyTests(unittest.TestCase):
             "status": surface,
             "evidence_ids": ["surface:P1"],
             "reason": "The expected change surface was inspected.",
+            "contract_boundary_changed": False,
+        }
+        clauses["K-MODULES"] = {
+            "status": complexity,
+            "evidence_ids": ["complexity:K-MODULES"],
+            "reason": "The module complexity budget was inspected.",
             "contract_boundary_changed": False,
         }
         return {
@@ -355,6 +379,335 @@ class AuditPolicyTests(unittest.TestCase):
 
         self.assertEqual(without_qa.route, ("qa-ticket",))
         self.assertEqual(with_qa.route, ("qa-pr",))
+
+    def test_non_met_surface_and_complexity_are_derived_deviations(self):
+        for axis, response in (
+            (
+                "surface",
+                self.valid_code_response(surface="EXCEEDED"),
+            ),
+            (
+                "complexity",
+                self.valid_code_response(complexity="EXCEEDED"),
+            ),
+        ):
+            with self.subTest(axis=axis):
+                code = self.module.validate_code_judgment(
+                    self.packet, response
+                )
+                decision = self.module.aggregate(
+                    code, self.reconcile(), self.rules
+                )
+
+                self.assertTrue(code.deviations)
+                self.assertEqual(decision.fidelity, "PASS")
+                self.assertEqual(decision.yagni, "PASS")
+                self.assertEqual(decision.reuse, "PASS")
+                self.assertEqual(decision.undocumented_drift, "PRESENT")
+                self.assertEqual(decision.verdict, "NEEDS HUMAN REVIEW")
+                self.assertEqual(decision.route, ("qa-ticket",))
+
+    def test_deviation_and_finding_identity_is_permutation_stable(self):
+        deviations = [
+            {
+                "path_id": "P1",
+                "line": 20,
+                "description": "Second deviation.",
+                "evidence_ids": ["surface:P1"],
+                "reason": "Second fact.",
+            },
+            {
+                "path_id": "P1",
+                "line": 10,
+                "description": "First deviation.",
+                "evidence_ids": ["surface:P1"],
+                "reason": "First fact.",
+            },
+        ]
+        responses = (
+            self.valid_code_response(deviations=deviations),
+            self.valid_code_response(deviations=reversed(deviations)),
+        )
+        results = []
+        for response in responses:
+            code = self.module.validate_code_judgment(
+                self.packet, response
+            )
+            decision = self.module.aggregate(
+                code, self.reconcile(), self.rules
+            )
+            results.append(
+                (
+                    tuple(
+                        (
+                            item.deviation_id,
+                            item.path_id,
+                            item.line,
+                            item.description,
+                        )
+                        for item in code.deviations
+                    ),
+                    decision.findings,
+                )
+            )
+
+        self.assertEqual(results[0], results[1])
+        self.assertEqual(
+            results[0][0],
+            (
+                ("U1", "P1", 10, "First deviation."),
+                ("U2", "P1", 20, "Second deviation."),
+            ),
+        )
+        findings = results[0][1]
+        self.assertEqual(
+            [
+                (
+                    item.finding_id,
+                    item.source_kind,
+                    item.source_id,
+                    item.path_id,
+                    item.line,
+                )
+                for item in findings
+            ],
+            [
+                ("F1", "deviation", "U1", "P1", 10),
+                ("F2", "deviation", "U2", "P1", 20),
+            ],
+        )
+        self.assertEqual(
+            tuple(item.sort_key for item in findings),
+            tuple(sorted(item.sort_key for item in findings)),
+        )
+        self.assertEqual(
+            tuple(item.finding_id for item in findings),
+            self.module.aggregate(
+                self.module.validate_code_judgment(
+                    self.packet, responses[0]
+                ),
+                self.reconcile(),
+                self.rules,
+            ).finding_ids,
+        )
+
+    def test_precedence_is_exhaustive(self):
+        cases = (
+            (
+                "obsolete",
+                self.valid_code_response(),
+                self.reconcile(contract_obsolete=True),
+                ("CONTRACT VIOLATED", ("change-contract",)),
+            ),
+            (
+                "fidelity-with-simplicity",
+                self.valid_code_response(
+                    owned={
+                        "O1": "UNMET",
+                        "B1": "MET",
+                        "I1": "MET",
+                        "C1": "MET",
+                        "A-B1": "MET",
+                    },
+                    yagni_items=("UNEARNED_LOCAL",),
+                ),
+                self.reconcile(),
+                ("CONTRACT VIOLATED", ("exec-ticket", "clean-up")),
+            ),
+            (
+                "fidelity",
+                self.valid_code_response(
+                    owned={
+                        "O1": "UNMET",
+                        "B1": "MET",
+                        "I1": "MET",
+                        "C1": "MET",
+                        "A-B1": "MET",
+                    }
+                ),
+                self.reconcile(),
+                ("CONTRACT VIOLATED", ("exec-ticket",)),
+            ),
+            (
+                "unresolved-with-simplicity",
+                self.valid_code_response(
+                    owned={
+                        "O1": "INDETERMINATE",
+                        "B1": "MET",
+                        "I1": "MET",
+                        "C1": "MET",
+                        "A-B1": "MET",
+                    },
+                    reuse_items=("NEAR_DUPLICATE",),
+                ),
+                self.reconcile(),
+                ("NEEDS HUMAN REVIEW", ("clean-up",)),
+            ),
+            (
+                "unresolved",
+                self.valid_code_response(
+                    owned={
+                        "O1": "INDETERMINATE",
+                        "B1": "MET",
+                        "I1": "MET",
+                        "C1": "MET",
+                        "A-B1": "MET",
+                    }
+                ),
+                self.reconcile(),
+                ("NEEDS HUMAN REVIEW", ("qa-ticket",)),
+            ),
+            (
+                "simplicity",
+                self.valid_code_response(
+                    yagni_items=("UNEARNED_LOCAL",)
+                ),
+                self.reconcile(),
+                ("NEEDS HUMAN REVIEW", ("clean-up",)),
+            ),
+            (
+                "documented-drift",
+                self.valid_code_response(),
+                self.reconcile(
+                    ledger_entries=(
+                        self.module.LedgerEntry("D1", "VERIFIED"),
+                    )
+                ),
+                ("PASS WITH DOCUMENTED DRIFT", ("qa-ticket",)),
+            ),
+            (
+                "pass",
+                self.valid_code_response(),
+                self.reconcile(),
+                ("PASS", ("qa-ticket",)),
+            ),
+        )
+        for name, response, reconciliation, expected in cases:
+            with self.subTest(name=name):
+                code = self.module.validate_code_judgment(
+                    self.packet, response
+                )
+                decision = self.module.aggregate(
+                    code, reconciliation, self.rules
+                )
+                self.assertEqual(
+                    (decision.verdict, decision.route), expected
+                )
+
+    def test_yagni_and_reuse_thresholds(self):
+        cases = (
+            ("no-yagni", (), ("REUSED",), ("PASS", "PASS")),
+            (
+                "one-local",
+                ("UNEARNED_LOCAL",),
+                ("REUSED",),
+                ("WARNING", "PASS"),
+            ),
+            (
+                "two-local",
+                ("UNEARNED_LOCAL", "UNEARNED_LOCAL"),
+                ("REUSED",),
+                ("FAIL", "PASS"),
+            ),
+            (
+                "structural",
+                ("UNEARNED_MODULE",),
+                ("REUSED",),
+                ("FAIL", "PASS"),
+            ),
+            (
+                "questionable",
+                ("QUESTIONABLE_OTHER",),
+                ("REUSED",),
+                ("WARNING", "PASS"),
+            ),
+            ("duplicated", (), ("DUPLICATED",), ("PASS", "FAIL")),
+            ("bypassed", (), ("BYPASSED",), ("PASS", "FAIL")),
+            (
+                "near-duplicate",
+                (),
+                ("NEAR_DUPLICATE",),
+                ("PASS", "WARNING"),
+            ),
+            (
+                "indeterminate",
+                (),
+                ("INDETERMINATE",),
+                ("PASS", "WARNING"),
+            ),
+            ("missing-reuse", (), (), ("PASS", "WARNING")),
+            (
+                "no-reuse-available",
+                (),
+                ("NO_REUSE_AVAILABLE",),
+                ("PASS", "PASS"),
+            ),
+        )
+        for name, yagni, reuse, expected in cases:
+            with self.subTest(name=name):
+                code = self.module.validate_code_judgment(
+                    self.packet,
+                    self.valid_code_response(
+                        yagni_items=yagni, reuse_items=reuse
+                    ),
+                )
+                decision = self.module.aggregate(
+                    code, self.reconcile(), self.rules
+                )
+                self.assertEqual(
+                    (decision.yagni, decision.reuse), expected
+                )
+
+    def test_rule_pack_rejects_non_v1_and_malformed_policy(self):
+        source = json.loads(RULES.read_text(encoding="utf-8"))
+        mutations = {}
+        for field in ("schema_version", "report_schema_version"):
+            for value in (2, 1.0):
+                changed = json.loads(json.dumps(source))
+                changed[field] = value
+                mutations[
+                    f"{field}.*version 1(?#unsupported={value})"
+                ] = changed
+
+        changed = json.loads(json.dumps(source))
+        changed["statuses"]["clause"].append("MAYBE")
+        mutations["statuses.*closed v1"] = changed
+
+        changed = json.loads(json.dumps(source))
+        changed["routes"]["PASS"] = ["qa-ticket"]
+        mutations["routes.PASS.*conditional"] = changed
+
+        changed = json.loads(json.dumps(source))
+        changed["routes"]["FIDELITY_FAIL"] = {
+            "acceptance_qa_exists": ["qa-pr"],
+            "otherwise": ["qa-ticket"],
+        }
+        mutations["routes.FIDELITY_FAIL.*fixed"] = changed
+
+        for message, document in mutations.items():
+            with self.subTest(message=message):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "rules.json"
+                    path.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        self.module.AuditInputError, message
+                    ):
+                        self.module.load_rules(path)
+
+    def test_public_facade_reexports_focused_module_boundaries(self):
+        domain = importlib.import_module("audit_domain")
+        validation = importlib.import_module("audit_validation")
+        policy = importlib.import_module("audit_policy")
+
+        self.assertIs(self.module.RulePack, domain.RulePack)
+        self.assertIs(self.module.CodeJudgment, domain.CodeJudgment)
+        self.assertIs(self.module.Finding, domain.Finding)
+        self.assertIs(self.module.load_rules, domain.load_rules)
+        self.assertIs(
+            self.module.validate_code_judgment,
+            validation.validate_code_judgment,
+        )
+        self.assertIs(self.module.aggregate, policy.aggregate)
 
     def test_policy_domain_objects_are_immutable(self):
         code = self.module.validate_code_judgment(
