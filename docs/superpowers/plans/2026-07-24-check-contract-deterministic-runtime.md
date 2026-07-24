@@ -471,6 +471,8 @@ git commit -m "feat: add deterministic contract audit policy"
 **Files:**
 
 - Modify: `change-contract/references/contract-protocol.md`
+- Create: `change-contract/scripts/replay_probe.py`
+- Create: `change-contract/tests/test_replay_probe.py`
 - Modify:
   `check-contract/evals/fixtures/documented-drift/overlay/.notes/feature-proj-123/contract/v1/execution-ledger.md`
 - Modify: `check-contract/evals/fixture-manifest.json`
@@ -480,7 +482,8 @@ git commit -m "feat: add deterministic contract audit policy"
 
 - Consumes: the existing optional D-entry body
 - Produces: optional exact field
-  `Replay probe: <canonical JSON python-call-v1 descriptor>`
+  `Replay probe: <canonical JSON python-call-v1 descriptor>` and
+  `parse_replay_probe(value: object) -> PythonCallProbe`
 
 - [ ] **Step 1: Write failing closed-probe fixture tests**
 
@@ -500,9 +503,11 @@ Require D1 to contain exactly:
 }
 ```
 
-Add a regression that rejects an unknown kind, extra keys, shell/argv fields,
-non-identifier module/callable names, non-list args, unsupported exceptions,
-and a case containing both/none of the required expectation shapes.
+Add production parser regressions that reject an unknown kind, extra keys,
+shell/argv fields, non-identifier module/callable names, non-list args,
+unsupported exceptions, empty/duplicate cases, and a case containing
+both/none of the required expectation shapes. Exact scalar types participate
+in duplicate identity, so `true` and `1` remain distinct legal JSON scalars.
 
 - [ ] **Step 2: Run the focused eval-contract tests and verify RED**
 
@@ -517,7 +522,9 @@ Expected: FAIL because D1 has no closed replay declaration.
 
 - [ ] **Step 3: Define the optional protocol field and update D1**
 
-Document `python-call-v1` as data, never command text:
+Implement frozen `PythonCallProbe`/`PythonCallCase` types and strict parsing in
+`change-contract/scripts/replay_probe.py`. Document `python-call-v1` as data,
+never command text:
 
 ```markdown
 - Replay probe: `{"kind":"python-call-v1",...}`
@@ -555,6 +562,8 @@ Expected: all tests PASS.
 
 ```text
 git add change-contract/references/contract-protocol.md \
+  change-contract/scripts/replay_probe.py \
+  change-contract/tests/test_replay_probe.py \
   check-contract/evals/fixtures/documented-drift \
   check-contract/evals/fixture-manifest.json \
   check-contract/tests/test_eval_contract.py
