@@ -29,6 +29,7 @@ import stat
 import fcntl
 import errno
 import ctypes
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +44,8 @@ DIRECTORY_FLAGS = (
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
 RESPONSE_BYTE_LIMIT = 2 * 1024 * 1024
 RENAME_NOREPLACE = 1
+_SUCCESSOR_LOCKS_GUARD = threading.Lock()
+_SUCCESSOR_LOCKS = {}
 
 
 def _rename_noreplace(
@@ -76,6 +79,34 @@ def _rename_noreplace(
     if result != 0:
         number = ctypes.get_errno()
         raise OSError(number, os.strerror(number), target_name)
+
+
+@contextmanager
+def _successor_transition_lock(key):
+    with _SUCCESSOR_LOCKS_GUARD:
+        entry = _SUCCESSOR_LOCKS.get(key)
+        if entry is None:
+            entry = [threading.Lock(), 0]
+            _SUCCESSOR_LOCKS[key] = entry
+        entry[1] += 1
+    lock = entry[0]
+    acquired = lock.acquire(blocking=False)
+    if not acquired:
+        with _SUCCESSOR_LOCKS_GUARD:
+            entry[1] -= 1
+            if entry[1] == 0 and _SUCCESSOR_LOCKS.get(key) is entry:
+                del _SUCCESSOR_LOCKS[key]
+        raise SessionBusyError(
+            "generation successor transition is active"
+        )
+    try:
+        yield
+    finally:
+        lock.release()
+        with _SUCCESSOR_LOCKS_GUARD:
+            entry[1] -= 1
+            if entry[1] == 0 and _SUCCESSOR_LOCKS.get(key) is entry:
+                del _SUCCESSOR_LOCKS[key]
 
 
 class SessionIntegrityError(RuntimeError):
@@ -813,7 +844,7 @@ class SessionStore:
         self,
         token: str,
         lease: ClaimLease,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, tuple[int, int]]:
         run_id, digest = self._parse_token(token)
         if (
             not isinstance(lease, ClaimLease)
@@ -826,12 +857,54 @@ class SessionStore:
                 "claimed append requires the live owning lease"
             )
         try:
-            _owned(os.fstat(lease._descriptor), directory=True)
-        except OSError as error:
+            descriptor_metadata = os.fstat(lease._descriptor)
+            _owned(descriptor_metadata, directory=True)
+            with self._run_directories(run_id) as directories:
+                published = self._open_directory(
+                    digest,
+                    dir_fd=directories["claims"],
+                )
+                try:
+                    published_metadata = os.fstat(published)
+                    if (
+                        descriptor_metadata.st_dev,
+                        descriptor_metadata.st_ino,
+                    ) != (
+                        published_metadata.st_dev,
+                        published_metadata.st_ino,
+                    ):
+                        raise SessionIntegrityError(
+                            "claim lease is not bound to the published claim"
+                        )
+                finally:
+                    os.close(published)
+            marker = self._read_file(
+                lease._descriptor,
+                "lease",
+                expected_mode=0o400,
+            )
+            if marker != b"claim-v1\n":
+                raise SessionIntegrityError(
+                    "claim lease marker is invalid"
+                )
+            try:
+                fcntl.flock(
+                    lease._descriptor,
+                    fcntl.LOCK_EX | fcntl.LOCK_NB,
+                )
+            except BlockingIOError as error:
+                raise SessionBusyError(
+                    "generation transition is active"
+                ) from error
+        except (OSError, TypeError) as error:
             raise SessionIntegrityError(
                 "claim lease is no longer live"
             ) from error
-        return run_id, digest
+        claim_identity = (
+            descriptor_metadata.st_dev,
+            descriptor_metadata.st_ino,
+        )
+        return run_id, digest, claim_identity
 
     def claim_lease(self, token: str) -> ClaimLease:
         run_id, digest = self._parse_token(token)
@@ -1012,30 +1085,35 @@ class SessionStore:
         if lease is None:
             lease = self._existing_claim_lease(run_id, digest)
         try:
-            run_id, digest = self._require_claim_lease(token, lease)
-            response_name = self._response_name(state)
-            issued_response_names = set()
-            self._load_verified(
-                run_id,
-                digest,
-                verify_previous=True,
-                response_names=issued_response_names,
+            run_id, digest, claim_identity = self._require_claim_lease(
+                token,
+                lease,
             )
-            if response_name in issued_response_names:
-                raise SessionIntegrityError(
-                    "response name was already issued in this generation chain"
+            with _successor_transition_lock(claim_identity):
+                response_name = self._response_name(state)
+                issued_response_names = set()
+                self._load_verified(
+                    run_id,
+                    digest,
+                    verify_previous=True,
+                    response_names=issued_response_names,
                 )
-            with self._run_directories(run_id) as directories:
-                self._require_response_absent(
-                    directories["inbox"],
-                    response_name,
+                if response_name in issued_response_names:
+                    raise SessionIntegrityError(
+                        "response name was already issued "
+                        "in this generation chain"
+                    )
+                with self._run_directories(run_id) as directories:
+                    self._require_response_absent(
+                        directories["inbox"],
+                        response_name,
+                    )
+                return self._append_claimed_locked(
+                    run_id,
+                    digest,
+                    state,
+                    packet,
                 )
-            return self._append_claimed_locked(
-                run_id,
-                digest,
-                state,
-                packet,
-            )
         finally:
             if owns_lease:
                 lease.close()
@@ -1054,16 +1132,21 @@ class SessionStore:
         self._load_verified(run_id, digest, verify_previous=True)
         lease = self._existing_claim_lease(run_id, digest)
         try:
-            children = self._direct_successors(run_id, digest)
-            if children:
-                return "committed-successor"
-            self._append_claimed_locked(
-                run_id,
-                digest,
-                terminal_state,
-                {"schema_version": 1, "kind": "terminal"},
+            _, _, claim_identity = self._require_claim_lease(
+                token,
+                lease,
             )
-            return "abandoned-claim-closed"
+            with _successor_transition_lock(claim_identity):
+                children = self._direct_successors(run_id, digest)
+                if children:
+                    return "committed-successor"
+                self._append_claimed_locked(
+                    run_id,
+                    digest,
+                    terminal_state,
+                    {"schema_version": 1, "kind": "terminal"},
+                )
+                return "abandoned-claim-closed"
         finally:
             lease.close()
 

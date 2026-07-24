@@ -978,6 +978,111 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             )
             self.assertEqual(self.generation_count(root, started.session), 2)
 
+    def test_shared_lease_appenders_are_linearized_before_commit(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            original_state = store.load(started.session)
+            original_successors = store._direct_successors
+            precheck_barrier = threading.Barrier(2)
+
+            def synchronized_precheck(run_id, predecessor_digest):
+                children = original_successors(run_id, predecessor_digest)
+                if not children:
+                    try:
+                        precheck_barrier.wait(timeout=0.25)
+                    except threading.BrokenBarrierError:
+                        pass
+                return children
+
+            store._direct_successors = synchronized_precheck
+
+            def append(suffix):
+                state = {
+                    **original_state,
+                    "phase": "reconciliation",
+                    "nonce": suffix * 32,
+                    "response_name": f"{suffix * 32}.json",
+                }
+                try:
+                    result = store.append_claimed(
+                        started.session,
+                        state,
+                        {"schema_version": 1, "kind": "reconciliation"},
+                        lease=lease,
+                    )
+                    return ("ok", result.token)
+                except self.module.SessionIntegrityError as error:
+                    return ("error", str(error))
+
+            try:
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    outcomes = list(executor.map(append, ("a", "b")))
+            finally:
+                store._direct_successors = original_successors
+                lease.close()
+
+            self.assertEqual(
+                sorted(item[0] for item in outcomes),
+                ["error", "ok"],
+            )
+            self.assertEqual(self.generation_count(root, started.session), 2)
+            run_id, digest = started.session.split(".", 1)
+            self.assertEqual(
+                len(original_successors(run_id, digest)),
+                1,
+            )
+
+    def test_forged_run_directory_lease_cannot_append_without_claim(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            original_state = store.load(started.session)
+            run_id, digest = started.session.split(".", 1)
+            descriptor = os.open(
+                root / run_id,
+                os.O_RDONLY
+                | os.O_DIRECTORY
+                | os.O_NOFOLLOW
+                | os.O_CLOEXEC,
+            )
+            session_module = sys.modules["audit_session"]
+            forged = session_module.ClaimLease(
+                store,
+                run_id,
+                digest,
+                descriptor,
+            )
+            next_state = {
+                **original_state,
+                "phase": "reconciliation",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+
+            try:
+                with self.assertRaises(self.module.SessionIntegrityError):
+                    store.append_claimed(
+                        started.session,
+                        next_state,
+                        {"schema_version": 1, "kind": "reconciliation"},
+                        lease=forged,
+                    )
+            finally:
+                forged.close()
+
+            self.assertFalse(
+                (root / run_id / "claims" / digest).exists()
+            )
+            self.assertEqual(self.generation_count(root, started.session), 1)
+
     def test_active_continuation_lease_cannot_be_preempted_by_duplicate(self):
         with materialized_repo(
             "contract-compliant-overengineered"
