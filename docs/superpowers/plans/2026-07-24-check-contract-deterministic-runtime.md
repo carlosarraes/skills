@@ -1037,7 +1037,7 @@ python check-contract/scripts/check_contract.py continue \
   --session OPAQUE --response RESPONSE_JSON
 ```
 
-- [ ] **Step 1: Write failing compound erasure tests**
+- [x] **Step 1: Write failing compound erasure tests**
 
 For invalid A then valid B:
 
@@ -1072,14 +1072,14 @@ For a published valid A, `zero_writes` is false and `report_only_write` is
 true. For an authority-stopped A, `zero_writes` is true,
 `report_only_write` is false, and `prior_report_preserved` is true.
 
-- [ ] **Step 2: Write failing CLI tests**
+- [x] **Step 2: Write failing CLI tests**
 
 Require canonical JSON output, installed-sibling discovery from script
 location, foreign-cwd operation, exact start/continue args, exit `0` for
 `NeedJudgment`/`AuditComplete`, exit `2` for `AuditStopped`, and no secrets or
 target capabilities in output.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run:
 
@@ -1092,7 +1092,7 @@ python -m unittest discover -s check-contract/tests \
 
 Expected: FAIL because compound transition and CLI do not exist.
 
-- [ ] **Step 4: Implement target-stop versus run-stop**
+- [x] **Step 4: Implement target-stop versus run-stop**
 
 - Target authority hard stop: seal zero-write/prior-report preservation,
   hash and erase target state, then allow `then`.
@@ -1105,7 +1105,7 @@ Start B in a new random run directory. No B token or generation references the
 A run directory or generation; only the closure digest and path-free summary
 cross the boundary.
 
-- [ ] **Step 5: Implement the thin CLI**
+- [x] **Step 5: Implement the thin CLI**
 
 The CLI parses args, derives sibling `change-contract` from its absolute
 installed script location, calls only `AuditRuntime.advance`, and prints
@@ -1119,7 +1119,7 @@ def main(argv=None):
     return 0 if isinstance(result, (NeedJudgment, AuditComplete)) else 2
 ```
 
-- [ ] **Step 6: Run the full runtime/shared suites**
+- [x] **Step 6: Run the full runtime/shared suites**
 
 Run:
 
@@ -1132,7 +1132,7 @@ git diff --check
 
 Expected: all tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```text
 git add check-contract/scripts/audit_runtime.py \
