@@ -579,6 +579,7 @@ git commit -m "feat: declare closed contract replay probes"
 - Modify: `check-contract/scripts/audit_runtime.py`
 - Create: `check-contract/scripts/audit_session.py`
 - Create: `check-contract/scripts/audit_evidence.py`
+- Create: `check-contract/scripts/audit_paths.py`
 - Create: `check-contract/tests/runtime_fixtures.py`
 - Create: `check-contract/tests/test_audit_runtime_start.py`
 
@@ -705,12 +706,22 @@ class AuditStopped:
    state SHA-256;
 3. read-only generation files before returning;
 4. an opaque token carrying only random run ID and generation digest;
-5. atomic one-use claim via `mkdir(claims/<generation-digest>)`; and
-6. appending a new immutable generation or terminal tombstone without
+5. an authenticated append-only manifest chain that rejects
+   accidental/stale/token-only forgery;
+6. dirfd-relative, no-follow access to owned run/generation/claim/inbox
+   directories;
+7. an exact unique response name proven absent before issuance;
+8. atomic one-use claim via `mkdir(claims/<generation-digest>)`; and
+9. appending a new immutable generation or terminal tombstone without
    modifying an old generation.
 
 Every `NeedJudgment` has a new session token. The exact `response_path` is an
 absent inbox file outside every target.
+
+The local HMAC is not a security boundary against deliberate coordinated
+same-UID filesystem tampering; that remains outside the approved trust model.
+Later response creation/consumption must use the verified inbox dirfd,
+`O_NOFOLLOW`, and the exact issued name.
 
 - [ ] **Step 6: Implement strict contract parsing and code evidence**
 
@@ -725,9 +736,21 @@ Derive one sorted literal reuse query from:
 - changed public symbol names.
 
 Drop a fixed checked-in stopword set and tokens shorter than three characters.
-Run one no-shell `git grep -n -I` against recorded full HEAD/full tree. Store
+Run one no-shell `git grep -z -n -I -F` against recorded full HEAD/full tree. Store
 query, scope, results, and truncation under typed evidence IDs. Truncation
 makes uncovered reuse indeterminate and cannot yield Reuse PASS.
+
+`audit_paths.py` is the single typed boundary for deferred paths, rename/copy
+sides, NUL-delimited Git path identities, and allowed grep results. Capture
+recorded-HEAD symlink link-target bytes without following; reject unsupported
+Git entry modes.
+
+Internal state retains canonical target identity and every authority, pointer,
+ledger, report, narrative, worktree, and recorded-source guard needed by later
+freshness checks. Read the approved contract once, hash that exact buffer
+against resolved authority, and parse only the matching bytes. Public mapping
+fields accept and recursively freeze only a closed immutable JSON-like value
+grammar.
 
 Return `NeedJudgment(kind="code")`; do not implement `continue` yet.
 
@@ -753,6 +776,7 @@ Expected: all tests PASS.
 git add check-contract/scripts/audit_runtime.py \
   check-contract/scripts/audit_session.py \
   check-contract/scripts/audit_evidence.py \
+  check-contract/scripts/audit_paths.py \
   check-contract/tests/runtime_fixtures.py \
   check-contract/tests/test_audit_runtime_start.py
 git commit -m "feat: freeze contract code evidence sessions"
