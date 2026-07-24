@@ -51,8 +51,10 @@ CLAIM_MARKER = b"claim-v1\n"
 TRANSACTION_MARKER = b"transaction-v1\n"
 _SUCCESSOR_LOCKS_GUARD = threading.Lock()
 _SUCCESSOR_LOCKS = {}
-_ACTIVE_LEASES = weakref.WeakSet()
-_ACTIVE_TRANSACTION_FDS = set()
+_FORK_FD_LIFECYCLE_GUARD = threading.Lock()
+_TRACKED_LEASE_FDS = set()
+_LEASE_REFS = {}
+_TRACKED_TRANSACTION_FDS = set()
 
 
 def _rename_noreplace(
@@ -146,51 +148,81 @@ class ClaimLease:
         self.digest = digest
         self._descriptor = descriptor
         self.closed = False
-        _ACTIVE_LEASES.add(self)
+        with _FORK_FD_LIFECYCLE_GUARD:
+            _TRACKED_LEASE_FDS.add(descriptor)
+            _LEASE_REFS[descriptor] = weakref.ref(self)
 
     def close(self) -> None:
-        if self.closed:
-            return
-        descriptor = self._descriptor
-        self._descriptor = -1
-        self.closed = True
-        _ACTIVE_LEASES.discard(self)
+        with _FORK_FD_LIFECYCLE_GUARD:
+            if self.closed:
+                return
+            descriptor = self._descriptor
+            self._descriptor = -1
+            self.closed = True
+            if descriptor not in _TRACKED_LEASE_FDS:
+                return
+            try:
+                os.close(descriptor)
+            except OSError as error:
+                if error.errno != errno.EBADF:
+                    raise
+            finally:
+                _TRACKED_LEASE_FDS.discard(descriptor)
+                _LEASE_REFS.pop(descriptor, None)
+
+    def __del__(self):
         try:
-            os.close(descriptor)
-        except OSError as error:
-            if error.errno != errno.EBADF:
-                raise
+            self.close()
+        except Exception:
+            pass
+
+
+def _before_fork() -> None:
+    _FORK_FD_LIFECYCLE_GUARD.acquire()
+
+
+def _after_fork_parent() -> None:
+    _FORK_FD_LIFECYCLE_GUARD.release()
 
 
 def _after_fork_child() -> None:
     global _SUCCESSOR_LOCKS_GUARD
     global _SUCCESSOR_LOCKS
-    global _ACTIVE_LEASES
-    global _ACTIVE_TRANSACTION_FDS
+    global _FORK_FD_LIFECYCLE_GUARD
+    global _TRACKED_LEASE_FDS
+    global _LEASE_REFS
+    global _TRACKED_TRANSACTION_FDS
 
-    for lease in tuple(_ACTIVE_LEASES):
-        descriptor = lease._descriptor
-        lease._descriptor = -1
-        lease._creator_pid = -1
-        lease.closed = True
-        if descriptor >= 0:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-    for descriptor in tuple(_ACTIVE_TRANSACTION_FDS):
+    for reference in _LEASE_REFS.values():
+        lease = reference()
+        if lease is not None:
+            lease._descriptor = -1
+            lease._creator_pid = -1
+            lease.closed = True
+    for descriptor in _TRACKED_LEASE_FDS:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+    for descriptor in _TRACKED_TRANSACTION_FDS:
         try:
             os.close(descriptor)
         except OSError:
             pass
     _SUCCESSOR_LOCKS_GUARD = threading.Lock()
     _SUCCESSOR_LOCKS = {}
-    _ACTIVE_LEASES = weakref.WeakSet()
-    _ACTIVE_TRANSACTION_FDS = set()
+    _FORK_FD_LIFECYCLE_GUARD = threading.Lock()
+    _TRACKED_LEASE_FDS = set()
+    _LEASE_REFS = {}
+    _TRACKED_TRANSACTION_FDS = set()
 
 
 if hasattr(os, "register_at_fork"):
-    os.register_at_fork(after_in_child=_after_fork_child)
+    os.register_at_fork(
+        before=_before_fork,
+        after_in_parent=_after_fork_parent,
+        after_in_child=_after_fork_child,
+    )
 
 
 @dataclass(frozen=True)
@@ -253,6 +285,25 @@ class SessionStore:
         except Exception:
             os.close(descriptor)
             raise
+
+    def _open_tracked_claim_directory(self, name, *, dir_fd) -> int:
+        with _FORK_FD_LIFECYCLE_GUARD:
+            descriptor = self._open_directory(name, dir_fd=dir_fd)
+            _TRACKED_LEASE_FDS.add(descriptor)
+            return descriptor
+
+    def _close_tracked_claim_descriptor(self, descriptor: int) -> None:
+        with _FORK_FD_LIFECYCLE_GUARD:
+            if descriptor not in _TRACKED_LEASE_FDS:
+                return
+            try:
+                os.close(descriptor)
+            except OSError as error:
+                if error.errno != errno.EBADF:
+                    raise
+            finally:
+                _TRACKED_LEASE_FDS.discard(descriptor)
+                _LEASE_REFS.pop(descriptor, None)
 
     def _open_base(self, *, create: bool) -> int:
         self._require_current_process()
@@ -809,7 +860,7 @@ class SessionStore:
                     mode=0o700,
                     dir_fd=directories["claims"],
                 )
-                claim = self._open_directory(
+                claim = self._open_tracked_claim_directory(
                     temporary_name,
                     dir_fd=directories["claims"],
                 )
@@ -854,7 +905,7 @@ class SessionStore:
                                 os.unlink(marker_name, dir_fd=claim)
                             except FileNotFoundError:
                                 pass
-                        os.close(claim)
+                        self._close_tracked_claim_descriptor(claim)
                     try:
                         os.rmdir(
                             temporary_name,
@@ -863,7 +914,7 @@ class SessionStore:
                     except FileNotFoundError:
                         pass
                 elif claim is not None:
-                    os.close(claim)
+                    self._close_tracked_claim_descriptor(claim)
 
     def _existing_claim_lease(
         self,
@@ -871,7 +922,7 @@ class SessionStore:
         digest: str,
     ) -> ClaimLease:
         with self._run_directories(run_id) as directories:
-            claim = self._open_directory(
+            claim = self._open_tracked_claim_directory(
                 digest,
                 dir_fd=directories["claims"],
             )
@@ -905,7 +956,7 @@ class SessionStore:
                     )
                 return ClaimLease(self, run_id, digest, claim)
             except Exception:
-                os.close(claim)
+                self._close_tracked_claim_descriptor(claim)
                 raise
 
     def _require_claim_lease(
@@ -980,17 +1031,18 @@ class SessionStore:
     @contextmanager
     def _successor_transaction_lock(self, lease: ClaimLease):
         self._require_current_process()
-        try:
-            descriptor = os.open(
-                "transaction",
-                READ_FLAGS,
-                dir_fd=lease._descriptor,
-            )
-        except OSError as error:
-            raise SessionIntegrityError(
-                "claim transaction lock is unavailable or unsafe"
-            ) from error
-        _ACTIVE_TRANSACTION_FDS.add(descriptor)
+        with _FORK_FD_LIFECYCLE_GUARD:
+            try:
+                descriptor = os.open(
+                    "transaction",
+                    READ_FLAGS,
+                    dir_fd=lease._descriptor,
+                )
+            except OSError as error:
+                raise SessionIntegrityError(
+                    "claim transaction lock is unavailable or unsafe"
+                ) from error
+            _TRACKED_TRANSACTION_FDS.add(descriptor)
         try:
             try:
                 metadata = os.fstat(descriptor)
@@ -1021,12 +1073,15 @@ class SessionStore:
                 ) from error
             yield
         finally:
-            _ACTIVE_TRANSACTION_FDS.discard(descriptor)
-            try:
-                os.close(descriptor)
-            except OSError as error:
-                if error.errno != errno.EBADF:
-                    raise
+            with _FORK_FD_LIFECYCLE_GUARD:
+                if descriptor in _TRACKED_TRANSACTION_FDS:
+                    try:
+                        os.close(descriptor)
+                    except OSError as error:
+                        if error.errno != errno.EBADF:
+                            raise
+                    finally:
+                        _TRACKED_TRANSACTION_FDS.discard(descriptor)
 
     def claim_lease(self, token: str) -> ClaimLease:
         run_id, digest = self._parse_token(token)

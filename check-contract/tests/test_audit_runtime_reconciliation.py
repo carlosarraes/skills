@@ -1,5 +1,6 @@
 import hashlib
 import fcntl
+import gc
 import importlib
 import json
 import multiprocessing
@@ -1261,6 +1262,255 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertEqual(os.WEXITSTATUS(status), 0)
             self.assertEqual(child_result, b"child-busy")
             self.assertEqual(self.generation_count(root, started.session), 1)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_fork_cannot_snapshot_lease_between_state_and_physical_close(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            descriptor = lease._descriptor
+            original_state = store.load(started.session)
+            session_module = sys.modules["audit_session"]
+            original_close = session_module.os.close
+            close_paused = threading.Event()
+            release_close = threading.Event()
+            delayed = False
+
+            def paused_close(value):
+                nonlocal delayed
+                if value == descriptor and not delayed:
+                    delayed = True
+                    close_paused.set()
+                    if not release_close.wait(2):
+                        raise AssertionError("lease close was not released")
+                return original_close(value)
+
+            closer = threading.Thread(target=lease.close)
+            child_result_read, child_result_write = os.pipe()
+            child_hold_read, child_hold_write = os.pipe()
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                paused_close,
+            ):
+                closer.start()
+                self.assertTrue(close_paused.wait(1))
+                threading.Timer(0.1, release_close.set).start()
+                child = os.fork()
+                if child == 0:
+                    original_close(child_result_read)
+                    original_close(child_hold_write)
+                    try:
+                        os.fstat(descriptor)
+                        outcome = b"child-fd-open"
+                    except OSError:
+                        outcome = b"child-fd-closed"
+                    os.write(child_result_write, outcome)
+                    os.read(child_hold_read, 1)
+                    os._exit(0)
+
+                original_close(child_result_write)
+                original_close(child_hold_read)
+                child_result = os.read(child_result_read, 1024)
+                closer.join(timeout=1)
+                terminal_state = {
+                    **original_state,
+                    "phase": "terminal",
+                    "nonce": "a" * 32,
+                    "response_name": f"{'b' * 32}.json",
+                }
+                try:
+                    recovery = store.recover_claim(
+                        started.session,
+                        terminal_state,
+                    )
+                except Exception as error:
+                    recovery = type(error).__name__
+                os.write(child_hold_write, b"x")
+                _, status = os.waitpid(child, 0)
+                original_close(child_result_read)
+                original_close(child_hold_write)
+
+            self.assertFalse(closer.is_alive())
+            self.assertEqual(child_result, b"child-fd-closed")
+            self.assertEqual(recovery, "abandoned-claim-closed")
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
+
+    def test_dropped_unclosed_lease_is_finalized_and_recoverable(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            original_state = store.load(started.session)
+            descriptor = lease._descriptor
+
+            del lease
+            gc.collect()
+
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+            terminal_state = {
+                **original_state,
+                "phase": "terminal",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+            recovery = store.recover_claim(
+                started.session,
+                terminal_state,
+            )
+            self.assertEqual(recovery, "abandoned-claim-closed")
+            session_module = sys.modules["audit_session"]
+            self.assertEqual(session_module._TRACKED_LEASE_FDS, set())
+            self.assertEqual(
+                session_module._TRACKED_TRANSACTION_FDS,
+                set(),
+            )
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_fork_cannot_snapshot_transaction_between_open_and_tracking(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            session_module = sys.modules["audit_session"]
+            original_open = session_module.os.open
+            open_paused = threading.Event()
+            release_open = threading.Event()
+            transaction_entered = threading.Event()
+            release_transaction = threading.Event()
+            captured = []
+
+            def paused_open(path, flags, *args, **kwargs):
+                descriptor = original_open(path, flags, *args, **kwargs)
+                if path == "transaction" and not captured:
+                    captured.append(descriptor)
+                    open_paused.set()
+                    if not release_open.wait(2):
+                        raise AssertionError(
+                            "transaction open was not released"
+                        )
+                return descriptor
+
+            def hold_transaction():
+                with store._successor_transaction_lock(lease):
+                    transaction_entered.set()
+                    release_transaction.wait(2)
+
+            child_result_read, child_result_write = os.pipe()
+            with mock.patch.object(
+                session_module.os,
+                "open",
+                paused_open,
+            ):
+                worker = threading.Thread(target=hold_transaction)
+                worker.start()
+                self.assertTrue(open_paused.wait(1))
+                threading.Timer(0.1, release_open.set).start()
+                child = os.fork()
+                if child == 0:
+                    os.close(child_result_read)
+                    try:
+                        os.fstat(captured[0])
+                        outcome = b"child-fd-open"
+                    except OSError:
+                        outcome = b"child-fd-closed"
+                    os.write(child_result_write, outcome)
+                    os._exit(0)
+
+                os.close(child_result_write)
+                self.assertTrue(transaction_entered.wait(1))
+                child_result = os.read(child_result_read, 1024)
+                _, status = os.waitpid(child, 0)
+                release_transaction.set()
+                worker.join(timeout=1)
+                os.close(child_result_read)
+            lease.close()
+
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(child_result, b"child-fd-closed")
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_fork_cannot_snapshot_transaction_during_physical_close(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            session_module = sys.modules["audit_session"]
+            original_close = session_module.os.close
+            transaction_entered = threading.Event()
+            exit_transaction = threading.Event()
+            close_paused = threading.Event()
+            release_close = threading.Event()
+            captured = []
+
+            def paused_close(descriptor):
+                if captured and descriptor == captured[0]:
+                    close_paused.set()
+                    if not release_close.wait(2):
+                        raise AssertionError(
+                            "transaction close was not released"
+                        )
+                return original_close(descriptor)
+
+            def hold_transaction():
+                with store._successor_transaction_lock(lease):
+                    captured.extend(
+                        session_module._TRACKED_TRANSACTION_FDS
+                    )
+                    transaction_entered.set()
+                    exit_transaction.wait(2)
+
+            child_result_read, child_result_write = os.pipe()
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                paused_close,
+            ):
+                worker = threading.Thread(target=hold_transaction)
+                worker.start()
+                self.assertTrue(transaction_entered.wait(1))
+                exit_transaction.set()
+                self.assertTrue(close_paused.wait(1))
+                threading.Timer(0.1, release_close.set).start()
+                child = os.fork()
+                if child == 0:
+                    original_close(child_result_read)
+                    try:
+                        os.fstat(captured[0])
+                        outcome = b"child-fd-open"
+                    except OSError:
+                        outcome = b"child-fd-closed"
+                    os.write(child_result_write, outcome)
+                    os._exit(0)
+
+                original_close(child_result_write)
+                child_result = os.read(child_result_read, 1024)
+                _, status = os.waitpid(child, 0)
+                worker.join(timeout=1)
+                original_close(child_result_read)
+            lease.close()
+
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(child_result, b"child-fd-closed")
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
 
     def test_active_continuation_lease_cannot_be_preempted_by_duplicate(self):
         with materialized_repo(
