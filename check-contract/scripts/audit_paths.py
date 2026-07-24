@@ -1,6 +1,7 @@
 """Typed changed-path, deferred-path, and machine-grep filtering."""
 
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,13 +66,23 @@ class PathPolicy:
             )
             normalized = Path(os.path.abspath(absolute))
             try:
-                narratives.append(
-                    normalized.relative_to(self.repository_root).as_posix()
-                )
+                relative = normalized.relative_to(self.repository_root)
             except ValueError as error:
                 raise AuditPathError(
                     "narrative path is outside the target repository"
                 ) from error
+            current = self.repository_root
+            for part in relative.parts:
+                current /= part
+                try:
+                    metadata = current.lstat()
+                except FileNotFoundError:
+                    break
+                if stat.S_ISLNK(metadata.st_mode):
+                    raise AuditPathError(
+                        "narrative path cannot use a symlink alias"
+                    )
+            narratives.append(relative.as_posix())
         self.narrative_paths = tuple(sorted(set(narratives)))
 
     @classmethod

@@ -203,59 +203,92 @@ def parse_execution_ledger(content: bytes) -> tuple[ParsedLedgerEntry, ...]:
     return tuple(entries)
 
 
+IDENTITY_GUARD_KEYS = {
+    "path",
+    "exists",
+    "kind",
+    "dev",
+    "ino",
+    "mode",
+    "size",
+    "mtime_ns",
+    "ctime_ns",
+}
+
+
 def _guard_keys(guard: object) -> dict[str, object]:
     if (
         type(guard) is not dict
-        or set(guard) != {"path", "exists", "kind", "sha256"}
+        or set(guard) != IDENTITY_GUARD_KEYS
         or not isinstance(guard["path"], str)
         or not guard["path"]
         or not isinstance(guard["exists"], bool)
         or guard["kind"] not in {"absent", "file", "symlink", "other"}
-        or (
-            guard["sha256"] is not None
-            and (
-                not isinstance(guard["sha256"], str)
-                or re.fullmatch(r"[0-9a-f]{64}", guard["sha256"]) is None
-            )
-        )
     ):
         raise ReconciliationError("narrative guard is invalid")
+    values = (
+        guard["dev"],
+        guard["ino"],
+        guard["mode"],
+        guard["size"],
+        guard["mtime_ns"],
+        guard["ctime_ns"],
+    )
+    if guard["exists"]:
+        if any(type(value) is not int or value < 0 for value in values):
+            raise ReconciliationError("narrative identity guard is invalid")
+    elif (
+        guard["kind"] != "absent"
+        or any(value is not None for value in values)
+    ):
+        raise ReconciliationError("absent narrative guard is invalid")
     return guard
 
 
-def read_guarded_bytes(guard: object) -> bytes | None:
+def _identity_value(path: Path, metadata) -> dict[str, object]:
+    if stat.S_ISREG(metadata.st_mode):
+        kind = "file"
+    elif stat.S_ISLNK(metadata.st_mode):
+        kind = "symlink"
+    else:
+        kind = "other"
+    return {
+        "path": str(path),
+        "exists": True,
+        "kind": kind,
+        "dev": metadata.st_dev,
+        "ino": metadata.st_ino,
+        "mode": metadata.st_mode,
+        "size": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+        "ctime_ns": metadata.st_ctime_ns,
+    }
+
+
+def read_guarded_bytes(
+    guard: object,
+) -> tuple[bytes | None, dict[str, object]]:
     """Read an exact guarded leaf without following its final symlink."""
     guard = _guard_keys(guard)
     path = Path(guard["path"])
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
-        if guard != {
-            "path": str(path),
-            "exists": False,
-            "kind": "absent",
-            "sha256": None,
-        }:
-            raise ReconciliationError("guarded narrative changed after start")
-        return None
     if not guard["exists"]:
-        raise ReconciliationError("guarded narrative appeared after start")
-    if stat.S_ISLNK(metadata.st_mode):
-        kind = "symlink"
-        content = os.fsencode(path.readlink())
-    elif stat.S_ISREG(metadata.st_mode):
-        kind = "file"
         try:
-            descriptor = os.open(path, READ_FLAGS)
+            path.lstat()
+        except FileNotFoundError:
+            return None, {**guard, "sha256": None}
+        raise ReconciliationError("guarded narrative appeared after start")
+    if guard["kind"] == "file":
+        try:
+            descriptor = os.open(path, READ_FLAGS | os.O_NONBLOCK)
         except OSError as error:
             raise ReconciliationError(
                 "guarded narrative is unavailable or unsafe"
             ) from error
         try:
             opened = os.fstat(descriptor)
-            if not stat.S_ISREG(opened.st_mode):
+            if _identity_value(path, opened) != guard:
                 raise ReconciliationError(
-                    "guarded narrative changed type while reading"
+                    "guarded narrative identity changed after start"
                 )
             chunks = []
             total = 0
@@ -273,20 +306,23 @@ def read_guarded_bytes(guard: object) -> bytes | None:
         finally:
             os.close(descriptor)
     else:
-        kind = "other"
-        content = (
-            f"{stat.S_IFMT(metadata.st_mode)}:{metadata.st_size}"
-        ).encode("ascii")
-    if (
-        guard["kind"] != kind
-        or hashlib.sha256(content).hexdigest() != guard["sha256"]
-    ):
-        raise ReconciliationError("guarded narrative changed after start")
-    if kind != "file":
+        try:
+            actual = _identity_value(path, path.lstat())
+        except FileNotFoundError as error:
+            raise ReconciliationError(
+                "guarded narrative disappeared after start"
+            ) from error
+        if actual != guard:
+            raise ReconciliationError(
+                "guarded narrative identity changed after start"
+            )
         raise ReconciliationError(
             "guarded narrative must remain a regular file"
         )
-    return content
+    return content, {
+        **guard,
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
 
 
 def _encoded(content: bytes) -> tuple[object, str | None]:
@@ -302,16 +338,21 @@ def collect_guarded_narratives(
 ) -> tuple[
     tuple[ParsedLedgerEntry, ...],
     tuple[GuardedNarrative, ...],
+    dict[str, object],
 ]:
     """Read every start-guarded narrative only after code validation."""
-    ledger_content = read_guarded_bytes(state["ledger_guard"])
+    ledger_content, ledger_content_guard = read_guarded_bytes(
+        state["ledger_guard"]
+    )
     entries = (
         ()
         if ledger_content is None
         else parse_execution_ledger(ledger_content)
     )
     narratives = []
-    report_content = read_guarded_bytes(state["report_guard"])
+    report_content, report_content_guard = read_guarded_bytes(
+        state["report_guard"]
+    )
     if report_content is not None:
         content, text = _encoded(report_content)
         narratives.append(
@@ -330,12 +371,14 @@ def collect_guarded_narratives(
         raise ReconciliationError("narrative guard list is invalid")
     seen = {ledger_path, report_path}
     narrative_index = 0
+    narrative_content_guards = []
     for guard in narrative_guards:
         guard = _guard_keys(guard)
         if guard["path"] in seen:
             continue
         seen.add(guard["path"])
-        content_bytes = read_guarded_bytes(guard)
+        content_bytes, content_guard = read_guarded_bytes(guard)
+        narrative_content_guards.append(content_guard)
         if content_bytes is None:
             continue
         narrative_index += 1
@@ -349,14 +392,21 @@ def collect_guarded_narratives(
                 text,
             )
         )
-    return tuple(entries), tuple(narratives)
+    return (
+        tuple(entries),
+        tuple(narratives),
+        {
+            "ledger": ledger_content_guard,
+            "report": report_content_guard,
+            "narratives": narrative_content_guards,
+        },
+    )
 
 
-def acceptance_qa_exists(
+def qa_head_references(
     narratives: tuple[GuardedNarrative, ...],
-    head_sha: str,
-    base_sha: str,
-) -> bool:
+) -> tuple[str, ...]:
+    references = []
     for narrative in narratives:
         if (
             narrative.source != "supplied-or-deferred"
@@ -368,13 +418,8 @@ def acceptance_qa_exists(
             match = QA_HEADING_RE.fullmatch(line)
             if match is None:
                 continue
-            prefix = match.group(1)
-            if (
-                head_sha.startswith(prefix)
-                and not base_sha.startswith(prefix)
-            ):
-                return True
-    return False
+            references.append(match.group(1))
+    return tuple(sorted(set(references)))
 
 
 def reconciliation_response_schema(
@@ -391,20 +436,19 @@ def reconciliation_response_schema(
         "minItems": 1,
         "uniqueItems": True,
     }
+    optional_evidence_array = {
+        **evidence_array,
+        "minItems": 0,
+    }
     ledger_item = {
         "type": "object",
         "additionalProperties": False,
         "required": [
-            "ledger_id",
             "status",
             "evidence_ids",
             "reason",
         ],
         "properties": {
-            "ledger_id": {
-                "type": "string",
-                "enum": list(ledger_ids),
-            },
             "status": {
                 "type": "string",
                 "enum": [
@@ -449,14 +493,17 @@ def reconciliation_response_schema(
             "ledger_entries",
             "deviation_matches",
             "contract_obsolete",
-            "selected_probe_id",
+            "probe_id",
         ],
         "properties": {
             "ledger_entries": {
-                "type": "array",
-                "items": ledger_item,
-                "minItems": len(ledger_ids),
-                "maxItems": len(ledger_ids),
+                "type": "object",
+                "additionalProperties": False,
+                "required": list(ledger_ids),
+                "properties": {
+                    ledger_id: ledger_item
+                    for ledger_id in ledger_ids
+                },
             },
             "deviation_matches": {
                 "type": "array",
@@ -468,12 +515,36 @@ def reconciliation_response_schema(
                 "required": ["value", "evidence_ids", "reason"],
                 "properties": {
                     "value": {"type": "boolean"},
-                    "evidence_ids": evidence_array,
+                    "evidence_ids": optional_evidence_array,
                     "reason": {"type": "string", "minLength": 1},
                 },
             },
-            "selected_probe_id": probe_schema,
+            "probe_id": probe_schema,
         },
+        "allOf": [
+            {
+                "if": {
+                    "properties": {
+                        "contract_obsolete": {
+                            "type": "object",
+                            "required": ["value"],
+                            "properties": {
+                                "value": {"const": True},
+                            },
+                        }
+                    }
+                },
+                "then": {
+                    "properties": {
+                        "contract_obsolete": {
+                            "properties": {
+                                "evidence_ids": evidence_array,
+                            }
+                        }
+                    }
+                },
+            }
+        ],
     }
     return {
         "type": "object",

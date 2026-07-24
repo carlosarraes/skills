@@ -1,10 +1,14 @@
 import hashlib
 import importlib
 import json
+import os
 import sys
 import tempfile
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
 
 from runtime_fixtures import materialized_repo, packet_of
 from test_audit_runtime_start import FakeClock, git
@@ -119,6 +123,53 @@ class TruncatedReuseRunner:
         return result
 
 
+class AmbiguousShaRunner:
+    def __init__(self, module, head):
+        self.module = module
+        self.head = head
+        self.delegate = module.LocalGitRunner()
+        self.result_type = sys.modules["audit_evidence"].CommandResult
+        self.disambiguations = []
+
+    def run(self, args, *, cwd, deadline, output_limit=None):
+        if args[:1] == ["rev-parse"] and args[1].startswith(
+            "--disambiguate="
+        ):
+            prefix = args[1].partition("=")[2]
+            self.disambiguations.append(prefix)
+            other = prefix + "f" * (40 - len(prefix))
+            return self.result_type(
+                f"{self.head}\n{other}\n".encode("ascii"),
+                False,
+                False,
+            )
+        return self.delegate.run(
+            args,
+            cwd=cwd,
+            deadline=deadline,
+            output_limit=output_limit,
+        )
+
+
+class DeadlineAdvancingRunner:
+    def __init__(self, module, clock):
+        self.delegate = module.LocalGitRunner(clock)
+        self.clock = clock
+
+    def run(self, args, *, cwd, deadline, output_limit=None):
+        result = self.delegate.run(
+            args,
+            cwd=cwd,
+            deadline=deadline,
+            output_limit=output_limit,
+        )
+        if args[:1] == ["rev-parse"] and args[1].startswith(
+            "--disambiguate="
+        ):
+            self.clock.value = deadline + 0.001
+        return result
+
+
 class AuditRuntimeReconciliationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -145,7 +196,10 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
 
     def generation_count(self, root, token):
         run = token.split(".", 1)[0]
-        return len(list((Path(root) / run / "generations").iterdir()))
+        return sum(
+            not path.name.startswith(".")
+            for path in (Path(root) / run / "generations").iterdir()
+        )
 
     def test_valid_code_response_issues_guarded_reconciliation_packet(self):
         with materialized_repo(
@@ -220,6 +274,24 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             response_properties = packet["response_schema"]["properties"][
                 "judgment"
             ]["properties"]
+            self.assertEqual(
+                set(response_properties),
+                {
+                    "ledger_entries",
+                    "deviation_matches",
+                    "contract_obsolete",
+                    "probe_id",
+                },
+            )
+            ledger_schema = response_properties["ledger_entries"]
+            self.assertEqual(ledger_schema["type"], "object")
+            self.assertEqual(ledger_schema["required"], ["D1"])
+            self.assertFalse(ledger_schema["additionalProperties"])
+            self.assertEqual(
+                set(ledger_schema["properties"]["D1"]["properties"]),
+                {"status", "evidence_ids", "reason"},
+            )
+            self.assertNotIn("selected_probe_id", response_properties)
             self.assertNotIn("acceptance_qa_exists", response_properties)
             self.assertIn("evidence_ids", json.dumps(response_properties))
             issued = packet["evidence_ids"]
@@ -233,6 +305,27 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertIn("code:O1", issued)
             self.assertTrue(
                 any(item.startswith("code-path:") for item in issued)
+            )
+            self.assertEqual(
+                response_properties["contract_obsolete"]["properties"][
+                    "evidence_ids"
+                ]["minItems"],
+                0,
+            )
+            obsolete_condition = packet["response_schema"]["properties"][
+                "judgment"
+            ]["allOf"][0]
+            self.assertEqual(
+                obsolete_condition["if"]["properties"][
+                    "contract_obsolete"
+                ]["properties"]["value"],
+                {"const": True},
+            )
+            self.assertEqual(
+                obsolete_condition["then"]["properties"][
+                    "contract_obsolete"
+                ]["properties"]["evidence_ids"]["minItems"],
+                1,
             )
             state = self.module.SessionStore(root).load(result.session)
             self.assertEqual(state["phase"], "reconciliation")
@@ -414,6 +507,35 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertEqual(result.code, "RESPONSE_INVALID")
             self.assertEqual(self.generation_count(root, started.session), 2)
 
+    def test_fifo_response_is_nonblocking_claimed_and_terminal(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            os.mkfifo(started.response_path)
+
+            before = time.monotonic()
+            result = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            elapsed = time.monotonic() - before
+
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(result.code, "RESPONSE_INVALID")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+            duplicate = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            self.assertIsInstance(duplicate, self.module.AuditStopped)
+            self.assertEqual(self.generation_count(root, started.session), 2)
+
     def test_response_at_exact_byte_limit_is_accepted(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -493,6 +615,120 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
 
             self.assertEqual(result.code, "NARRATIVE_INVALID")
             self.assertEqual(self.generation_count(root, started.session), 2)
+
+    def test_regular_narrative_replaced_by_fifo_stops_without_blocking(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            narrative = repo / "review-summary.md"
+            narrative.write_text("ORIGINAL\n", encoding="utf-8")
+            root = Path(temporary)
+            started = self.start(
+                repo,
+                root,
+                narrative_paths=(narrative,),
+            )
+            narrative.unlink()
+            os.mkfifo(narrative)
+            write_response(started.response_path, code_response(started))
+
+            before = time.monotonic()
+            result = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            elapsed = time.monotonic() - before
+
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(result.code, "NARRATIVE_INVALID")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+
+    def test_start_never_reads_ledger_report_or_narrative_bytes(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            report = (
+                repo
+                / ".notes/feature-proj-123/contract/v1/check-report.md"
+            )
+            narrative = repo / "review-summary.md"
+            summary = repo / ".worker-results/implementation-summary.md"
+            report.write_text("PRIOR BYTES\n", encoding="utf-8")
+            narrative.write_text("NARRATIVE BYTES\n", encoding="utf-8")
+            summary.parent.mkdir(parents=True, exist_ok=True)
+            summary.write_text("SUMMARY BYTES\n", encoding="utf-8")
+            git(repo, "add", str(summary.relative_to(repo)))
+            git(repo, "commit", "-m", "docs: add deferred summary")
+            ledger = (
+                repo
+                / ".notes/feature-proj-123/contract/v1/execution-ledger.md"
+            )
+            forbidden = {
+                str(path.absolute())
+                for path in (ledger, report, narrative, summary)
+            }
+            original = Path.read_bytes
+
+            def selective_read(path):
+                if str(path.absolute()) in forbidden:
+                    raise AssertionError(
+                        f"narrative bytes read before code judgment: {path}"
+                    )
+                return original(path)
+
+            with mock.patch.object(Path, "read_bytes", selective_read):
+                started = self.start(
+                    repo,
+                    Path(temporary),
+                    narrative_paths=(narrative,),
+                )
+
+            state = self.module.SessionStore(Path(temporary)).load(
+                started.session
+            )
+            for guard in (
+                state["ledger_guard"],
+                state["report_guard"],
+                *state["narrative_guards"],
+            ):
+                self.assertNotIn("sha256", guard)
+                self.assertIn("mtime_ns", guard)
+
+            write_response(started.response_path, code_response(started))
+            result = self.runtime(Path(temporary)).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            next_state = self.module.SessionStore(Path(temporary)).load(
+                result.session
+            )
+            content_guards = next_state["narrative_content_guards"]
+            self.assertRegex(
+                content_guards["ledger"]["sha256"],
+                r"^[0-9a-f]{64}$",
+            )
+            self.assertEqual(
+                content_guards["report"]["sha256"],
+                hashlib.sha256(b"PRIOR BYTES\n").hexdigest(),
+            )
+            self.assertEqual(
+                {
+                    Path(item["path"]).name: item["sha256"]
+                    for item in content_guards["narratives"]
+                }["review-summary.md"],
+                hashlib.sha256(b"NARRATIVE BYTES\n").hexdigest(),
+            )
+            self.assertEqual(
+                {
+                    Path(item["path"]).name: item["sha256"]
+                    for item in content_guards["narratives"]
+                }["implementation-summary.md"],
+                hashlib.sha256(b"SUMMARY BYTES\n").hexdigest(),
+            )
 
     def test_changed_ledger_and_prior_report_each_fail_guarded_read(self):
         for source in ("ledger", "report"):
@@ -610,6 +846,117 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertIsInstance(result, self.module.NeedJudgment)
             self.assertEqual(self.generation_count(root, started.session), count)
 
+    def test_precommit_append_failure_leaves_tombstone_recoverable(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            store.claim(started.session)
+            original_state = store.load(started.session)
+            next_state = {
+                **original_state,
+                "phase": "reconciliation",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+            original_write = store._write_generation
+
+            def fail_before_commit(*args, **kwargs):
+                raise OSError("injected append failure")
+
+            store._write_generation = fail_before_commit
+            with self.assertRaises(OSError):
+                store.append_claimed(
+                    started.session,
+                    next_state,
+                    {"schema_version": 1, "kind": "reconciliation"},
+                )
+            store._write_generation = original_write
+            terminal_state = {
+                **original_state,
+                "phase": "terminal",
+                "nonce": "c" * 32,
+                "response_name": f"{'d' * 32}.json",
+            }
+
+            terminal = store.tombstone_claimed(
+                started.session,
+                terminal_state,
+            )
+
+            self.assertEqual(packet_of(terminal)["kind"], "terminal")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+
+    def test_postcommit_append_error_recovers_authenticated_successor(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            store.claim(started.session)
+            original_state = store.load(started.session)
+            next_state = {
+                **original_state,
+                "phase": "reconciliation",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+            original_write = store._write_generation
+
+            def fail_after_commit(*args, **kwargs):
+                original_write(*args, **kwargs)
+                raise OSError("injected post-commit failure")
+
+            store._write_generation = fail_after_commit
+            result = store.append_claimed(
+                started.session,
+                next_state,
+                {"schema_version": 1, "kind": "reconciliation"},
+            )
+
+            self.assertEqual(packet_of(result)["kind"], "reconciliation")
+            self.assertEqual(self.generation_count(root, started.session), 2)
+
+    def test_competing_appenders_commit_one_authenticated_successor(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            self.module.SessionStore(root).claim(started.session)
+            original_state = self.module.SessionStore(root).load(
+                started.session
+            )
+
+            def append(suffix):
+                state = {
+                    **original_state,
+                    "phase": "reconciliation",
+                    "nonce": suffix * 32,
+                    "response_name": f"{suffix * 32}.json",
+                }
+                try:
+                    result = self.module.SessionStore(root).append_claimed(
+                        started.session,
+                        state,
+                        {"schema_version": 1, "kind": "reconciliation"},
+                    )
+                    return ("ok", result.token)
+                except self.module.SessionIntegrityError as error:
+                    return ("error", str(error))
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(append, ("a", "b")))
+
+            self.assertEqual(
+                sorted(item[0] for item in outcomes),
+                ["error", "ok"],
+            )
+            self.assertEqual(self.generation_count(root, started.session), 2)
+
     def test_exact_code_deviation_ids_are_issued_for_matching(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -690,6 +1037,41 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 count,
             )
 
+    def test_abandoned_claim_is_closed_on_later_continue(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            self.module.SessionStore(root).claim(started.session)
+            run = started.session.split(".", 1)[0]
+            (
+                root
+                / run
+                / "generations"
+                / ".interrupted-staging-directory"
+            ).mkdir()
+
+            result = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(self.generation_count(root, started.session), 2)
+            run, original = started.session.split(".", 1)
+            children = []
+            for path in (root / run / "generations").iterdir():
+                if path.name == original or path.name.startswith("."):
+                    continue
+                packet = json.loads(
+                    (path / "packet.json").read_text(encoding="utf-8")
+                )
+                children.append(packet["kind"])
+            self.assertEqual(children, ["terminal"])
+
     def test_qa_marker_in_ledger_or_prior_report_does_not_count(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -718,6 +1100,35 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
 
             self.assertFalse(packet_of(result)["acceptance_qa_exists"])
 
+    def test_explicit_narrative_parent_symlink_outside_repo_is_rejected(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            outside.mkdir()
+            secret = outside / "secret.md"
+            secret.write_text("OUTSIDE_SECRET_SENTINEL\n", encoding="utf-8")
+            alias = repo / "linked-outside"
+            alias.symlink_to(outside, target_is_directory=True)
+
+            result = self.runtime(root / "sessions").advance(
+                self.module.StartAudit(
+                    self.target(
+                        repo,
+                        narrative_paths=(alias / "secret.md",),
+                    )
+                )
+            )
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "EVIDENCE_FAILURE")
+            self.assertNotIn("OUTSIDE_SECRET_SENTINEL", result.reason)
+            self.assertEqual(
+                secret.read_text(encoding="utf-8"),
+                "OUTSIDE_SECRET_SENTINEL\n",
+            )
+
     def test_qa_heading_requires_a_unique_seven_character_head_prefix(self):
         with materialized_repo(
             "contract-compliant-overengineered"
@@ -728,6 +1139,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 ("short", True, head[:6], False, False),
                 ("stale", True, "0" * 12, False, False),
                 ("head", True, head[:7], True, False),
+                ("full-head", True, head, True, False),
                 ("non-utf8", True, head[:12], False, True),
             ):
                 with self.subTest(name=name):
@@ -764,6 +1176,81 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                         packet_of(result)["acceptance_qa_exists"],
                         expected,
                     )
+
+    def test_qa_short_sha_must_resolve_to_one_git_object(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            head = git(repo, "rev-parse", "HEAD")
+            narrative = repo / "ambiguous-qa.md"
+            narrative.write_text(
+                "<!-- qa-pr-evidence -->\n"
+                "## QA evidence — ✅ PASS "
+                f"<sub>(@ {head[:7]})</sub>\n",
+                encoding="utf-8",
+            )
+            runner = AmbiguousShaRunner(self.module, head)
+            root = Path(temporary)
+            started = self.runtime(root, git_runner=runner).advance(
+                self.module.StartAudit(
+                    self.target(repo, narrative_paths=(narrative,))
+                )
+            )
+            write_response(started.response_path, code_response(started))
+
+            result = self.runtime(root, git_runner=runner).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+
+            packet = packet_of(result)
+            self.assertFalse(packet["acceptance_qa_exists"])
+            self.assertEqual(runner.disambiguations, [head[:7]])
+            self.assertEqual(
+                packet["runtime_facts"]["qa_sha_resolution"][
+                    "candidates"
+                ][0]["object_ids"],
+                [
+                    head,
+                    head[:7] + "f" * 33,
+                ],
+            )
+
+    def test_deadline_is_rechecked_after_qa_sha_resolution(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            head = git(repo, "rev-parse", "HEAD")
+            narrative = repo / "qa.md"
+            narrative.write_text(
+                "<!-- qa-pr-evidence -->\n"
+                "## QA evidence — ✅ PASS "
+                f"<sub>(@ {head[:7]})</sub>\n",
+                encoding="utf-8",
+            )
+            clock = FakeClock()
+            runner = DeadlineAdvancingRunner(self.module, clock)
+            root = Path(temporary)
+            runtime = self.runtime(root, clock=clock, git_runner=runner)
+            started = runtime.advance(
+                self.module.StartAudit(
+                    self.target(repo, narrative_paths=(narrative,)),
+                    deadline_seconds=60,
+                )
+            )
+            write_response(started.response_path, code_response(started))
+
+            result = runtime.advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+
+            self.assertEqual(result.code, "DEADLINE_EXPIRED")
+            self.assertEqual(self.generation_count(root, started.session), 2)
 
     def test_ledger_parser_requires_sequential_ids_and_all_seven_fields(self):
         valid = (

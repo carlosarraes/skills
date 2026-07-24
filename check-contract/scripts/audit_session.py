@@ -9,6 +9,12 @@ Response creation is caller-owned at the exact issued path. Consumption claims
 the generation first, then reads only the exact issued response name through
 the verified inbox directory descriptor with O_NOFOLLOW and a fixed byte
 limit.
+
+Claimed-generation appenders serialize on a crash-released filesystem lock.
+A fully fsynced authenticated generation becomes the one successor at its
+atomic directory rename; dot-prefixed staging directories are never children.
+After an interrupted call, authenticated child discovery recovers a committed
+rename or permits a terminal child when no rename committed.
 """
 
 import hashlib
@@ -19,6 +25,7 @@ import os
 import re
 import secrets
 import stat
+import fcntl
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +47,10 @@ class SessionIntegrityError(RuntimeError):
 
 class ClaimedResponseError(SessionIntegrityError):
     """Raised after a generation was irreversibly claimed for a bad response."""
+
+
+class GenerationConsumedError(SessionIntegrityError):
+    """Raised when a generation claim already exists."""
 
 
 @dataclass(frozen=True)
@@ -199,11 +210,12 @@ class SessionStore:
         *,
         expected_mode: int | None = None,
         byte_limit: int | None = None,
+        nonblocking: bool = False,
     ) -> bytes:
         try:
             descriptor = os.open(
                 name,
-                READ_FLAGS,
+                READ_FLAGS | (os.O_NONBLOCK if nonblocking else 0),
                 dir_fd=directory,
             )
         except OSError as error:
@@ -377,19 +389,15 @@ class SessionStore:
         packet: Mapping[str, object],
         previous_digest: str | None,
     ) -> SessionGeneration:
-        packet_value = dict(packet)
-        if packet_value.get("schema_version") != 1:
-            raise SessionIntegrityError("packet schema version is invalid")
-        packet_bytes = _canonical_json(packet_value)
-        packet_digest = _digest(packet_bytes)
-        state_value = dict(state)
-        if state_value.get("schema_version") != 1:
-            raise SessionIntegrityError("state schema version is invalid")
-        state_value["packet_sha256"] = packet_digest
-        response_name = self._response_name(state_value)
-        self._validate_values(state_value, packet_value)
-        state_bytes = _canonical_json(state_value)
-        state_digest = _digest(state_bytes)
+        (
+            state_value,
+            packet_value,
+            state_bytes,
+            packet_bytes,
+            state_digest,
+            packet_digest,
+            response_name,
+        ) = self._prepared_generation(state, packet)
         temporary_name = f".{state_digest}-{secrets.token_hex(8)}"
         issued_response_names = set()
         if previous_digest is not None:
@@ -460,6 +468,30 @@ class SessionStore:
             packet_path=packet_path,
             packet_sha256=packet_digest,
             response_path=response_path,
+        )
+
+    def _prepared_generation(self, state, packet):
+        packet_value = dict(packet)
+        if packet_value.get("schema_version") != 1:
+            raise SessionIntegrityError("packet schema version is invalid")
+        packet_bytes = _canonical_json(packet_value)
+        packet_digest = _digest(packet_bytes)
+        state_value = dict(state)
+        if state_value.get("schema_version") != 1:
+            raise SessionIntegrityError("state schema version is invalid")
+        state_value["packet_sha256"] = packet_digest
+        response_name = self._response_name(state_value)
+        self._validate_values(state_value, packet_value)
+        state_bytes = _canonical_json(state_value)
+        state_digest = _digest(state_bytes)
+        return (
+            state_value,
+            packet_value,
+            state_bytes,
+            packet_bytes,
+            state_digest,
+            packet_digest,
+            response_name,
         )
 
     def create(
@@ -629,7 +661,7 @@ class SessionStore:
                     dir_fd=directories["claims"],
                 )
             except FileExistsError as error:
-                raise SessionIntegrityError(
+                raise GenerationConsumedError(
                     "generation was already consumed"
                 ) from error
             except OSError as error:
@@ -663,37 +695,150 @@ class SessionStore:
                     directories["inbox"],
                     response_name,
                     byte_limit=RESPONSE_BYTE_LIMIT,
+                    nonblocking=True,
                 )
         except (OSError, SessionIntegrityError) as error:
             raise ClaimedResponseError(str(error)) from error
 
-    def _require_claimed(self, run_id: str, digest: str) -> None:
-        with self._run_directories(run_id) as directories:
-            claim = self._open_directory(
-                digest,
-                dir_fd=directories["claims"],
-            )
-            os.close(claim)
-
-    def _reserve_successor(self, run_id: str, digest: str) -> None:
+    @contextmanager
+    def _claim_lock(self, run_id: str, digest: str):
         with self._run_directories(run_id) as directories:
             claim = self._open_directory(
                 digest,
                 dir_fd=directories["claims"],
             )
             try:
-                self._write_file(claim, "successor", b"reserved\n")
-                os.fsync(claim)
-            except FileExistsError as error:
-                raise SessionIntegrityError(
-                    "claimed generation already has a successor"
-                ) from error
-            except OSError as error:
-                raise SessionIntegrityError(
-                    "cannot reserve generation successor"
-                ) from error
+                fcntl.flock(claim, fcntl.LOCK_EX)
+                yield
             finally:
+                fcntl.flock(claim, fcntl.LOCK_UN)
                 os.close(claim)
+
+    def _direct_successors(
+        self,
+        run_id: str,
+        predecessor_digest: str,
+    ) -> tuple[str, ...]:
+        with self._run_directories(run_id) as directories:
+            names = os.listdir(directories["generations"])
+        successors = []
+        for name in sorted(names):
+            if name.startswith("."):
+                continue
+            if re.fullmatch(r"[0-9a-f]{64}", name) is None:
+                raise SessionIntegrityError(
+                    "generation directory has an invalid name"
+                )
+            self._load_verified(
+                run_id,
+                name,
+                verify_previous=True,
+            )
+            with self._run_directories(run_id) as directories:
+                generation = self._open_directory(
+                    name,
+                    dir_fd=directories["generations"],
+                )
+                try:
+                    manifest_bytes = self._read_file(
+                        generation,
+                        "manifest.json",
+                        expected_mode=0o400,
+                    )
+                finally:
+                    os.close(generation)
+            try:
+                manifest = json.loads(manifest_bytes)
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise SessionIntegrityError(
+                    "generation manifest JSON is invalid"
+                ) from error
+            if (
+                not isinstance(manifest, dict)
+                or manifest_bytes != _canonical_json(manifest)
+            ):
+                raise SessionIntegrityError(
+                    "generation manifest is noncanonical"
+                )
+            if (
+                manifest.get("previous_generation_sha256")
+                != predecessor_digest
+            ):
+                continue
+            successors.append(name)
+        if len(successors) > 1:
+            raise SessionIntegrityError(
+                "claimed generation has multiple authenticated successors"
+            )
+        return tuple(successors)
+
+    def _generation_result(
+        self,
+        run_id: str,
+        digest: str,
+    ) -> SessionGeneration:
+        state = self._load_verified(
+            run_id,
+            digest,
+            verify_previous=True,
+        )
+        with self._run_directories(run_id) as directories:
+            packet_path, response_path = self._resolved_run_paths(
+                directories,
+                digest,
+                self._response_name(state),
+            )
+        return SessionGeneration(
+            token=f"{run_id}.{digest}",
+            packet_path=packet_path,
+            packet_sha256=state["packet_sha256"],
+            response_path=response_path,
+        )
+
+    def _append_claimed_locked(
+        self,
+        run_id: str,
+        predecessor_digest: str,
+        state: Mapping[str, object],
+        packet: Mapping[str, object],
+    ) -> SessionGeneration:
+        existing = self._direct_successors(
+            run_id,
+            predecessor_digest,
+        )
+        if existing:
+            raise SessionIntegrityError(
+                "claimed generation already has an authenticated successor"
+            )
+        expected_digest = self._prepared_generation(state, packet)[4]
+        try:
+            result = self._write_generation(
+                run_id,
+                state,
+                packet,
+                predecessor_digest,
+            )
+        except Exception:
+            committed = self._direct_successors(
+                run_id,
+                predecessor_digest,
+            )
+            if committed == (expected_digest,):
+                return self._generation_result(run_id, expected_digest)
+            if committed:
+                raise SessionIntegrityError(
+                    "unexpected authenticated successor committed"
+                )
+            raise
+        committed = self._direct_successors(
+            run_id,
+            predecessor_digest,
+        )
+        if committed != (expected_digest,):
+            raise SessionIntegrityError(
+                "successor commit boundary is inconsistent"
+            )
+        return result
 
     def append_claimed(
         self,
@@ -711,7 +856,6 @@ class SessionStore:
             verify_previous=True,
             response_names=issued_response_names,
         )
-        self._require_claimed(run_id, digest)
         if response_name in issued_response_names:
             raise SessionIntegrityError(
                 "response name was already issued in this generation chain"
@@ -721,8 +865,37 @@ class SessionStore:
                 directories["inbox"],
                 response_name,
             )
-        self._reserve_successor(run_id, digest)
-        return self._write_generation(run_id, state, packet, digest)
+        with self._claim_lock(run_id, digest):
+            return self._append_claimed_locked(
+                run_id,
+                digest,
+                state,
+                packet,
+            )
+
+    def recover_claim(
+        self,
+        token: str,
+        terminal_state: Mapping[str, object],
+    ) -> str:
+        """Close a crash-abandoned claim or preserve its committed child.
+
+        The atomic rename of a fully fsynced authenticated generation is the
+        commit boundary. Temporary dot-directories are never children.
+        """
+        run_id, digest = self._parse_token(token)
+        self._load_verified(run_id, digest, verify_previous=True)
+        with self._claim_lock(run_id, digest):
+            children = self._direct_successors(run_id, digest)
+            if children:
+                return "committed-successor"
+            self._append_claimed_locked(
+                run_id,
+                digest,
+                terminal_state,
+                {"schema_version": 1, "kind": "terminal"},
+            )
+            return "abandoned-claim-closed"
 
     def append(
         self,

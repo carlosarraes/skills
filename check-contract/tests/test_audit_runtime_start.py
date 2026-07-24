@@ -727,22 +727,26 @@ class AuditRuntimeStartTests(unittest.TestCase):
                 "head_sha",
             ):
                 self.assertIn(key, state["authority_guard"])
-            self.assertEqual(
-                state["ledger_guard"]["sha256"],
-                hashlib.sha256(
-                    Path(state["authority_guard"]["ledger_path"]).read_bytes()
-                ).hexdigest(),
-            )
-            self.assertEqual(
-                state["report_guard"]["sha256"],
-                hashlib.sha256(b"opaque report bytes\n").hexdigest(),
-            )
-            self.assertEqual(
-                state["narrative_guards"][0]["sha256"],
-                hashlib.sha256(
-                    (repo / state["narrative_guards"][0]["path"]).read_bytes()
-                ).hexdigest(),
-            )
+            for guard in (
+                state["ledger_guard"],
+                state["report_guard"],
+                *state["narrative_guards"],
+            ):
+                self.assertNotIn("sha256", guard)
+                self.assertEqual(
+                    set(guard),
+                    {
+                        "path",
+                        "exists",
+                        "kind",
+                        "dev",
+                        "ino",
+                        "mode",
+                        "size",
+                        "mtime_ns",
+                        "ctime_ns",
+                    },
+                )
             self.assertIn("plan.md", state["deferred_narrative_paths"])
             self.assertIn(
                 str(narrative.resolve()),
@@ -750,13 +754,6 @@ class AuditRuntimeStartTests(unittest.TestCase):
                     item["path"]
                     for item in state["narrative_guards"]
                 },
-            )
-            self.assertEqual(
-                {
-                    item["path"]: item["sha256"]
-                    for item in state["narrative_guards"]
-                }[str(narrative.resolve())],
-                hashlib.sha256(b"opaque narrative bytes\n").hexdigest(),
             )
             self.assertIn("initial_status_sha256", state)
             self.assertIn("source_guards", state)

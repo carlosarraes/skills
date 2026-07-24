@@ -42,14 +42,15 @@ from audit_domain import (
 from audit_policy import aggregate
 from audit_session import (
     ClaimedResponseError,
+    GenerationConsumedError,
     SessionIntegrityError,
     SessionStore,
 )
 from audit_validation import validate_code_judgment
 from audit_reconciliation import (
     ReconciliationError,
-    acceptance_qa_exists,
     collect_guarded_narratives,
+    qa_head_references,
     reconciliation_response_schema,
 )
 
@@ -102,6 +103,41 @@ def _guard_path(path: Path) -> dict[str, object]:
         "exists": True,
         "kind": kind,
         "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+
+def _identity_guard_path(path: Path) -> dict[str, object]:
+    path = Path(path)
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return {
+            "path": str(path),
+            "exists": False,
+            "kind": "absent",
+            "dev": None,
+            "ino": None,
+            "mode": None,
+            "size": None,
+            "mtime_ns": None,
+            "ctime_ns": None,
+        }
+    if stat.S_ISREG(metadata.st_mode):
+        kind = "file"
+    elif stat.S_ISLNK(metadata.st_mode):
+        kind = "symlink"
+    else:
+        kind = "other"
+    return {
+        "path": str(path),
+        "exists": True,
+        "kind": kind,
+        "dev": metadata.st_dev,
+        "ino": metadata.st_ino,
+        "mode": metadata.st_mode,
+        "size": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+        "ctime_ns": metadata.st_ctime_ns,
     }
 
 
@@ -262,6 +298,24 @@ class AuditRuntime:
             state.get("target", "session"),
         )
 
+    def _stop_consumed(self, store, token, state):
+        try:
+            recovery = store.recover_claim(
+                token,
+                self._terminal_state(state, "ABANDONED_CLAIM"),
+            )
+        except (SessionIntegrityError, OSError, ValueError) as error:
+            return self._stopped(
+                "SESSION_INVALID",
+                error,
+                state.get("target", "session"),
+            )
+        return self._stopped(
+            "DUPLICATE_RESPONSE",
+            f"generation was already claimed ({recovery})",
+            state.get("target", "session"),
+        )
+
     def _response_envelope(self, raw, token, state):
         def closed_object(pairs):
             value = {}
@@ -327,7 +381,9 @@ class AuditRuntime:
         code_packet,
         code_judgment,
     ):
-        entries, narratives = collect_guarded_narratives(state)
+        entries, narratives, content_guards = collect_guarded_narratives(
+            state
+        )
         issued_probes = {}
         ledger_values = []
         evidence = {}
@@ -357,17 +413,25 @@ class AuditRuntime:
             }
         for narrative in narratives:
             evidence[narrative.evidence_id] = narrative.packet_value()
-        qa_exists = acceptance_qa_exists(
+        qa_exists, qa_resolution = self._resolve_acceptance_qa(
             narratives,
-            state["recorded_range"]["head_sha"],
-            state["recorded_range"]["base_sha"],
+            state,
         )
+        if self.clock() > state["absolute_deadline"]:
+            return self._stop_after_claim(
+                store,
+                token,
+                state,
+                "DEADLINE_EXPIRED",
+                "audit deadline expired during narrative reconciliation",
+            )
         evidence["runtime:QA-1"] = {
             "acceptance_qa_exists": qa_exists,
             "rule": (
                 "guarded supplied/deferred qa-pr marker "
                 "and recorded-HEAD heading"
             ),
+            "sha_resolution": qa_resolution,
         }
         reuse_indeterminate = bool(
             code_packet["reuse_coverage_indeterminate"]
@@ -395,6 +459,8 @@ class AuditRuntime:
             "acceptance_qa_exists": qa_exists,
             "reuse_coverage_indeterminate": reuse_indeterminate,
             "reconciliation_evidence_ids": list(evidence_ids),
+            "narrative_content_guards": content_guards,
+            "qa_sha_resolution": qa_resolution,
         }
         packet = {
             "schema_version": 1,
@@ -421,6 +487,7 @@ class AuditRuntime:
                 "reuse_coverage_indeterminate": reuse_indeterminate,
                 "reuse_evidence_id": "runtime:REUSE-COVERAGE-1",
                 "acceptance_qa_evidence_id": "runtime:QA-1",
+                "qa_sha_resolution": qa_resolution,
             },
             "response_schema": reconciliation_response_schema(
                 nonce,
@@ -449,6 +516,52 @@ class AuditRuntime:
             nonce=nonce,
         )
 
+    def _resolve_acceptance_qa(self, narratives, state):
+        head = state["recorded_range"]["head_sha"]
+        candidates = []
+        accepted = False
+        for reference in qa_head_references(narratives):
+            timed_out = False
+            truncated = False
+            if len(reference) == 40:
+                object_ids = [head] if reference == head else []
+            else:
+                result = self.git_runner.run(
+                    ["rev-parse", f"--disambiguate={reference}"],
+                    cwd=state["target_identity"]["repository_root"],
+                    deadline=state["absolute_deadline"],
+                    output_limit=1024 * 1024,
+                )
+                timed_out = result.timed_out
+                truncated = result.truncated
+                try:
+                    values = result.stdout.decode("ascii").splitlines()
+                except UnicodeDecodeError:
+                    values = []
+                object_ids = sorted(
+                    {
+                        value
+                        for value in values
+                        if re.fullmatch(r"[0-9a-f]{40}", value)
+                    }
+                )
+            unique_head = (
+                not timed_out
+                and not truncated
+                and object_ids == [head]
+            )
+            candidates.append(
+                {
+                    "reference": reference,
+                    "object_ids": object_ids,
+                    "timed_out": timed_out,
+                    "truncated": truncated,
+                    "unique_recorded_head": unique_head,
+                }
+            )
+            accepted = accepted or unique_head
+        return accepted, {"candidates": candidates}
+
     def _continue(self, request):
         store = SessionStore(self.session_root)
         try:
@@ -459,6 +572,12 @@ class AuditRuntime:
         if state["phase"] != "code":
             try:
                 store.claim(request.session)
+            except GenerationConsumedError:
+                return self._stop_consumed(
+                    store,
+                    request.session,
+                    state,
+                )
             except (SessionIntegrityError, OSError, ValueError) as error:
                 return self._stopped(
                     "SESSION_INVALID",
@@ -476,6 +595,12 @@ class AuditRuntime:
             raw = store.claim_and_read(
                 request.session,
                 request.response_path,
+            )
+        except GenerationConsumedError:
+            return self._stop_consumed(
+                store,
+                request.session,
+                state,
             )
         except ClaimedResponseError as error:
             return self._stop_after_claim(
@@ -605,7 +730,9 @@ class AuditRuntime:
                 raise ContractParseError(
                     "authority artifacts changed after resolution"
                 )
-            ledger_guard = _guard_path(Path(authority["ledger_path"]))
+            ledger_guard = _identity_guard_path(
+                Path(authority["ledger_path"])
+            )
             if ledger_guard["exists"] != authority["ledger_present"]:
                 raise ContractParseError(
                     "ledger presence changed after authority resolution"
@@ -615,7 +742,7 @@ class AuditRuntime:
                 / f"v{authority['active_version']}"
                 / "check-report.md"
             )
-            report_guard = _guard_path(report_path)
+            report_guard = _identity_guard_path(report_path)
             authority_guard = {
                 **authority,
                 "current_path": str(current_path),
@@ -702,7 +829,7 @@ class AuditRuntime:
                 "deferred_narrative_paths"
             ],
             "narrative_guards": [
-                _guard_path(repository_root / path)
+                _identity_guard_path(repository_root / path)
                 for path in captured["deferred_narrative_paths"]
             ],
             "initial_status_bytes_b64": captured[
