@@ -1,6 +1,7 @@
 """Deep public facade for contract-audit policy and runtime orchestration."""
 
 import hashlib
+import json
 import math
 import os
 import re
@@ -9,7 +10,7 @@ import stat
 import tempfile
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import MappingProxyType
 
@@ -40,10 +41,17 @@ from audit_domain import (
 )
 from audit_policy import aggregate
 from audit_session import (
+    ClaimedResponseError,
     SessionIntegrityError,
     SessionStore,
 )
 from audit_validation import validate_code_judgment
+from audit_reconciliation import (
+    ReconciliationError,
+    acceptance_qa_exists,
+    collect_guarded_narratives,
+    reconciliation_response_schema,
+)
 
 
 def _deep_freeze(value):
@@ -201,11 +209,7 @@ class AuditRuntime:
 
     def advance(self, transition):
         if isinstance(transition, ContinueAudit):
-            return self._stopped(
-                "CONTINUE_UNAVAILABLE",
-                "audit continuation is deferred to the next runtime task",
-                "session",
-            )
+            return self._continue(transition)
         if not isinstance(transition, StartAudit):
             return self._stopped(
                 "TRANSITION_INVALID",
@@ -217,6 +221,316 @@ class AuditRuntime:
                 "compound audit transitions are deferred",
             )
         return self._start(transition)
+
+    def _nonce(self):
+        value = self.nonce_factory()
+        if not isinstance(value, str) or re.fullmatch(
+            r"[0-9a-f]{32}", value
+        ) is None:
+            raise SessionIntegrityError(
+                "nonce factory returned an invalid nonce"
+            )
+        return value
+
+    def _terminal_state(self, state, code):
+        value = dict(state)
+        value.update(
+            {
+                "phase": "terminal",
+                "nonce": self._nonce(),
+                "response_name": f"{self._nonce()}.json",
+                "terminal_code": code,
+            }
+        )
+        return value
+
+    def _stop_after_claim(self, store, token, state, code, reason):
+        try:
+            store.tombstone_claimed(
+                token,
+                self._terminal_state(state, code),
+            )
+        except (SessionIntegrityError, OSError, ValueError) as error:
+            return self._stopped(
+                "SESSION_FAILURE",
+                f"{reason}; terminal state failed: {error}",
+                state.get("target", "session"),
+            )
+        return self._stopped(
+            code,
+            reason,
+            state.get("target", "session"),
+        )
+
+    def _response_envelope(self, raw, token, state):
+        try:
+            value = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AuditInputError(
+                "response must be one UTF-8 JSON object"
+            ) from error
+        expected = {
+            "schema_version",
+            "session",
+            "nonce",
+            "packet_sha256",
+            "kind",
+            "judgment",
+        }
+        if type(value) is not dict or set(value) != expected:
+            raise AuditInputError(
+                "response envelope has extra or missing JSON keys"
+            )
+        if type(value["schema_version"]) is not int or value[
+            "schema_version"
+        ] != 1:
+            raise AuditInputError(
+                "response schema_version must be exactly 1"
+            )
+        checks = (
+            ("session", token),
+            ("nonce", state["nonce"]),
+            ("packet_sha256", state["packet_sha256"]),
+            ("kind", state["phase"]),
+        )
+        for field, expected_value in checks:
+            actual = value[field]
+            if not isinstance(actual, str) or not secrets.compare_digest(
+                actual,
+                expected_value,
+            ):
+                raise AuditInputError(
+                    f"response {field} does not match the issued generation"
+                )
+        if type(value["judgment"]) is not dict:
+            raise AuditInputError("response judgment must be a JSON object")
+        return value["judgment"]
+
+    def _code_value(self, judgment):
+        return asdict(judgment)
+
+    def _issue_reconciliation(
+        self,
+        store,
+        token,
+        state,
+        code_packet,
+        code_judgment,
+    ):
+        entries, narratives = collect_guarded_narratives(state)
+        issued_probes = {}
+        ledger_values = []
+        evidence = {}
+        for clause in code_packet["clauses"]:
+            evidence[f"contract:{clause['clause_id']}"] = clause
+        code_value = self._code_value(code_judgment)
+        for clause in code_value["clauses"]:
+            evidence[f"code:{clause['clause_id']}"] = clause
+        for path in code_value["path_assessments"]:
+            evidence[f"code-path:{path['path_id']}"] = path
+        for deviation in code_value["deviations"]:
+            evidence[
+                f"code-deviation:{deviation['deviation_id']}"
+            ] = deviation
+        for entry in entries:
+            evidence_id = f"ledger:{entry.ledger_id}"
+            probe_id = None
+            if entry.probe_descriptor is not None:
+                probe_id = f"Q{len(issued_probes) + 1}"
+                issued_probes[probe_id] = entry.probe_descriptor
+            ledger_value = entry.packet_value(evidence_id, probe_id)
+            ledger_values.append(ledger_value)
+            evidence[evidence_id] = {
+                key: value
+                for key, value in ledger_value.items()
+                if key not in {"evidence_id", "probe_id"}
+            }
+        for narrative in narratives:
+            evidence[narrative.evidence_id] = narrative.packet_value()
+        qa_exists = acceptance_qa_exists(
+            narratives,
+            state["recorded_range"]["head_sha"],
+            state["recorded_range"]["base_sha"],
+        )
+        evidence["runtime:QA-1"] = {
+            "acceptance_qa_exists": qa_exists,
+            "rule": (
+                "guarded supplied/deferred qa-pr marker "
+                "and recorded-HEAD heading"
+            ),
+        }
+        reuse_indeterminate = bool(
+            code_packet["reuse_coverage_indeterminate"]
+        )
+        evidence["runtime:REUSE-COVERAGE-1"] = {
+            "reuse_coverage_indeterminate": reuse_indeterminate,
+            "source": "recorded full-HEAD search capture",
+        }
+        evidence_ids = tuple(evidence)
+        deviations = code_value["deviations"]
+        deviation_ids = tuple(
+            item["deviation_id"] for item in deviations
+        )
+        ledger_ids = tuple(item.ledger_id for item in entries)
+        probe_ids = tuple(issued_probes)
+        nonce = self._nonce()
+        next_state = {
+            **state,
+            "phase": "reconciliation",
+            "nonce": nonce,
+            "response_name": f"{self._nonce()}.json",
+            "code_judgment": code_value,
+            "ledger_entries": ledger_values,
+            "issued_probes": issued_probes,
+            "acceptance_qa_exists": qa_exists,
+            "reuse_coverage_indeterminate": reuse_indeterminate,
+            "reconciliation_evidence_ids": list(evidence_ids),
+        }
+        packet = {
+            "schema_version": 1,
+            "kind": "reconciliation",
+            "authority": code_packet["authority"],
+            "recorded_range": {
+                "base_sha": code_packet["authority"]["base_sha"],
+                "head_sha": code_packet["authority"]["head_sha"],
+            },
+            "clauses": code_packet["clauses"],
+            "clause_ids": code_packet["clause_ids"],
+            "code_judgment": code_value,
+            "ledger_entries": ledger_values,
+            "deviations": deviations,
+            "deviation_ids": list(deviation_ids),
+            "probe_ids": list(probe_ids),
+            "narratives": [
+                item.packet_value() for item in narratives
+            ],
+            "evidence": evidence,
+            "evidence_ids": list(evidence_ids),
+            "acceptance_qa_exists": qa_exists,
+            "runtime_facts": {
+                "reuse_coverage_indeterminate": reuse_indeterminate,
+                "reuse_evidence_id": "runtime:REUSE-COVERAGE-1",
+                "acceptance_qa_evidence_id": "runtime:QA-1",
+            },
+            "response_schema": reconciliation_response_schema(
+                nonce,
+                ledger_ids,
+                deviation_ids,
+                evidence_ids,
+                probe_ids,
+            ),
+        }
+        generation = store.append_claimed(token, next_state, packet)
+        return NeedJudgment(
+            session=generation.token,
+            target=state["target"],
+            kind="reconciliation",
+            packet_path=generation.packet_path,
+            packet_sha256=generation.packet_sha256,
+            response_path=generation.response_path,
+            next_command=(
+                "check-contract-runtime",
+                "continue",
+                "--session",
+                generation.token,
+                "--response",
+                str(generation.response_path),
+            ),
+            nonce=nonce,
+        )
+
+    def _continue(self, request):
+        store = SessionStore(self.session_root)
+        try:
+            state = store.load(request.session)
+            packet = store.load_packet(request.session)
+        except (SessionIntegrityError, OSError, ValueError) as error:
+            return self._stopped("SESSION_INVALID", error, "session")
+        if state["phase"] != "code":
+            try:
+                store.claim(request.session)
+            except (SessionIntegrityError, OSError, ValueError) as error:
+                return self._stopped(
+                    "SESSION_INVALID",
+                    error,
+                    state.get("target", "session"),
+                )
+            return self._stop_after_claim(
+                store,
+                request.session,
+                state,
+                "OUT_OF_PHASE",
+                "generation is not in the code-judgment phase",
+            )
+        try:
+            raw = store.claim_and_read(
+                request.session,
+                request.response_path,
+            )
+        except ClaimedResponseError as error:
+            return self._stop_after_claim(
+                store,
+                request.session,
+                state,
+                "RESPONSE_INVALID",
+                error,
+            )
+        except (SessionIntegrityError, OSError, ValueError) as error:
+            return self._stopped(
+                "SESSION_INVALID",
+                error,
+                state.get("target", "session"),
+            )
+        if self.clock() > state["absolute_deadline"]:
+            return self._stop_after_claim(
+                store,
+                request.session,
+                state,
+                "DEADLINE_EXPIRED",
+                "audit deadline expired before response validation",
+            )
+        try:
+            judgment_value = self._response_envelope(
+                raw,
+                request.session,
+                state,
+            )
+            code_judgment = validate_code_judgment(
+                packet,
+                judgment_value,
+            )
+        except (AuditInputError, KeyError, TypeError, ValueError) as error:
+            return self._stop_after_claim(
+                store,
+                request.session,
+                state,
+                "RESPONSE_INVALID",
+                error,
+            )
+        try:
+            return self._issue_reconciliation(
+                store,
+                request.session,
+                state,
+                packet,
+                code_judgment,
+            )
+        except ReconciliationError as error:
+            return self._stop_after_claim(
+                store,
+                request.session,
+                state,
+                "NARRATIVE_INVALID",
+                error,
+            )
+        except (SessionIntegrityError, OSError, ValueError) as error:
+            return self._stop_after_claim(
+                store,
+                request.session,
+                state,
+                "SESSION_FAILURE",
+                error,
+            )
 
     def _start(self, request: StartAudit):
         target = request.primary

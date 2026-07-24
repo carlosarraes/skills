@@ -863,7 +863,7 @@ class AuditRuntimeStartTests(unittest.TestCase):
             self.assertTrue(result.zero_target_writes)
             self.assertEqual(list(Path(temporary).iterdir()), [])
 
-    def test_deferred_transitions_stop_explicitly(self):
+    def test_unsupported_transitions_stop_explicitly(self):
         with tempfile.TemporaryDirectory() as temporary:
             runtime = self.runtime(Path(temporary))
             continued = runtime.advance(
@@ -876,28 +876,9 @@ class AuditRuntimeStartTests(unittest.TestCase):
                 )
             )
 
-            self.assertEqual(continued.code, "CONTINUE_UNAVAILABLE")
+            self.assertIsInstance(continued, self.module.AuditStopped)
+            self.assertTrue(continued.zero_target_writes)
             self.assertEqual(compound.code, "COMPOUND_UNAVAILABLE")
-
-    def test_unavailable_continue_does_not_claim_a_valid_generation(self):
-        with materialized_repo(
-            "contract-compliant-overengineered"
-        ) as repo, tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            started = self.runtime(root).advance(
-                self.module.StartAudit(self.target(repo))
-            )
-            runtime = self.runtime(root)
-            stopped = runtime.advance(
-                self.module.ContinueAudit(
-                    started.session,
-                    started.response_path,
-                )
-            )
-            store = self.module.SessionStore(root)
-
-            self.assertEqual(stopped.code, "CONTINUE_UNAVAILABLE")
-            store.claim(started.session)
 
     def test_public_envelope_mappings_are_recursively_immutable(self):
         closed = {"nested": {"values": [1, 2]}}

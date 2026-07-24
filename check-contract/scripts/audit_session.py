@@ -5,10 +5,10 @@ token-only or unkeyed forgery. Because its key and data are owned by the same
 effective user, it does not protect against deliberate coordinated filesystem
 tampering by that same effective user.
 
-This slice only issues absent response paths. Later response creation and
-consumption must use the exact issued response name. It must operate through
-the inbox directory descriptor with O_NOFOLLOW; a lexical path check is not
-sufficient.
+Response creation is caller-owned at the exact issued path. Consumption claims
+the generation first, then reads only the exact issued response name through
+the verified inbox directory descriptor with O_NOFOLLOW and a fixed byte
+limit.
 """
 
 import hashlib
@@ -31,10 +31,15 @@ DIRECTORY_FLAGS = (
     os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 )
 READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+RESPONSE_BYTE_LIMIT = 2 * 1024 * 1024
 
 
 class SessionIntegrityError(RuntimeError):
     """Raised when a session component or generation is not trustworthy."""
+
+
+class ClaimedResponseError(SessionIntegrityError):
+    """Raised after a generation was irreversibly claimed for a bad response."""
 
 
 @dataclass(frozen=True)
@@ -193,6 +198,7 @@ class SessionStore:
         name: str,
         *,
         expected_mode: int | None = None,
+        byte_limit: int | None = None,
     ) -> bytes:
         try:
             descriptor = os.open(
@@ -215,10 +221,16 @@ class SessionStore:
                     "session file permissions are invalid"
                 )
             chunks = []
+            total = 0
             while True:
                 chunk = os.read(descriptor, 65536)
                 if not chunk:
                     return b"".join(chunks)
+                total += len(chunk)
+                if byte_limit is not None and total > byte_limit:
+                    raise SessionIntegrityError(
+                        "session response exceeds the byte limit"
+                    )
                 chunks.append(chunk)
         finally:
             os.close(descriptor)
@@ -570,6 +582,42 @@ class SessionStore:
         run_id, digest = self._parse_token(token)
         return self._load_verified(run_id, digest, verify_previous=True)
 
+    def load_packet(self, token: str) -> dict:
+        run_id, digest = self._parse_token(token)
+        state = self._load_verified(
+            run_id,
+            digest,
+            verify_previous=True,
+        )
+        with self._run_directories(run_id) as directories:
+            generation = self._open_directory(
+                digest,
+                dir_fd=directories["generations"],
+            )
+            try:
+                packet_bytes = self._read_file(
+                    generation,
+                    "packet.json",
+                    expected_mode=0o400,
+                )
+            finally:
+                os.close(generation)
+        try:
+            packet = json.loads(packet_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise SessionIntegrityError(
+                "generation packet JSON is invalid"
+            ) from error
+        if (
+            not isinstance(packet, dict)
+            or packet_bytes != _canonical_json(packet)
+            or _digest(packet_bytes) != state["packet_sha256"]
+        ):
+            raise SessionIntegrityError(
+                "generation packet digest mismatch"
+            )
+        return packet
+
     def claim(self, token: str) -> None:
         run_id, digest = self._parse_token(token)
         self.load(token)
@@ -588,6 +636,93 @@ class SessionStore:
                 raise SessionIntegrityError(
                     "cannot claim generation"
                 ) from error
+            os.fsync(directories["claims"])
+
+    def claim_and_read(
+        self,
+        token: str,
+        response_path: Path,
+    ) -> bytes:
+        """Claim once, then read only the state-issued no-follow inbox name."""
+        run_id, digest = self._parse_token(token)
+        state = self.load(token)
+        self.claim(token)
+        try:
+            with self._run_directories(run_id) as directories:
+                response_name = self._response_name(state)
+                _, issued_path = self._resolved_run_paths(
+                    directories,
+                    digest,
+                    response_name,
+                )
+                if str(response_path) != str(issued_path):
+                    raise SessionIntegrityError(
+                        "caller response path does not match the issued path"
+                    )
+                return self._read_file(
+                    directories["inbox"],
+                    response_name,
+                    byte_limit=RESPONSE_BYTE_LIMIT,
+                )
+        except (OSError, SessionIntegrityError) as error:
+            raise ClaimedResponseError(str(error)) from error
+
+    def _require_claimed(self, run_id: str, digest: str) -> None:
+        with self._run_directories(run_id) as directories:
+            claim = self._open_directory(
+                digest,
+                dir_fd=directories["claims"],
+            )
+            os.close(claim)
+
+    def _reserve_successor(self, run_id: str, digest: str) -> None:
+        with self._run_directories(run_id) as directories:
+            claim = self._open_directory(
+                digest,
+                dir_fd=directories["claims"],
+            )
+            try:
+                self._write_file(claim, "successor", b"reserved\n")
+                os.fsync(claim)
+            except FileExistsError as error:
+                raise SessionIntegrityError(
+                    "claimed generation already has a successor"
+                ) from error
+            except OSError as error:
+                raise SessionIntegrityError(
+                    "cannot reserve generation successor"
+                ) from error
+            finally:
+                os.close(claim)
+
+    def append_claimed(
+        self,
+        token: str,
+        state: Mapping[str, object],
+        packet: Mapping[str, object],
+    ) -> SessionGeneration:
+        """Append after an existing claim without attempting a second claim."""
+        run_id, digest = self._parse_token(token)
+        response_name = self._response_name(state)
+        issued_response_names = set()
+        self._load_verified(
+            run_id,
+            digest,
+            verify_previous=True,
+            response_names=issued_response_names,
+        )
+        self._require_claimed(run_id, digest)
+        if response_name in issued_response_names:
+            raise SessionIntegrityError(
+                "response name was already issued in this generation chain"
+            )
+        with self._run_directories(run_id) as directories:
+            self._require_response_absent(
+                directories["inbox"],
+                response_name,
+            )
+        self._reserve_successor(run_id, digest)
+        return self._write_generation(run_id, state, packet, digest)
 
     def append(
         self,
@@ -614,7 +749,7 @@ class SessionStore:
                 response_name,
             )
         self.claim(token)
-        return self._write_generation(run_id, state, packet, digest)
+        return self.append_claimed(token, state, packet)
 
     def tombstone(
         self,
@@ -622,6 +757,17 @@ class SessionStore:
         state: Mapping[str, object],
     ) -> SessionGeneration:
         return self.append(
+            token,
+            state,
+            {"schema_version": 1, "kind": "terminal"},
+        )
+
+    def tombstone_claimed(
+        self,
+        token: str,
+        state: Mapping[str, object],
+    ) -> SessionGeneration:
+        return self.append_claimed(
             token,
             state,
             {"schema_version": 1, "kind": "terminal"},
