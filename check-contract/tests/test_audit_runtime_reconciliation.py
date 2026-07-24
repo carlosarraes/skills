@@ -1341,6 +1341,260 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertTrue(os.WIFEXITED(status))
             self.assertEqual(os.WEXITSTATUS(status), 0)
 
+    def test_paused_lease_close_does_not_block_duplicate_audit(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            descriptor = lease._descriptor
+            original_state = store.load(started.session)
+            session_module = sys.modules["audit_session"]
+            original_close = session_module.os.close
+            close_paused = threading.Event()
+            release_close = threading.Event()
+            delayed = False
+            before_fds = len(os.listdir("/proc/self/fd"))
+
+            def paused_close(value):
+                nonlocal delayed
+                if value == descriptor and not delayed:
+                    delayed = True
+                    close_paused.set()
+                    if not release_close.wait(2):
+                        raise AssertionError("lease close was not released")
+                return original_close(value)
+
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                paused_close,
+            ):
+                closer = threading.Thread(target=lease.close)
+                closer.start()
+                self.assertTrue(close_paused.wait(1))
+                before = time.monotonic()
+                duplicate = self.runtime(root).advance(
+                    self.module.ContinueAudit(
+                        started.session,
+                        started.response_path,
+                    )
+                )
+                elapsed = time.monotonic() - before
+                release_close.set()
+                closer.join(timeout=1)
+
+            terminal_state = {
+                **original_state,
+                "phase": "terminal",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+            recovery = store.recover_claim(
+                started.session,
+                terminal_state,
+            )
+
+            self.assertLess(elapsed, 0.75)
+            self.assertEqual(duplicate.code, "SESSION_BUSY")
+            self.assertFalse(closer.is_alive())
+            self.assertEqual(recovery, "abandoned-claim-closed")
+            self.assertEqual(
+                len(os.listdir("/proc/self/fd")),
+                before_fds - 1,
+            )
+
+    def test_paused_claim_open_does_not_block_an_independent_claim(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.start(repo, root / "first")
+            second = self.start(repo, root / "second")
+            first_store = self.module.SessionStore(root / "first")
+            second_store = self.module.SessionStore(root / "second")
+            session_module = sys.modules["audit_session"]
+            original_open = session_module.os.open
+            open_paused = threading.Event()
+            release_open = threading.Event()
+            delayed = False
+            first_result = []
+
+            def paused_open(path, flags, *args, **kwargs):
+                nonlocal delayed
+                descriptor = original_open(path, flags, *args, **kwargs)
+                if (
+                    isinstance(path, str)
+                    and path.startswith(".")
+                    and not delayed
+                ):
+                    delayed = True
+                    open_paused.set()
+                    if not release_open.wait(2):
+                        raise AssertionError("claim open was not released")
+                return descriptor
+
+            def open_first():
+                first_result.append(
+                    first_store.claim_lease(first.session)
+                )
+
+            with mock.patch.object(
+                session_module.os,
+                "open",
+                paused_open,
+            ):
+                worker = threading.Thread(target=open_first)
+                worker.start()
+                self.assertTrue(open_paused.wait(1))
+                before = time.monotonic()
+                second_lease = second_store.claim_lease(second.session)
+                elapsed = time.monotonic() - before
+                release_open.set()
+                worker.join(timeout=1)
+
+            self.assertLess(elapsed, 0.75)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(len(first_result), 1)
+            first_result[0].close()
+            second_lease.close()
+            self.assertEqual(session_module._TRACKED_LEASE_FDS, set())
+
+    def test_paused_transaction_open_does_not_block_independent_open(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.start(repo, root / "first")
+            second = self.start(repo, root / "second")
+            first_store = self.module.SessionStore(root / "first")
+            second_store = self.module.SessionStore(root / "second")
+            first_lease = first_store.claim_lease(first.session)
+            second_lease = second_store.claim_lease(second.session)
+            session_module = sys.modules["audit_session"]
+            original_open = session_module.os.open
+            open_paused = threading.Event()
+            release_open = threading.Event()
+            delayed = False
+
+            def paused_open(path, flags, *args, **kwargs):
+                nonlocal delayed
+                descriptor = original_open(path, flags, *args, **kwargs)
+                if path == "transaction" and not delayed:
+                    delayed = True
+                    open_paused.set()
+                    if not release_open.wait(2):
+                        raise AssertionError(
+                            "transaction open was not released"
+                        )
+                return descriptor
+
+            def open_first():
+                with first_store._successor_transaction_lock(first_lease):
+                    pass
+
+            with mock.patch.object(
+                session_module.os,
+                "open",
+                paused_open,
+            ):
+                worker = threading.Thread(target=open_first)
+                worker.start()
+                self.assertTrue(open_paused.wait(1))
+                before = time.monotonic()
+                with second_store._successor_transaction_lock(second_lease):
+                    pass
+                elapsed = time.monotonic() - before
+                release_open.set()
+                worker.join(timeout=1)
+
+            first_lease.close()
+            second_lease.close()
+            self.assertLess(elapsed, 0.75)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(
+                session_module._TRACKED_TRANSACTION_FDS,
+                set(),
+            )
+
+    def test_paused_transaction_close_returns_busy_without_fd_growth(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            store = self.module.SessionStore(root)
+            lease = store.claim_lease(started.session)
+            original_state = store.load(started.session)
+            session_module = sys.modules["audit_session"]
+            original_close = session_module.os.close
+            transaction_entered = threading.Event()
+            exit_transaction = threading.Event()
+            close_paused = threading.Event()
+            release_close = threading.Event()
+            captured = []
+            before_fds = len(os.listdir("/proc/self/fd"))
+
+            def paused_close(descriptor):
+                if captured and descriptor == captured[0]:
+                    close_paused.set()
+                    if not release_close.wait(2):
+                        raise AssertionError(
+                            "transaction close was not released"
+                        )
+                return original_close(descriptor)
+
+            def hold_transaction():
+                with store._successor_transaction_lock(lease):
+                    captured.extend(
+                        session_module._TRACKED_TRANSACTION_FDS
+                    )
+                    transaction_entered.set()
+                    exit_transaction.wait(2)
+
+            next_state = {
+                **original_state,
+                "phase": "reconciliation",
+                "nonce": "a" * 32,
+                "response_name": f"{'b' * 32}.json",
+            }
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                paused_close,
+            ):
+                worker = threading.Thread(target=hold_transaction)
+                worker.start()
+                self.assertTrue(transaction_entered.wait(1))
+                exit_transaction.set()
+                self.assertTrue(close_paused.wait(1))
+                before = time.monotonic()
+                with self.assertRaises(self.module.SessionBusyError):
+                    store.append_claimed(
+                        started.session,
+                        next_state,
+                        {"schema_version": 1, "kind": "reconciliation"},
+                        lease=lease,
+                    )
+                elapsed = time.monotonic() - before
+                release_close.set()
+                worker.join(timeout=1)
+
+            result = store.append_claimed(
+                started.session,
+                next_state,
+                {"schema_version": 1, "kind": "reconciliation"},
+                lease=lease,
+            )
+            lease.close()
+
+            self.assertLess(elapsed, 0.75)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(packet_of(result)["kind"], "reconciliation")
+            self.assertEqual(len(os.listdir("/proc/self/fd")), before_fds - 1)
+
     def test_dropped_unclosed_lease_is_finalized_and_recoverable(self):
         with materialized_repo(
             "contract-compliant-overengineered"

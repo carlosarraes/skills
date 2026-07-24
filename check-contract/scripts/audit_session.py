@@ -51,10 +51,93 @@ CLAIM_MARKER = b"claim-v1\n"
 TRANSACTION_MARKER = b"transaction-v1\n"
 _SUCCESSOR_LOCKS_GUARD = threading.Lock()
 _SUCCESSOR_LOCKS = {}
-_FORK_FD_LIFECYCLE_GUARD = threading.Lock()
 _TRACKED_LEASE_FDS = set()
 _LEASE_REFS = {}
 _TRACKED_TRANSACTION_FDS = set()
+_PENDING_LEASE_CLOSE_FDS = set()
+_PENDING_TRANSACTION_CLOSE_FDS = set()
+
+
+class _ForkLifecycleGate:
+    """Concurrent audit readers with an exclusive fork snapshot boundary."""
+
+    def __init__(self):
+        self._metadata = threading.Lock()
+        self._drained = threading.Condition(self._metadata)
+        self._readers = 0
+        self._fork_pending = False
+
+    def try_enter_audit(self) -> bool:
+        if not self._metadata.acquire(blocking=False):
+            return False
+        try:
+            if self._fork_pending:
+                return False
+            self._readers += 1
+            return True
+        finally:
+            self._metadata.release()
+
+    def exit_audit(self) -> None:
+        with self._metadata:
+            self._readers -= 1
+            if self._readers == 0:
+                self._drained.notify_all()
+
+    def before_fork(self) -> None:
+        with self._metadata:
+            while self._fork_pending:
+                self._drained.wait()
+            self._fork_pending = True
+            while self._readers:
+                self._drained.wait()
+
+    def after_parent(self) -> None:
+        with self._metadata:
+            self._fork_pending = False
+            self._drained.notify_all()
+
+
+_FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
+
+
+def _close_owned_descriptor(descriptor: int) -> None:
+    try:
+        os.close(descriptor)
+    except OSError as error:
+        if error.errno != errno.EBADF:
+            raise
+
+
+def _drain_pending_descriptor_closes() -> None:
+    while _PENDING_LEASE_CLOSE_FDS:
+        descriptor = _PENDING_LEASE_CLOSE_FDS.pop()
+        try:
+            _close_owned_descriptor(descriptor)
+        except Exception:
+            _PENDING_LEASE_CLOSE_FDS.add(descriptor)
+            raise
+        _TRACKED_LEASE_FDS.discard(descriptor)
+        _LEASE_REFS.pop(descriptor, None)
+    while _PENDING_TRANSACTION_CLOSE_FDS:
+        descriptor = _PENDING_TRANSACTION_CLOSE_FDS.pop()
+        try:
+            _close_owned_descriptor(descriptor)
+        except Exception:
+            _PENDING_TRANSACTION_CLOSE_FDS.add(descriptor)
+            raise
+        _TRACKED_TRANSACTION_FDS.discard(descriptor)
+
+
+@contextmanager
+def _audit_fd_lifecycle():
+    if not _FORK_FD_LIFECYCLE_GATE.try_enter_audit():
+        raise SessionBusyError("fork descriptor lifecycle is active")
+    try:
+        _drain_pending_descriptor_closes()
+        yield
+    finally:
+        _FORK_FD_LIFECYCLE_GATE.exit_audit()
 
 
 def _rename_noreplace(
@@ -148,27 +231,31 @@ class ClaimLease:
         self.digest = digest
         self._descriptor = descriptor
         self.closed = False
-        with _FORK_FD_LIFECYCLE_GUARD:
-            _TRACKED_LEASE_FDS.add(descriptor)
-            _LEASE_REFS[descriptor] = weakref.ref(self)
+        if descriptor not in _TRACKED_LEASE_FDS:
+            with _audit_fd_lifecycle():
+                _TRACKED_LEASE_FDS.add(descriptor)
+        _LEASE_REFS[descriptor] = weakref.ref(self)
 
     def close(self) -> None:
-        with _FORK_FD_LIFECYCLE_GUARD:
-            if self.closed:
-                return
-            descriptor = self._descriptor
+        if self.closed:
+            return
+        descriptor = self._descriptor
+        try:
+            with _audit_fd_lifecycle():
+                self._descriptor = -1
+                self.closed = True
+                if descriptor not in _TRACKED_LEASE_FDS:
+                    return
+                try:
+                    _close_owned_descriptor(descriptor)
+                finally:
+                    _TRACKED_LEASE_FDS.discard(descriptor)
+                    _LEASE_REFS.pop(descriptor, None)
+        except SessionBusyError:
             self._descriptor = -1
             self.closed = True
-            if descriptor not in _TRACKED_LEASE_FDS:
-                return
-            try:
-                os.close(descriptor)
-            except OSError as error:
-                if error.errno != errno.EBADF:
-                    raise
-            finally:
-                _TRACKED_LEASE_FDS.discard(descriptor)
-                _LEASE_REFS.pop(descriptor, None)
+            if descriptor in _TRACKED_LEASE_FDS:
+                _PENDING_LEASE_CLOSE_FDS.add(descriptor)
 
     def __del__(self):
         try:
@@ -178,20 +265,25 @@ class ClaimLease:
 
 
 def _before_fork() -> None:
-    _FORK_FD_LIFECYCLE_GUARD.acquire()
+    _FORK_FD_LIFECYCLE_GATE.before_fork()
 
 
 def _after_fork_parent() -> None:
-    _FORK_FD_LIFECYCLE_GUARD.release()
+    try:
+        _drain_pending_descriptor_closes()
+    finally:
+        _FORK_FD_LIFECYCLE_GATE.after_parent()
 
 
 def _after_fork_child() -> None:
     global _SUCCESSOR_LOCKS_GUARD
     global _SUCCESSOR_LOCKS
-    global _FORK_FD_LIFECYCLE_GUARD
+    global _FORK_FD_LIFECYCLE_GATE
     global _TRACKED_LEASE_FDS
     global _LEASE_REFS
     global _TRACKED_TRANSACTION_FDS
+    global _PENDING_LEASE_CLOSE_FDS
+    global _PENDING_TRANSACTION_CLOSE_FDS
 
     for reference in _LEASE_REFS.values():
         lease = reference()
@@ -211,10 +303,12 @@ def _after_fork_child() -> None:
             pass
     _SUCCESSOR_LOCKS_GUARD = threading.Lock()
     _SUCCESSOR_LOCKS = {}
-    _FORK_FD_LIFECYCLE_GUARD = threading.Lock()
+    _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
     _TRACKED_LEASE_FDS = set()
     _LEASE_REFS = {}
     _TRACKED_TRANSACTION_FDS = set()
+    _PENDING_LEASE_CLOSE_FDS = set()
+    _PENDING_TRANSACTION_CLOSE_FDS = set()
 
 
 if hasattr(os, "register_at_fork"):
@@ -287,23 +381,24 @@ class SessionStore:
             raise
 
     def _open_tracked_claim_directory(self, name, *, dir_fd) -> int:
-        with _FORK_FD_LIFECYCLE_GUARD:
+        with _audit_fd_lifecycle():
             descriptor = self._open_directory(name, dir_fd=dir_fd)
             _TRACKED_LEASE_FDS.add(descriptor)
             return descriptor
 
     def _close_tracked_claim_descriptor(self, descriptor: int) -> None:
-        with _FORK_FD_LIFECYCLE_GUARD:
-            if descriptor not in _TRACKED_LEASE_FDS:
-                return
-            try:
-                os.close(descriptor)
-            except OSError as error:
-                if error.errno != errno.EBADF:
-                    raise
-            finally:
-                _TRACKED_LEASE_FDS.discard(descriptor)
-                _LEASE_REFS.pop(descriptor, None)
+        try:
+            with _audit_fd_lifecycle():
+                if descriptor not in _TRACKED_LEASE_FDS:
+                    return
+                try:
+                    _close_owned_descriptor(descriptor)
+                finally:
+                    _TRACKED_LEASE_FDS.discard(descriptor)
+                    _LEASE_REFS.pop(descriptor, None)
+        except SessionBusyError:
+            if descriptor in _TRACKED_LEASE_FDS:
+                _PENDING_LEASE_CLOSE_FDS.add(descriptor)
 
     def _open_base(self, *, create: bool) -> int:
         self._require_current_process()
@@ -1031,7 +1126,7 @@ class SessionStore:
     @contextmanager
     def _successor_transaction_lock(self, lease: ClaimLease):
         self._require_current_process()
-        with _FORK_FD_LIFECYCLE_GUARD:
+        with _audit_fd_lifecycle():
             try:
                 descriptor = os.open(
                     "transaction",
@@ -1073,15 +1168,16 @@ class SessionStore:
                 ) from error
             yield
         finally:
-            with _FORK_FD_LIFECYCLE_GUARD:
+            try:
+                with _audit_fd_lifecycle():
+                    if descriptor in _TRACKED_TRANSACTION_FDS:
+                        try:
+                            _close_owned_descriptor(descriptor)
+                        finally:
+                            _TRACKED_TRANSACTION_FDS.discard(descriptor)
+            except SessionBusyError:
                 if descriptor in _TRACKED_TRANSACTION_FDS:
-                    try:
-                        os.close(descriptor)
-                    except OSError as error:
-                        if error.errno != errno.EBADF:
-                            raise
-                    finally:
-                        _TRACKED_TRANSACTION_FDS.discard(descriptor)
+                    _PENDING_TRANSACTION_CLOSE_FDS.add(descriptor)
 
     def claim_lease(self, token: str) -> ClaimLease:
         run_id, digest = self._parse_token(token)
