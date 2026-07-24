@@ -58,6 +58,7 @@ _LEASE_REFS = {}
 _TRACKED_TRANSACTION_OWNERSHIPS = set()
 _PENDING_LEASE_CLOSE_FDS = set()
 _PENDING_TRANSACTION_CLOSE_FDS = set()
+_CONSUMED_DESCRIPTOR_OWNERSHIPS = set()
 _CLEANUP_QUEUE = queue.SimpleQueue()
 _CLEANUP_THREAD = None
 _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
@@ -73,6 +74,28 @@ if _CLOSE_RANGE is not None:
         ctypes.c_int,
     )
     _CLOSE_RANGE.restype = ctypes.c_int
+
+
+class _OneShotToken:
+    """An idempotently releasable token that is never reacquired."""
+
+    def __init__(self):
+        self._released = False
+        self._lock = threading.Lock()
+        self._lock.acquire()
+
+    def locked(self) -> bool:
+        return not self._released
+
+    def release(self) -> None:
+        if self._released:
+            return
+        self._released = True
+        self._lock.release()
+
+    def wait(self) -> None:
+        self._lock.acquire()
+        self._lock.release()
 
 
 class _ForkLifecycleGate:
@@ -93,14 +116,17 @@ class _ForkLifecycleGate:
             }
             if self._fork_pending:
                 return None
-            reader = threading.Lock()
-            reader.acquire()
+            reader = _OneShotToken()
             self._readers.add(reader)
             return reader
         finally:
             self._metadata.release()
 
     def exit_audit(self, reader) -> None:
+        self.ensure_audit_released(reader)
+
+    @staticmethod
+    def ensure_audit_released(reader) -> None:
         reader.release()
 
     def before_fork(self) -> None:
@@ -110,8 +136,7 @@ class _ForkLifecycleGate:
             self._fork_pending = True
             readers = tuple(self._readers)
             for reader in readers:
-                reader.acquire()
-                reader.release()
+                reader.wait()
             self._readers.clear()
 
     def after_parent_reopen(self) -> None:
@@ -177,7 +202,12 @@ class _DescriptorOwnershipGate:
 
     @staticmethod
     def exit_publication(token) -> None:
-        token.release()
+        _DescriptorOwnershipGate.ensure_publication_released(token)
+
+    @staticmethod
+    def ensure_publication_released(token) -> None:
+        if token.locked():
+            token.release()
 
     def exit_cleanup(
         gate,
@@ -253,7 +283,13 @@ def _ownership_publication():
     try:
         yield
     finally:
-        _DESCRIPTOR_OWNERSHIP_GATE.exit_publication(token)
+        try:
+            _DESCRIPTOR_OWNERSHIP_GATE.exit_publication(token)
+        finally:
+            (
+                _DESCRIPTOR_OWNERSHIP_GATE
+                .ensure_publication_released(token)
+            )
 
 
 class _CleanupAdmission:
@@ -313,11 +349,24 @@ def _close_owned_record(kind: str, ownership) -> bool:
     pending.add(ownership)
     if ownership not in tracked:
         return _forget_owned_record(kind, ownership)
+    if not _consume_owned_slot(ownership):
+        return False
+    return _forget_owned_record(kind, ownership)
+
+
+def _consume_owned_slot(ownership) -> bool:
+    """Quarantine an exact slot before the close syscall can be interrupted."""
+    if ownership in _CONSUMED_DESCRIPTOR_OWNERSHIPS:
+        return True
+    _CONSUMED_DESCRIPTOR_OWNERSHIPS.add(ownership)
     try:
         _close_owned_descriptor(ownership[0])
     except OSError:
+        _CONSUMED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
         return False
-    return _forget_owned_record(kind, ownership)
+    except BaseException:
+        raise
+    return True
 
 
 def _forget_owned_record(kind: str, ownership) -> bool:
@@ -326,6 +375,7 @@ def _forget_owned_record(kind: str, ownership) -> bool:
     pending.discard(ownership)
     if kind == "lease":
         _LEASE_REFS.pop(ownership[1], None)
+    _CONSUMED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
     return True
 
 
@@ -368,7 +418,15 @@ def _background_pending_cleanup() -> None:
                     except Exception:
                         closed = False
                 finally:
-                    _FORK_FD_LIFECYCLE_GATE.exit_audit(reader)
+                    try:
+                        _FORK_FD_LIFECYCLE_GATE.exit_audit(
+                            reader
+                        )
+                    finally:
+                        (
+                            _FORK_FD_LIFECYCLE_GATE
+                            .ensure_audit_released(reader)
+                        )
         except BaseException as error:
             crashed = error
         if crashed is not None:
@@ -455,7 +513,10 @@ def _audit_fd_lifecycle():
     try:
         yield
     finally:
-        _FORK_FD_LIFECYCLE_GATE.exit_audit(reader)
+        try:
+            _FORK_FD_LIFECYCLE_GATE.exit_audit(reader)
+        finally:
+            _FORK_FD_LIFECYCLE_GATE.ensure_audit_released(reader)
 
 
 def _rename_noreplace(
@@ -620,12 +681,18 @@ def _after_fork_parent() -> None:
 def _close_child_snapshot(ownerships) -> set:
     failed = set()
     for ownership in ownerships:
+        if ownership in _CONSUMED_DESCRIPTOR_OWNERSHIPS:
+            continue
         for _ in range(2):
             try:
-                _close_owned_descriptor(ownership[0])
-            except OSError:
+                consumed = _consume_owned_slot(ownership)
+            except BaseException:
+                _CONSUMED_DESCRIPTOR_OWNERSHIPS.discard(
+                    ownership
+                )
                 continue
-            break
+            if consumed:
+                break
         else:
             failed.add(ownership)
     return failed
@@ -641,38 +708,48 @@ def _after_fork_child() -> None:
     global _TRACKED_TRANSACTION_OWNERSHIPS
     global _PENDING_LEASE_CLOSE_FDS
     global _PENDING_TRANSACTION_CLOSE_FDS
+    global _CONSUMED_DESCRIPTOR_OWNERSHIPS
     global _CLEANUP_QUEUE
     global _CLEANUP_THREAD
     global _CLEANUP_SUPERVISOR_LOCK
 
-    for reference in _LEASE_REFS.values():
-        lease = reference()
-        if lease is not None:
-            lease._descriptor = -1
-            lease._creator_pid = -1
-            lease.closed = True
-    failed_leases = _close_child_snapshot(
-        _TRACKED_LEASE_OWNERSHIPS
-    )
-    failed_transactions = _close_child_snapshot(
+    failed_leases = set(_TRACKED_LEASE_OWNERSHIPS)
+    failed_transactions = set(
         _TRACKED_TRANSACTION_OWNERSHIPS
     )
-    _SUCCESSOR_LOCKS_GUARD = threading.Lock()
-    _SUCCESSOR_LOCKS = {}
-    _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
-    _DESCRIPTOR_OWNERSHIP_GATE = _DescriptorOwnershipGate()
-    _TRACKED_LEASE_OWNERSHIPS = failed_leases
-    _LEASE_REFS = {}
-    _TRACKED_TRANSACTION_OWNERSHIPS = failed_transactions
-    _PENDING_LEASE_CLOSE_FDS = set(failed_leases)
-    _PENDING_TRANSACTION_CLOSE_FDS = set(failed_transactions)
-    _CLEANUP_QUEUE = queue.SimpleQueue()
-    _CLEANUP_THREAD = None
-    _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
-    for ownership in failed_leases:
-        _queue_cleanup("lease", ownership)
-    for ownership in failed_transactions:
-        _queue_cleanup("transaction", ownership)
+    try:
+        for reference in _LEASE_REFS.values():
+            lease = reference()
+            if lease is not None:
+                lease._descriptor = -1
+                lease._creator_pid = -1
+                lease.closed = True
+        failed_leases = _close_child_snapshot(
+            _TRACKED_LEASE_OWNERSHIPS
+        )
+        failed_transactions = _close_child_snapshot(
+            _TRACKED_TRANSACTION_OWNERSHIPS
+        )
+    finally:
+        _SUCCESSOR_LOCKS_GUARD = threading.Lock()
+        _SUCCESSOR_LOCKS = {}
+        _FORK_FD_LIFECYCLE_GATE = _ForkLifecycleGate()
+        _DESCRIPTOR_OWNERSHIP_GATE = _DescriptorOwnershipGate()
+        _TRACKED_LEASE_OWNERSHIPS = failed_leases
+        _LEASE_REFS = {}
+        _TRACKED_TRANSACTION_OWNERSHIPS = failed_transactions
+        _PENDING_LEASE_CLOSE_FDS = set(failed_leases)
+        _PENDING_TRANSACTION_CLOSE_FDS = set(
+            failed_transactions
+        )
+        _CONSUMED_DESCRIPTOR_OWNERSHIPS = set()
+        _CLEANUP_QUEUE = queue.SimpleQueue()
+        _CLEANUP_THREAD = None
+        _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
+        for ownership in failed_leases:
+            _queue_cleanup("lease", ownership)
+        for ownership in failed_transactions:
+            _queue_cleanup("transaction", ownership)
 
 
 if hasattr(os, "register_at_fork"):
@@ -746,17 +823,36 @@ class SessionStore:
             raise
 
     def _open_tracked_claim_directory(self, name, *, dir_fd) -> int:
-        with _audit_fd_lifecycle():
-            if not _ensure_cleanup_worker():
-                raise SessionBusyError(
-                    "descriptor cleanup executor is unavailable"
-                )
-            with _ownership_publication():
-                descriptor = self._open_directory(name, dir_fd=dir_fd)
-                ownership = (descriptor, object())
-                _TRACKED_LEASE_OWNERSHIPS.add(ownership)
-                self._tracked_claim_ownerships[descriptor] = ownership
-                return descriptor
+        ownership = None
+        try:
+            with _audit_fd_lifecycle():
+                if not _ensure_cleanup_worker():
+                    raise SessionBusyError(
+                        "descriptor cleanup executor is unavailable"
+                    )
+                with _ownership_publication():
+                    descriptor = self._open_directory(
+                        name,
+                        dir_fd=dir_fd,
+                    )
+                    ownership = (descriptor, object())
+                    _TRACKED_LEASE_OWNERSHIPS.add(ownership)
+                    self._tracked_claim_ownerships[
+                        descriptor
+                    ] = ownership
+                    return descriptor
+        except BaseException:
+            if ownership is not None:
+                if (
+                    self._tracked_claim_ownerships.get(descriptor)
+                    == ownership
+                ):
+                    self._tracked_claim_ownerships.pop(
+                        descriptor,
+                        None,
+                    )
+                _schedule_pending_cleanup("lease", ownership)
+            raise
 
     def _close_tracked_claim_descriptor(self, descriptor: int) -> None:
         ownership = self._tracked_claim_ownerships.pop(
@@ -1514,25 +1610,36 @@ class SessionStore:
     @contextmanager
     def _successor_transaction_lock(self, lease: ClaimLease):
         self._require_current_process()
-        with _audit_fd_lifecycle():
-            if not _ensure_cleanup_worker():
-                raise SessionBusyError(
-                    "descriptor cleanup executor is unavailable"
-                )
-            with _ownership_publication():
-                try:
-                    descriptor = os.open(
-                        "transaction",
-                        READ_FLAGS,
-                        dir_fd=lease._descriptor,
+        ownership = None
+        try:
+            with _audit_fd_lifecycle():
+                if not _ensure_cleanup_worker():
+                    raise SessionBusyError(
+                        "descriptor cleanup executor is unavailable"
                     )
-                except OSError as error:
-                    raise SessionIntegrityError(
-                        "claim transaction lock is unavailable or unsafe"
-                    ) from error
-                token = object()
-                ownership = (descriptor, token)
-                _TRACKED_TRANSACTION_OWNERSHIPS.add(ownership)
+                with _ownership_publication():
+                    try:
+                        descriptor = os.open(
+                            "transaction",
+                            READ_FLAGS,
+                            dir_fd=lease._descriptor,
+                        )
+                    except OSError as error:
+                        raise SessionIntegrityError(
+                            "claim transaction lock is unavailable or unsafe"
+                        ) from error
+                    token = object()
+                    ownership = (descriptor, token)
+                    _TRACKED_TRANSACTION_OWNERSHIPS.add(
+                        ownership
+                    )
+        except BaseException:
+            if ownership is not None:
+                _schedule_pending_cleanup(
+                    "transaction",
+                    ownership,
+                )
+            raise
         try:
             try:
                 metadata = os.fstat(descriptor)
