@@ -75,7 +75,7 @@ instructions, bubblewrap-isolated Claude Code evaluation.
 - The existing validator consumes the same helper; no second namespace
   implementation is allowed.
 
-- [ ] **Step 1: Add a failing packet regression for the iteration-4 contract gap**
+- [x] **Step 1: Add a failing packet regression for the iteration-4 contract gap**
 
 In `test_audit_runtime_start.py`, extend
 `test_start_records_authority_clause_ids_and_filtered_code`:
@@ -105,7 +105,7 @@ self.assertNotIn(
 )
 ```
 
-- [ ] **Step 2: Add a failing skill regression**
+- [x] **Step 2: Add a failing skill regression**
 
 In `test_skill_contract.py`, add:
 
@@ -124,7 +124,7 @@ def test_fidelity_evidence_uses_runtime_map_and_reasons_stay_bounded(self):
         self.assertNotIn(duplicated_policy, self.flat_skill)
 ```
 
-- [ ] **Step 3: Add a failing shared-helper regression**
+- [x] **Step 3: Add a failing shared-helper regression**
 
 In `test_audit_runtime_reconciliation.py`, add:
 
@@ -158,7 +158,7 @@ def test_iteration4_fidelity_failure_is_explained_by_issued_map(self):
         )
 ```
 
-- [ ] **Step 4: Run the focused tests and verify RED**
+- [x] **Step 4: Run the focused tests and verify RED**
 
 Run:
 
@@ -176,7 +176,7 @@ Expected: the new packet assertions fail because
 runtime-owned guidance is absent. The recorded-style response rejection
 already passes and proves the reproduced failure boundary.
 
-- [ ] **Step 5: Implement one shared derivation**
+- [x] **Step 5: Implement one shared derivation**
 
 In `audit_validation.py`, import `RulePack` and add:
 
@@ -201,7 +201,7 @@ Change `_parse_clause` to derive the allowed tuple with this helper and reject
 any cited ID outside that tuple. Preserve the existing error text containing
 `violates fidelity evidence namespace ownership`.
 
-- [ ] **Step 6: Add the runtime-owned map to the code packet**
+- [x] **Step 6: Add the runtime-owned map to the code packet**
 
 In `audit_runtime.py`, import `allowed_clause_evidence_ids` and
 `clause_family`. Immediately after evidence capture:
@@ -229,7 +229,7 @@ fidelity_evidence_ids = {
 Store `fidelity_evidence_ids` in the code packet. Do not store it as a mutable
 authority or session fact; packet authentication already freezes it.
 
-- [ ] **Step 7: Update the thin skill without duplicating policy**
+- [x] **Step 7: Update the thin skill without duplicating policy**
 
 In the code-response paragraph of `SKILL.md`, add exactly:
 
@@ -241,7 +241,7 @@ For each fidelity clause, choose evidence only from
 Remove or compress nearby prose only as needed to stay at or below 500 words.
 Do not add namespace names or validator logic to the skill.
 
-- [ ] **Step 8: Run focused and shared verification**
+- [x] **Step 8: Run focused and shared verification**
 
 Run:
 
@@ -263,7 +263,7 @@ git diff --check
 Expected: all tests pass, compilation/diff checks are clean, and the skill is
 at most 500 words.
 
-- [ ] **Step 9: Write evidence and commit**
+- [x] **Step 9: Write evidence and commit**
 
 Write `.superpowers/sdd/response-guidance-task-1-report.md` with RED evidence,
 the shared derivation, exact counts, word count, and immutability verdict.
