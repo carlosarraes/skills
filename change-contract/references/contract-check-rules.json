@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "statuses": {
+    "clause": ["MET", "UNMET", "EXCEEDED", "INDETERMINATE"],
+    "ledger": ["VERIFIED", "QUESTIONABLE", "CONTRADICTED"],
+    "fidelity": ["PASS", "PARTIAL", "FAIL"],
+    "yagni": ["PASS", "WARNING", "FAIL"],
+    "reuse": ["PASS", "WARNING", "FAIL"],
+    "documented_drift": ["NONE", "ACCEPTED", "QUESTIONABLE"],
+    "undocumented_drift": ["NONE", "PRESENT"]
+  },
+  "fidelity_families": ["O", "B", "N", "I", "C", "A"],
+  "fidelity_evidence_namespaces": [
+    "behavior",
+    "public-contract",
+    "risk",
+    "acceptance"
+  ],
+  "precedence": [
+    "CONTRACT_OBSOLETE",
+    "FIDELITY_FAIL_WITH_SIMPLICITY",
+    "FIDELITY_FAIL",
+    "UNRESOLVED_WITH_SIMPLICITY",
+    "UNRESOLVED",
+    "SIMPLICITY_ONLY",
+    "PASS_WITH_DOCUMENTED_DRIFT",
+    "PASS"
+  ],
+  "routes": {
+    "CONTRACT_OBSOLETE": ["change-contract"],
+    "FIDELITY_FAIL_WITH_SIMPLICITY": ["exec-ticket", "clean-up"],
+    "FIDELITY_FAIL": ["exec-ticket"],
+    "UNRESOLVED_WITH_SIMPLICITY": ["clean-up"],
+    "UNRESOLVED": ["qa-ticket"],
+    "SIMPLICITY_ONLY": ["clean-up"],
+    "PASS_WITH_DOCUMENTED_DRIFT": {
+      "acceptance_qa_exists": ["qa-pr"],
+      "otherwise": ["qa-ticket"]
+    },
+    "PASS": {
+      "acceptance_qa_exists": ["qa-pr"],
+      "otherwise": ["qa-ticket"]
+    }
+  },
+  "report_schema_version": 1
+}

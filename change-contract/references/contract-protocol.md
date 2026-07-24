@@ -162,26 +162,10 @@ verify their evidence and append accepted entries serially.
 
 ## Contract check vocabulary
 
-This protocol is the single source of truth for check vocabulary, aggregation,
-precedence, routes, and stable IDs.
-
-Clause status: `MET | UNMET | EXCEEDED | INDETERMINATE`
-
-Ledger status: `VERIFIED | QUESTIONABLE | CONTRADICTED`
-
-Contract fidelity: `PASS | PARTIAL | FAIL`
-
-YAGNI: `PASS | WARNING | FAIL`
-
-Reuse: `PASS | WARNING | FAIL`
-
-Documented drift: `NONE | ACCEPTED | QUESTIONABLE`
-
-Undocumented drift: `NONE | PRESENT`
-
-Overall verdict: `PASS | PASS WITH DOCUMENTED DRIFT | NEEDS HUMAN REVIEW | CONTRACT VIOLATED`
-
-Recommended next skill: `<ordered route>`
+`contract-check-rules.json` is the executable source of truth for closed
+enums, evidence-namespace ownership, aggregation order, route precedence, and
+report schema version. This section explains those rules; consumers must load
+and validate the JSON rather than scraping Markdown.
 
 ### Status semantics
 
@@ -300,18 +284,12 @@ contract are not such authority.
 | Contract satisfied and lean | `qa-ticket` |
 | Acceptance QA exists and review evidence is needed | `qa-pr` |
 
-Apply this exhaustive precedence after authority succeeds:
-
-| Order | Observable condition | Overall verdict | Route |
-|---:|---|---|---|
-| 1 | Approved contract is demonstrably obsolete/wrong because current human/product authority or repository constraints conflict with it | `CONTRACT VIOLATED` | `change-contract` |
-| 2 | Fidelity `FAIL`; contract remains the authority; YAGNI/Reuse also has findings | `CONTRACT VIOLATED` | `exec-ticket`, then `clean-up` |
-| 3 | Fidelity `FAIL`; contract remains the authority; no simplicity finding | `CONTRACT VIOLATED` | `exec-ticket` |
-| 4 | Fidelity `PARTIAL`, documented drift `QUESTIONABLE`, or undocumented drift `PRESENT`, with a YAGNI/Reuse finding | `NEEDS HUMAN REVIEW` | `clean-up`; cite the human-review precondition |
-| 5 | Fidelity `PARTIAL` or unresolved drift without a code correction finding | `NEEDS HUMAN REVIEW` | `qa-ticket`; cite the evidence/human-review precondition |
-| 6 | Fidelity `PASS` and YAGNI/Reuse is `WARNING` or `FAIL` | `NEEDS HUMAN REVIEW` | `clean-up` |
-| 7 | All three axes pass, documented drift `ACCEPTED`, undocumented drift `NONE` | `PASS WITH DOCUMENTED DRIFT` | `qa-pr` if acceptance QA already exists, otherwise `qa-ticket` |
-| 8 | All three axes pass and both drift fields are `NONE` | `PASS` | `qa-pr` if acceptance QA already exists, otherwise `qa-ticket` |
+Apply the executable precedence after authority succeeds. Contract obsolescence
+dominates code findings; fidelity failures dominate unresolved evidence and
+simplicity findings; unresolved evidence dominates simplicity-only findings;
+and documented drift is reported distinctly from a drift-free pass. Successful
+routes select `qa-pr` only when acceptance QA already exists, otherwise
+`qa-ticket`.
 
 ### Stable IDs
 
