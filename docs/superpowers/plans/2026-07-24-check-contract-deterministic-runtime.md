@@ -88,7 +88,12 @@ Claude Code isolated behavioral evals, skill-creator benchmark viewer
 | `check-contract/scripts/audit_domain.py` | Frozen policy/domain types and strict v1 rule-pack loading |
 | `check-contract/scripts/audit_validation.py` | Closed response parsing, namespace enforcement, and derived deviation coverage |
 | `check-contract/scripts/audit_policy.py` | Pure aggregation, precedence, stable findings, and conditional routes |
-| `check-contract/scripts/audit_runtime.py` | Small public facade extended by the continuation runtime, phase machine, evidence capture, and publication |
+| `check-contract/scripts/audit_runtime.py` | Deep public continuation facade and target-phase orchestration |
+| `check-contract/scripts/audit_session.py` | Append-only immutable generations, manifests, tokens, nonces, and atomic claims |
+| `check-contract/scripts/audit_evidence.py` | Strict contract parser and bounded recorded-HEAD evidence capture |
+| `check-contract/scripts/audit_reconciliation.py` | Strict ledger/narrative parsing and issued probe descriptors |
+| `check-contract/scripts/probe_runner.py` | Fixed no-shell `python-call-v1` replay executor |
+| `check-contract/scripts/audit_report.py` | Deterministic report rendering, freshness checks, atomic publication, mutation attestation |
 | `check-contract/scripts/check_contract.py` | Thin `start`/`continue` JSON CLI |
 | `check-contract/tests/runtime_fixtures.py` | Temporary-repository and response builders used only by runtime tests |
 | `check-contract/tests/test_audit_policy.py` | Pure rule/aggregation and evidence-namespace regressions |
@@ -461,22 +466,114 @@ git commit -m "feat: add deterministic contract audit policy"
 
 ---
 
-### Task 3: Implement the immutable continuation runtime and CLI
+### Task 3: Declare one closed, replayable ledger probe
+
+**Files:**
+
+- Modify: `change-contract/references/contract-protocol.md`
+- Modify:
+  `check-contract/evals/fixtures/documented-drift/overlay/.notes/feature-proj-123/contract/v1/execution-ledger.md`
+- Modify: `check-contract/evals/fixture-manifest.json`
+- Modify: `check-contract/tests/test_eval_contract.py`
+
+**Interfaces:**
+
+- Consumes: the existing optional D-entry body
+- Produces: optional exact field
+  `Replay probe: <canonical JSON python-call-v1 descriptor>`
+
+- [ ] **Step 1: Write failing closed-probe fixture tests**
+
+Require D1 to contain exactly:
+
+```json
+{
+  "kind": "python-call-v1",
+  "module": "src.pricing",
+  "callable": "validate_percentage",
+  "cases": [
+    {"args": [0], "expect": "returns"},
+    {"args": [100], "expect": "returns"},
+    {"args": [-1], "expect": "raises", "exception": "ValueError"},
+    {"args": [101], "expect": "raises", "exception": "ValueError"}
+  ]
+}
+```
+
+Add a regression that rejects an unknown kind, extra keys, shell/argv fields,
+non-identifier module/callable names, non-list args, unsupported exceptions,
+and a case containing both/none of the required expectation shapes.
+
+- [ ] **Step 2: Run the focused eval-contract tests and verify RED**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_eval_contract.py' -v
+```
+
+Expected: FAIL because D1 has no closed replay declaration.
+
+- [ ] **Step 3: Define the optional protocol field and update D1**
+
+Document `python-call-v1` as data, never command text:
+
+```markdown
+- Replay probe: `{"kind":"python-call-v1",...}`
+```
+
+Only dotted Python identifiers, positional JSON-scalar args,
+`expect: returns`, and `expect: raises` with the built-in exception
+`ValueError` are supported in v1. Unknown kinds/fields hard-stop. The runtime,
+not the ledger or model, owns the no-shell probe runner.
+
+Keep the human evidence sentence and add the canonical compact JSON field to
+D1. Do not modify any preserved iteration-1 through iteration-3 repository.
+
+- [ ] **Step 4: Recompute only the canonical future fixture HEAD**
+
+Use the canonical materializer and fixed Git metadata. Update only the
+documented-drift expected HEAD in `fixture-manifest.json`; the changed-path
+inventory remains identical. Prove a fresh materialization is clean and its
+authority/base bytes are otherwise unchanged.
+
+- [ ] **Step 5: Run eval and shared suites**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests -p 'test_*.py' -v
+python -m unittest discover -s change-contract/tests -p 'test_*.py' -v
+python -m unittest discover -s exec-ticket/tests -p 'test_*.py' -v
+git diff --check
+```
+
+Expected: all tests PASS.
+
+- [ ] **Step 6: Commit**
+
+```text
+git add change-contract/references/contract-protocol.md \
+  check-contract/evals/fixtures/documented-drift \
+  check-contract/evals/fixture-manifest.json \
+  check-contract/tests/test_eval_contract.py
+git commit -m "feat: declare closed contract replay probes"
+```
+
+---
+
+### Task 4: Build the code phase and immutable session generations
 
 **Files:**
 
 - Modify: `check-contract/scripts/audit_runtime.py`
-- Create: `check-contract/scripts/check_contract.py`
+- Create: `check-contract/scripts/audit_session.py`
+- Create: `check-contract/scripts/audit_evidence.py`
 - Create: `check-contract/tests/runtime_fixtures.py`
-- Create: `check-contract/tests/test_audit_runtime.py`
-- Create: `check-contract/tests/test_check_contract_cli.py`
+- Create: `check-contract/tests/test_audit_runtime_start.py`
 
 **Interfaces:**
-
-- Consumes:
-  `contract_state.resolve_consumer(repo, branch, ticket,
-  allow_missing_ledger=True)` and Task 2's rule pack/kernel
-- Produces:
 
 ```python
 AuditRuntime.advance(
@@ -484,124 +581,55 @@ AuditRuntime.advance(
 ) -> NeedJudgment | AuditComplete | AuditStopped
 ```
 
-CLI:
+Task 4 implements `StartAudit` for a single target. Later tasks implement the
+continuations and compound transition without changing these envelopes.
 
-```text
-python check-contract/scripts/check_contract.py start \
-  --repo R --branch B --ticket T \
-  [--then-repo R2 --then-branch B2 --then-ticket T2] \
-  [--deadline-seconds N]
+- [ ] **Step 1: Build canonical test fixtures**
 
-python check-contract/scripts/check_contract.py continue \
-  --session OPAQUE --response RESPONSE_JSON
-```
-
-- [ ] **Step 1: Build reusable temporary-repository fixtures**
-
-`runtime_fixtures.py` must create approved repositories by calling the
-canonical check-contract materializer, never by duplicating contract state.
 Expose:
 
 ```python
-def materialized_repo(scenario: str, target: str = "target") -> ContextManager[Path]:
+def materialized_repo(
+    scenario: str, target: str = "target"
+) -> ContextManager[Path]:
     ...
 
 
-def valid_code_response(packet: dict, *, overrides: dict | None = None) -> dict:
-    ...
-
-
-def valid_reconciliation_response(
-    packet: dict, *, overrides: dict | None = None
-) -> dict:
-    ...
+def packet_of(result: NeedJudgment) -> dict:
+    return json.loads(result.packet_path.read_text(encoding="utf-8"))
 ```
 
-- [ ] **Step 2: Write failing phase and mutation tests**
+Fixtures call the canonical materializer and never duplicate contract state.
 
-Cover at minimum:
+- [ ] **Step 2: Write failing start/session tests**
 
-```python
-def test_three_calls_publish_only_active_report(self):
-    first = self.runtime.advance(StartAudit(...))
-    self.assertEqual(first.kind, "code")
-    self.assertFalse(report_path.exists())
+Cover:
 
-    second = self.runtime.advance(
-        ContinueAudit(first.session, valid_code_response(first.packet))
-    )
-    self.assertEqual(second.kind, "reconciliation")
-    self.assertFalse(report_path.exists())
-
-    final = self.runtime.advance(
-        ContinueAudit(second.session,
-                      valid_reconciliation_response(second.packet))
-    )
-    self.assertIsInstance(final, AuditComplete)
-    self.assertEqual(final.verdict, "NEEDS HUMAN REVIEW")
-    self.assertEqual(final.route, ("clean-up",))
-    self.assertEqual(changed_paths(repo), {active_report_path})
-```
-
-Also test:
-
+- shared two-root authority and exact base/HEAD;
+- malformed contract sections/IDs hard-stop before evidence;
+- exact clause IDs O/B/N/I/C/R/S/K/A;
 - code packet contains no ledger, summary, PR, or prior-report bytes;
-- reconciliation packet is unavailable before valid code judgment;
-- invalid, duplicate, stale, wrong-session, and out-of-phase responses stop;
-- missing evidence IDs and extra response keys stop;
-- expired deadline stops without writing;
-- authority/hash/identity/ancestry failure preserves a sentinel report;
-- HEAD, contract, ledger, summary, status, or prior-report freshness drift
-  stops without replacement;
-- a dirty worktree is disclosed and remains byte-identical;
-- a replay probe is selected only by issued ID, runs once without shell in an
-  archived recorded-HEAD tree, and cannot create target pycache;
-- an undeclared probe or second probe stops;
-- deterministic report bytes are identical across repeated fresh fixtures;
-- required validation cannot become a YAGNI item without explicit unearned
-  evidence;
-- the overengineered scenario routes to `clean-up`;
-- the violated-summary scenario routes to `exec-ticket`; and
-- the documented-drift scenario routes to `qa-ticket`.
+- one name inventory, one recorded-HEAD source/test capture, and one
+  deterministic full-HEAD reuse search;
+- dirty worktree disclosure without treating worktree source as authority;
+- deadline maximum 300 seconds and immutable absolute deadline;
+- session directory outside target with mode `0700`;
+- generation files read-only and content-addressed;
+- wrong digest/manifest rejected; and
+- authority failure preserves an existing report and writes nothing.
 
-- [ ] **Step 3: Write failing compound closure tests**
-
-Test the exact pressure case:
-
-```python
-def test_invalid_a_is_sealed_before_b_and_never_revisited(self):
-    first = self.runtime.advance(
-        StartAudit(primary=invalid_a, then=valid_b)
-    )
-    self.assertEqual(first.target, "then")
-    self.assertEqual(first.kind, "code")
-    self.assertTrue(first.a_closure_digest)
-    self.assertNotIn(str(invalid_a.repo), json.dumps(first.packet))
-
-    finish_b(first)
-    self.assertEqual(self.runner.calls_for_repo(invalid_a.repo),
-                     calls_before_b_started)
-    self.assertEqual(invalid_a.report.read_bytes(), sentinel)
-```
-
-For two valid targets, assert B does not start until A is `Closed`. B state may
-contain only the opaque A closure digest; it must contain no A path, SHA,
-sentinel, clause, finding, or authority text.
-
-- [ ] **Step 4: Run runtime tests and verify RED**
+- [ ] **Step 3: Verify RED**
 
 Run:
 
 ```text
 python -m unittest discover -s check-contract/tests \
-  -p 'test_audit_runtime.py' -v
-python -m unittest discover -s check-contract/tests \
-  -p 'test_check_contract_cli.py' -v
+  -p 'test_audit_runtime_start.py' -v
 ```
 
-Expected: FAIL because the continuation runtime and CLI do not exist.
+Expected: FAIL because start/session/evidence behavior does not exist.
 
-- [ ] **Step 5: Implement the public continuation envelopes**
+- [ ] **Step 4: Implement frozen public envelopes**
 
 Use frozen dataclasses:
 
@@ -611,6 +639,7 @@ class AuditTarget:
     repo: Path
     branch: str
     ticket: str
+    narrative_paths: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -635,7 +664,9 @@ class NeedJudgment:
     packet_sha256: str
     response_path: Path
     next_command: tuple[str, ...]
+    nonce: str
     a_closure_digest: str | None = None
+    closed_target: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -644,7 +675,7 @@ class AuditComplete:
     route: tuple[str, ...]
     report_path: Path
     report_sha256: str
-    mutation_attestation: dict
+    mutation_attestation: Mapping[str, object]
 
 
 @dataclass(frozen=True)
@@ -656,78 +687,382 @@ class AuditStopped:
     zero_target_writes: bool
 ```
 
-`AuditRuntime.advance` is the sole public workflow method.
+- [ ] **Step 5: Implement append-only immutable generations**
 
-- [ ] **Step 6: Implement private monotonic phases and sealed sessions**
+`audit_session.py` owns:
 
-Private phase values:
+1. a random run directory outside targets, mode `0700`;
+2. canonical `state.json` plus `manifest.json` under a directory named by the
+   state SHA-256;
+3. read-only generation files before returning;
+4. an opaque token carrying only random run ID and generation digest;
+5. atomic one-use claim via `mkdir(claims/<generation-digest>)`; and
+6. appending a new immutable generation or terminal tombstone without
+   modifying an old generation.
 
-```python
-class _Phase(str, Enum):
-    AUTHORITY_GUARDED = "authority_guarded"
-    CODE_FROZEN = "code_frozen"
-    CODE_JUDGED = "code_judged"
-    NARRATIVE_GUARDED = "narrative_guarded"
-    RECONCILED = "reconciled"
-    AGGREGATED = "aggregated"
-    FRESH = "fresh"
-    PUBLISHED = "published"
-    CLOSED = "closed"
-    STOPPED = "stopped"
+Every `NeedJudgment` has a new session token. The exact `response_path` is an
+absent inbox file outside every target.
+
+- [ ] **Step 6: Implement strict contract parsing and code evidence**
+
+Parse the verified approved contract before evidence capture; it is immutable
+authority, not author narrative. Issue O/B/N/I/C/R/S/K/A IDs and hard-stop
+missing/duplicate/malformed fixed sections.
+
+Derive one sorted literal reuse query from:
+
+- identifiers in changed implementation hunks;
+- identifiers in Outcome/B/C/R/expected-surface contract text; and
+- changed public symbol names.
+
+Drop a fixed checked-in stopword set and tokens shorter than three characters.
+Run one no-shell `git grep -n -I` against recorded full HEAD/full tree. Store
+query, scope, results, and truncation under typed evidence IDs. Truncation
+makes uncovered reuse indeterminate and cannot yield Reuse PASS.
+
+Return `NeedJudgment(kind="code")`; do not implement `continue` yet.
+
+- [ ] **Step 7: Run focused and shared suites**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_runtime_start.py' -v
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_policy.py' -v
+python -m unittest discover -s change-contract/tests -p 'test_*.py' -v
+python -m unittest discover -s exec-ticket/tests -p 'test_*.py' -v
+git diff --check
 ```
 
-The session directory is created with mode `0700` outside all targets.
-Runtime-owned state is canonical JSON plus a SHA-256 manifest and is chmod
-read-only before return. The response path is separate and absent at return.
-On continuation, verify the manifest, packet hash, response session, phase,
-deadline, and one-use nonce before changing state.
+Expected: all tests PASS.
 
-- [ ] **Step 7: Implement bounded Git-object evidence capture**
+- [ ] **Step 8: Commit**
 
-At start:
+```text
+git add check-contract/scripts/audit_runtime.py \
+  check-contract/scripts/audit_session.py \
+  check-contract/scripts/audit_evidence.py \
+  check-contract/tests/runtime_fixtures.py \
+  check-contract/tests/test_audit_runtime_start.py
+git commit -m "feat: freeze contract code evidence sessions"
+```
 
-1. resolve canonical root and approved authority with the shared resolver;
-2. record full base/HEAD and exact guard bytes/hashes;
-3. capture one name-status inventory with rename detection;
-4. capture one path-filtered base..HEAD diff and recorded-HEAD blobs for
-   changed implementation source/tests;
-5. capture one full-HEAD repository-wide reuse search result;
-6. issue typed evidence IDs such as
-   `behavior:BLOB-0001`, `public-contract:DIFF-0002`,
-   `risk:BLOB-0003`, `acceptance:TEST-0004`,
-   `surface:PATH-0005`, `complexity:PATH-0005`, and
-   `reuse:SEARCH-0006`;
-7. freeze partial evidence as indeterminate if the evidence deadline expires;
-8. only after the code account is frozen, parse the approved contract and
-   return the code packet.
+---
 
-No packet contains narrative contents or a writable target capability.
+### Task 5: Add the code-to-reconciliation continuation
 
-- [ ] **Step 8: Implement reconciliation, probe, freshness, and publication**
+**Files:**
 
-After a valid code response:
+- Modify: `check-contract/scripts/audit_runtime.py`
+- Create: `check-contract/scripts/audit_reconciliation.py`
+- Create: `check-contract/tests/test_audit_runtime_reconciliation.py`
 
-1. guard and read ledger, supplied summary/PR narrative when explicitly
-   supplied, and prior report;
-2. parse ledger D entries and conservative shell-free probe candidates;
-3. return the reconciliation packet;
-4. validate the reconciliation response and optional issued probe ID;
-5. execute the selected exact argv once in an outside-repository archived
-   tree with `PYTHONDONTWRITEBYTECODE=1`;
-6. aggregate axes/verdict/route from the policy pack;
-7. rerun authority resolution and every guard;
-8. render the report outside the target;
-9. atomically replace only the active `check-report.md`;
-10. compare the final target state with the initial state plus that one path;
-11. close the target, then either start `then` or return `AuditComplete`.
+**Interfaces:**
 
-Use `tempfile.mkstemp(dir=report.parent)` plus `os.replace`; always remove an
-unpublished temporary.
+Both response kinds use this exact envelope:
 
-- [ ] **Step 9: Implement the thin JSON CLI**
+```json
+{
+  "schema_version": 1,
+  "session": "<issued generation token>",
+  "nonce": "<issued one-use nonce>",
+  "packet_sha256": "<issued packet digest>",
+  "kind": "code",
+  "judgment": {}
+}
+```
 
-`check_contract.py` only parses arguments, calls `AuditRuntime.advance`, and
-prints canonical JSON:
+The second kind is `reconciliation`. Extra/missing keys hard-stop.
+
+- [ ] **Step 1: Write failing one-use/code-first tests**
+
+Cover invalid, extra-key, missing-key, wrong-session, wrong-kind,
+wrong-packet, wrong-nonce, duplicate, stale, out-of-phase, and expired
+responses. Each consumes the generation once and returns `AuditStopped`
+without a retry or report write.
+
+Prove no narrative bytes are read before a fully valid code envelope and
+Task 2 inner judgment. After acceptance, prove ledger, active prior report,
+explicit `narrative_paths`, and implementation-summary paths deferred from the
+name inventory are read from guarded sources.
+
+- [ ] **Step 2: Write failing ledger/reconciliation packet tests**
+
+Require:
+
+- strict D IDs/order and complete required D fields;
+- exact parsing of optional `python-call-v1`;
+- opaque issued probe IDs, never argv/code from the model;
+- exact code deviation IDs available for matching;
+- runtime-derived `acceptance_qa_exists`, not a model field;
+- `contract_obsolete` and every ledger status cite issued evidence IDs; and
+- the reconciliation packet contains guarded narrative only now.
+
+- [ ] **Step 3: Verify RED**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_runtime_reconciliation.py' -v
+```
+
+Expected: FAIL because `continue` and reconciliation parsing do not exist.
+
+- [ ] **Step 4: Implement claim-before-validation and strict envelopes**
+
+On `ContinueAudit`, verify immutable generation/manifest, atomically claim it,
+then validate the exact response path and envelope. Any error appends a
+terminal tombstone and returns `AuditStopped`. Never release a claim or accept
+a replacement response.
+
+- [ ] **Step 5: Implement narrative guards and reconciliation packet**
+
+After valid code judgment only:
+
+1. persist the validated frozen `CodeJudgment`;
+2. hash/read ledger, active prior report, deferred summary paths, and explicit
+   narrative paths;
+3. parse D entries and closed probe declarations;
+4. derive whether prior acceptance QA exists from guarded artifacts;
+5. issue a reconciliation packet/schema and new one-use nonce; and
+6. return `NeedJudgment(kind="reconciliation")`.
+
+Do not execute a probe, aggregate, render, or write a report in this task.
+
+- [ ] **Step 6: Run focused and cumulative suites**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_runtime_*.py' -v
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_policy.py' -v
+python -m unittest discover -s change-contract/tests -p 'test_*.py' -v
+git diff --check
+```
+
+Expected: all tests PASS.
+
+- [ ] **Step 7: Commit**
+
+```text
+git add check-contract/scripts/audit_runtime.py \
+  check-contract/scripts/audit_reconciliation.py \
+  check-contract/tests/test_audit_runtime_reconciliation.py
+git commit -m "feat: reconcile contract narratives after code"
+```
+
+---
+
+### Task 6: Close and publish a single-target audit
+
+**Files:**
+
+- Modify: `check-contract/scripts/audit_runtime.py`
+- Create: `check-contract/scripts/probe_runner.py`
+- Create: `check-contract/scripts/audit_report.py`
+- Create: `check-contract/tests/test_audit_runtime_close.py`
+
+**Interfaces:**
+
+- Consumes: a reconciliation `NeedJudgment` and exact response envelope
+- Produces: `AuditComplete` or `AuditStopped`
+
+- [ ] **Step 1: Write failing probe/aggregation tests**
+
+Require that a reconciliation judgment:
+
+- covers exactly every D ID and deviation match;
+- may select zero or one issued probe ID;
+- cannot submit argv, shell, code, route, verdict, report path, or aggregate;
+- cannot mark a probe-required D `VERIFIED` without selecting its probe;
+- runs the selected descriptor once from `git archive <recorded-head>`;
+- uses a runtime-owned no-shell Python runner, fixed environment,
+  `PYTHONDONTWRITEBYTECODE=1`, and bounded timeout;
+- removes the disposable tree and creates no target pycache; and
+- makes probe failure an observed `QUESTIONABLE`, never a retry.
+
+- [ ] **Step 2: Write failing freshness/publication tests**
+
+Cover HEAD, authority, contract, ledger, summary, status, prior-report, packet,
+and source guard drift. Each mismatch preserves the prior report.
+
+For every scenario require deterministic report bytes, exact stable U/F/D IDs,
+all report sections, exact verdict/route, atomic `os.replace`, and a final
+mutation set containing only the active report. Required validation alone is
+not a YAGNI item.
+
+- [ ] **Step 3: Verify RED**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_runtime_close.py' -v
+```
+
+Expected: FAIL because reconciliation close/publication does not exist.
+
+- [ ] **Step 4: Implement strict reconciliation validation and probe runner**
+
+The inner judgment contains exactly:
+
+```json
+{
+  "ledger_entries": {},
+  "deviation_matches": [],
+  "contract_obsolete": {
+    "value": false,
+    "evidence_ids": [],
+    "reason": "..."
+  },
+  "probe_id": null
+}
+```
+
+Each ledger entry contains closed status, evidence IDs, and reason. The
+runtime, not the model, supplies `acceptance_qa_exists`. If a selected issued
+probe succeeds, its probe-required D may remain `VERIFIED`; failure or absence
+makes it `QUESTIONABLE`.
+
+- [ ] **Step 5: Implement freshness, deterministic report, and atomic write**
+
+Rerun shared authority resolution and every byte/hash/status guard immediately
+before publication. Render outside the target, then use
+`tempfile.mkstemp(dir=report.parent)` plus `os.replace`. Remove an unpublished
+temporary in all failure paths.
+
+After replacement, attest that initial target state plus the active report is
+the exact final state. Return `AuditComplete` with policy-owned verdict/route,
+report digest, and immutable mutation attestation.
+
+- [ ] **Step 6: Run scenario and shared suites**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_runtime_*.py' -v
+python -m unittest discover -s check-contract/tests -p 'test_*.py' -v
+python -m unittest discover -s change-contract/tests -p 'test_*.py' -v
+python -m unittest discover -s exec-ticket/tests -p 'test_*.py' -v
+git diff --check
+```
+
+Expected: all tests PASS.
+
+- [ ] **Step 7: Commit**
+
+```text
+git add check-contract/scripts/audit_runtime.py \
+  check-contract/scripts/probe_runner.py \
+  check-contract/scripts/audit_report.py \
+  check-contract/tests/test_audit_runtime_close.py
+git commit -m "feat: publish deterministic contract audit reports"
+```
+
+---
+
+### Task 7: Enforce compound closure and expose the thin CLI
+
+**Files:**
+
+- Modify: `check-contract/scripts/audit_runtime.py`
+- Create: `check-contract/scripts/check_contract.py`
+- Create: `check-contract/tests/test_audit_runtime_compound.py`
+- Create: `check-contract/tests/test_check_contract_cli.py`
+
+**Interfaces:**
+
+```text
+python check-contract/scripts/check_contract.py start \
+  --repo R --branch B --ticket T \
+  [--narrative PATH ...] \
+  [--then-repo R2 --then-branch B2 --then-ticket T2] \
+  [--then-narrative PATH ...] \
+  [--deadline-seconds N]
+
+python check-contract/scripts/check_contract.py continue \
+  --session OPAQUE --response RESPONSE_JSON
+```
+
+- [ ] **Step 1: Write failing compound erasure tests**
+
+For invalid A then valid B:
+
+```python
+first = runtime.advance(StartAudit(primary=invalid_a, then=valid_b))
+self.assertEqual(first.target, "then")
+self.assertEqual(first.kind, "code")
+self.assertTrue(first.a_closure_digest)
+self.assertNotIn(str(invalid_a.repo), json.dumps(packet_of(first)))
+```
+
+Require A zero-write/prior-report-preserved attestation before any B action,
+then no later A filesystem/Git call. B generation contains only the opaque A
+closure digest—no A path, identity, SHA, sentinel, clause, finding, authority
+text, or capability.
+
+For valid A then valid B, B begins only after A is published and `Closed`.
+The public transition may expose only a path-free closure summary:
+
+```json
+{
+  "target": "primary",
+  "outcome": "closed | authority-stopped",
+  "zero_writes": true,
+  "report_only_write": false,
+  "prior_report_preserved": true,
+  "closure_digest": "..."
+}
+```
+
+For a published valid A, `zero_writes` is false and `report_only_write` is
+true. For an authority-stopped A, `zero_writes` is true,
+`report_only_write` is false, and `prior_report_preserved` is true.
+
+- [ ] **Step 2: Write failing CLI tests**
+
+Require canonical JSON output, installed-sibling discovery from script
+location, foreign-cwd operation, exact start/continue args, exit `0` for
+`NeedJudgment`/`AuditComplete`, exit `2` for `AuditStopped`, and no secrets or
+target capabilities in output.
+
+- [ ] **Step 3: Verify RED**
+
+Run:
+
+```text
+python -m unittest discover -s check-contract/tests \
+  -p 'test_audit_runtime_compound.py' -v
+python -m unittest discover -s check-contract/tests \
+  -p 'test_check_contract_cli.py' -v
+```
+
+Expected: FAIL because compound transition and CLI do not exist.
+
+- [ ] **Step 4: Implement target-stop versus run-stop**
+
+- Target authority hard stop: seal zero-write/prior-report preservation,
+  hash and erase target state, then allow `then`.
+- Run stop: session integrity, storage, deadline, or runtime failure returns
+  `AuditStopped` and never starts `then`.
+- Valid target close: publish/attest, hash and erase target state, then allow
+  `then`.
+
+Start B in a new random run directory. No B token or generation references the
+A run directory or generation; only the closure digest and path-free summary
+cross the boundary.
+
+- [ ] **Step 5: Implement the thin CLI**
+
+The CLI parses args, derives sibling `change-contract` from its absolute
+installed script location, calls only `AuditRuntime.advance`, and prints
+canonical JSON:
 
 ```python
 def main(argv=None):
@@ -737,37 +1072,32 @@ def main(argv=None):
     return 0 if isinstance(result, (NeedJudgment, AuditComplete)) else 2
 ```
 
-It must derive sibling `change-contract` from the absolute installed
-`check-contract` script location, not cwd.
-
-- [ ] **Step 10: Run runtime, CLI, and shared suites**
+- [ ] **Step 6: Run the full runtime/shared suites**
 
 Run:
 
 ```text
-python -m unittest discover -s check-contract/tests \
-  -p 'test_audit_*.py' -v
-python -m unittest discover -s check-contract/tests \
-  -p 'test_check_contract_cli.py' -v
+python -m unittest discover -s check-contract/tests -p 'test_*.py' -v
 python -m unittest discover -s change-contract/tests -p 'test_*.py' -v
 python -m unittest discover -s exec-ticket/tests -p 'test_*.py' -v
 git diff --check
 ```
 
-Expected: all tests PASS and diff check is clean.
+Expected: all tests PASS.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 7: Commit**
 
 ```text
-git add check-contract/scripts check-contract/tests/runtime_fixtures.py \
-  check-contract/tests/test_audit_runtime.py \
+git add check-contract/scripts/audit_runtime.py \
+  check-contract/scripts/check_contract.py \
+  check-contract/tests/test_audit_runtime_compound.py \
   check-contract/tests/test_check_contract_cli.py
-git commit -m "feat: enforce immutable contract audit runtime"
+git commit -m "feat: expose compound contract audit runtime"
 ```
 
 ---
 
-### Task 4: Replace prompt choreography with runtime choreography
+### Task 8: Replace prompt choreography with runtime choreography
 
 **Files:**
 
@@ -777,7 +1107,7 @@ git commit -m "feat: enforce immutable contract audit runtime"
 
 **Interfaces:**
 
-- Consumes: Task 3 CLI public envelopes
+- Consumes: Task 7 CLI public envelopes
 - Produces: an explicit-only skill that performs no direct repository
   inspection and follows only runtime-issued packets/next commands
 
@@ -862,7 +1192,7 @@ git commit -m "refactor: drive check-contract through runtime"
 
 ---
 
-### Task 5: Run immutable behavioral acceptance and benchmark the runtime
+### Task 9: Run immutable behavioral acceptance and benchmark the runtime
 
 **Files:**
 
@@ -872,7 +1202,7 @@ git commit -m "refactor: drive check-contract through runtime"
 
 **Interfaces:**
 
-- Consumes: exact reviewed Task 4 HEAD, assertion contract v2, isolated runner
+- Consumes: exact reviewed Task 8 HEAD, assertion contract v2, isolated runner
 - Produces: 18 immutable paired samples, objective grades, benchmark JSON/MD,
   static review viewer, and independent causal/acceptance verdict
 
@@ -947,7 +1277,7 @@ Acceptance requires both:
 independent ACCEPT
 ```
 
-If either fails, do not install or claim Task 5 complete. Diagnose the repeated
+If either fails, do not install or claim Task 9 complete. Diagnose the repeated
 runtime defect, add a behavior-level failing regression, implement the minimum
 fix in a new reviewed commit, and run a new immutable iteration directory.
 Never rewrite or selectively rerun the failed iteration.
@@ -960,7 +1290,7 @@ incomplete task; partial gains are evidence only.
 
 ---
 
-### Task 6: Install and document only the accepted runtime
+### Task 10: Install and document only the accepted runtime
 
 **Files:**
 
@@ -970,12 +1300,12 @@ incomplete task; partial gains are evidence only.
 
 **Interfaces:**
 
-- Consumes: Task 5's 9/9 + independent ACCEPT
+- Consumes: Task 9's 9/9 + independent ACCEPT
 - Produces: source/install byte parity and discoverable `/check-contract`
 
 - [ ] **Step 1: Gate installation on accepted evidence**
 
-Read the Task 5 report and independently require the exact accepted HEAD,
+Read the Task 9 report and independently require the exact accepted HEAD,
 9/9 treatment full passes, no hidden retries, and reviewer ACCEPT. Stop if any
 field is missing.
 
