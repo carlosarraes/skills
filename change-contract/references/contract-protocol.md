@@ -159,3 +159,105 @@ before the affected implementation path is used.
 The parent agent is the only writer. Workers treat the contract, approval, and
 ledger as read-only, return proposed entries, and let the parent independently
 verify their evidence and append accepted entries serially.
+
+## Contract check vocabulary
+
+This protocol is the single source of truth for check vocabulary, aggregation,
+precedence, routes, and stable IDs.
+
+Clause status: `MET | UNMET | EXCEEDED | INDETERMINATE`
+
+Ledger status: `VERIFIED | QUESTIONABLE | CONTRADICTED`
+
+Contract fidelity: `PASS | PARTIAL | FAIL`
+
+YAGNI: `PASS | WARNING | FAIL`
+
+Reuse: `PASS | WARNING | FAIL`
+
+Documented drift: `NONE | ACCEPTED | QUESTIONABLE`
+
+Undocumented drift: `NONE | PRESENT`
+
+Overall verdict: `PASS | PASS WITH DOCUMENTED DRIFT | NEEDS HUMAN REVIEW | CONTRACT VIOLATED`
+
+Recommended next skill: `<ordered route>`
+
+### Aggregation
+
+Contract fidelity owns Outcome, B/N/I/C clauses, and whether each B's
+acceptance evidence actually demonstrates the behavior. Reuse clauses,
+expected surface, and complexity budget still receive clause statuses, but
+aggregate into Reuse, YAGNI, and drift—not fidelity. Thus a behaviorally correct
+implementation with an unexpected helper or surface remains a fidelity `PASS`
+while simplicity and drift remain visible.
+
+- Contract fidelity `FAIL`: any Outcome/B/N/I/C is `UNMET`, or `EXCEEDED` in a
+  way that changes an approved behavior, public contract, or risk boundary.
+- Contract fidelity `PARTIAL`: no `FAIL` condition, but any fidelity-owned
+  clause or mapped acceptance proof is `INDETERMINATE`.
+- Contract fidelity `PASS`: every fidelity-owned clause is determinate and
+  satisfied.
+- YAGNI `FAIL`: any proven unearned item adds a module, runtime dependency,
+  configuration, public interface, violates a numeric complexity budget of
+  zero, or two or more localized unearned layers, wrappers, or branches exist.
+- YAGNI `WARNING`: exactly one localized item is plausibly unearned but does
+  not violate an explicit zero budget. YAGNI `PASS`: no proven or questionable
+  item exists.
+- Reuse `FAIL`: a compatible current helper, component, service, or platform
+  feature is demonstrably duplicated or bypassed. Reuse `WARNING`:
+  compatibility remains indeterminate or only a near-duplicate exists. Reuse
+  `PASS`: every changed responsibility has an evidenced reuse/no-reuse verdict.
+- Documented drift `NONE`: zero D entries. Documented drift `ACCEPTED`: every D
+  entry is `VERIFIED` and bounded. Documented drift `QUESTIONABLE`: any D entry
+  is `QUESTIONABLE`, `CONTRADICTED`, incomplete, or actually contract-changing.
+- Undocumented drift `PRESENT`: any implementation-path, expected-surface, or
+  complexity-budget deviation lacks a matching accepted D entry. Otherwise it
+  is `NONE`.
+
+An implementation differing from the approved contract is
+implementation-wrong unless explicit current authority proves the contract
+obsolete. Implementer summaries, code shape, or tests written after the
+contract are not such authority.
+
+### Routing
+
+| Finding | Route |
+|---|---|
+| Missing/incorrect behavior | `exec-ticket` |
+| Correct behavior plus duplication/bloat/missed reuse | `clean-up` |
+| Correctness and simplicity | `exec-ticket`, then `clean-up` |
+| Contract obsolete/wrong | `change-contract` for a new human-approved version |
+| Contract satisfied and lean | `qa-ticket` |
+| Acceptance QA exists and review evidence is needed | `qa-pr` |
+
+Apply this exhaustive precedence after authority succeeds:
+
+| Order | Observable condition | Overall verdict | Route |
+|---:|---|---|---|
+| 1 | Approved contract is demonstrably obsolete/wrong because current human/product authority or repository constraints conflict with it | `CONTRACT VIOLATED` | `change-contract` |
+| 2 | Fidelity `FAIL`; contract remains the authority; YAGNI/Reuse also has findings | `CONTRACT VIOLATED` | `exec-ticket`, then `clean-up` |
+| 3 | Fidelity `FAIL`; contract remains the authority; no simplicity finding | `CONTRACT VIOLATED` | `exec-ticket` |
+| 4 | Fidelity `PARTIAL`, documented drift `QUESTIONABLE`, or undocumented drift `PRESENT`, with a YAGNI/Reuse finding | `NEEDS HUMAN REVIEW` | `clean-up`; cite the human-review precondition |
+| 5 | Fidelity `PARTIAL` or unresolved drift without a code correction finding | `NEEDS HUMAN REVIEW` | `qa-ticket`; cite the evidence/human-review precondition |
+| 6 | Fidelity `PASS` and YAGNI/Reuse is `WARNING` or `FAIL` | `NEEDS HUMAN REVIEW` | `clean-up` |
+| 7 | All three axes pass, documented drift `ACCEPTED`, undocumented drift `NONE` | `PASS WITH DOCUMENTED DRIFT` | `qa-pr` if acceptance QA already exists, otherwise `qa-ticket` |
+| 8 | All three axes pass and both drift fields are `NONE` | `PASS` | `qa-pr` if acceptance QA already exists, otherwise `qa-ticket` |
+
+### Stable IDs
+
+Generate stable IDs before aggregation:
+
+- `O1` for Outcome;
+- preserve authored `B*`, `N*`, `I*`, `C*`, and `R*`;
+- `S1..Sn` for expected-surface bullets in contract order;
+- `K-MODULES`, `K-DEPENDENCIES`, `K-ABSTRACTIONS`, `K-CONFIGURATION`, and
+  `K-PUBLIC-INTERFACES` for complexity budget rows;
+- `A-<B-id>` for each acceptance mapping;
+- preserve `D1..Dn` ledger order;
+- `U1..Un` for undocumented deviations sorted by first file path, then line,
+  then description; and
+- `F1..Fn` for findings sorted by verdict precedence, then clause/deviation ID,
+  then file/line.
+
+The route cites stable F/U/D IDs.

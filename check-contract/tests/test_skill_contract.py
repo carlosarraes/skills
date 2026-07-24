@@ -1,0 +1,292 @@
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).parents[1]
+SKILL = ROOT / "SKILL.md"
+PROTOCOL = ROOT.parent / "change-contract" / "references" / "contract-protocol.md"
+
+
+def normalized(text):
+    return " ".join(text.split())
+
+
+class CheckContractSkillTests(unittest.TestCase):
+    def setUp(self):
+        self.skill = SKILL.read_text(encoding="utf-8")
+        self.protocol = PROTOCOL.read_text(encoding="utf-8")
+        self.flat_skill = normalized(self.skill)
+        self.flat_protocol = normalized(self.protocol)
+
+    def assert_ordered(self, text, *phrases):
+        positions = [text.index(phrase) for phrase in phrases]
+        self.assertEqual(positions, sorted(positions), phrases)
+
+    def test_is_explicitly_user_invoked_and_compact(self):
+        frontmatter = self.skill.split("---", 2)[1]
+        self.assertIn("name: check-contract", frontmatter)
+        self.assertIn("disable-model-invocation: true", frontmatter)
+        self.assertLessEqual(len(self.skill.split()), 900)
+
+    def test_has_six_ordered_steps_with_completion_gates(self):
+        headings = [
+            "### Step 1: Resolve and verify authority",
+            "### Step 2: Derive code-as-shipped first",
+            "### Step 3: Classify contract fidelity",
+            "### Step 4: Audit YAGNI and reuse",
+            "### Step 5: Reconcile ledger and narrative",
+            "### Step 6: Replace report and route",
+        ]
+        self.assert_ordered(self.skill, *headings)
+        self.assertEqual(self.skill.count("### Step "), 6)
+        self.assertEqual(self.skill.count("**Complete when:**"), 6)
+        for start, end in zip(headings, headings[1:] + [None]):
+            section = self.skill[self.skill.index(start):]
+            if end:
+                section = section[:section.index(end)]
+            self.assertEqual(section.count("**Complete when:**"), 1)
+
+    def test_reads_protocol_before_absolute_read_only_resolution(self):
+        for phrase in (
+            "Read the sibling protocol completely",
+            "<change-contract-skill-dir>/references/contract-protocol.md",
+            "absolute directory containing this loaded `SKILL.md`",
+            "path inside the target repository",
+            "resolve-consumer",
+            "--allow-missing-ledger",
+        ):
+            self.assertIn(phrase, self.skill)
+        self.assertNotIn(
+            "python change-contract/scripts/contract_state.py",
+            self.skill,
+        )
+        self.assert_ordered(
+            self.skill,
+            "Read the sibling protocol completely",
+            "resolve-consumer",
+        )
+        self.assertRegex(
+            self.skill,
+            r"python <change-contract-skill-dir>/scripts/contract_state\.py "
+            r"resolve-consumer[\s\\]+"
+            r".*--repo <path-inside-target-repository>[\s\\]+"
+            r".*--branch <full-branch>[\s\\]+"
+            r".*--ticket <ticket>[\s\\]+"
+            r".*--allow-missing-ledger",
+        )
+
+    def test_authority_resolution_is_complete_and_immutable(self):
+        for phrase in (
+            "canonical `git rev-parse --show-toplevel` root",
+            ".notes/<branch-dir>/contract",
+            "ai_docs/<branch-dir>/contract",
+            "ambiguous",
+            "orphaned",
+            "true absence",
+            "active version",
+            "approval version",
+            "full base",
+            "full HEAD",
+            "approval bytes",
+            "approval SHA-256",
+            "contract SHA-256",
+            "branch",
+            "ticket",
+            "ancestry",
+            "worktree state",
+        ):
+            self.assertIn(phrase.lower(), self.flat_skill.lower())
+        self.assertIn(
+            "Hard-stop true absence or any authority failure",
+            self.flat_skill,
+        )
+        self.assertIn(
+            "preserve any existing report",
+            self.flat_skill,
+        )
+
+    def test_code_first_order_precedes_ledger_and_narrative(self):
+        self.assert_ordered(
+            self.skill,
+            "### Step 2: Derive code-as-shipped first",
+            "### Step 3: Classify contract fidelity",
+            "### Step 4: Audit YAGNI and reuse",
+            "### Step 5: Reconcile ledger and narrative",
+        )
+        step_two = self.skill[
+            self.skill.index("### Step 2:"):
+            self.skill.index("### Step 3:")
+        ]
+        for phrase in (
+            "`<base>..<HEAD>`",
+            "renames",
+            "contract artifacts",
+            "changed source and tests",
+            "surrounding code",
+            "public contracts",
+            "side effects",
+            "persisted state",
+            "integrations",
+            "`file:line`",
+        ):
+            self.assertIn(phrase, step_two)
+        self.assertIn(
+            normalized(
+                "Do not read the ledger, report, supplied summary, or PR "
+                "narrative"
+            ),
+            normalized(step_two),
+        )
+
+    def test_all_clause_families_and_axes_are_classified(self):
+        for token in (
+            "Outcome",
+            "B/N/I/C/R",
+            "expected-surface",
+            "complexity-budget",
+            "acceptance-evidence",
+            "Contract fidelity",
+            "YAGNI",
+            "Reuse",
+            "Documented drift",
+            "Undocumented drift",
+        ):
+            self.assertIn(token, self.skill)
+        self.assertIn(
+            "Clause status: `MET | UNMET | EXCEEDED | INDETERMINATE`",
+            self.protocol,
+        )
+        self.assertIn(
+            "Ledger status: `VERIFIED | QUESTIONABLE | CONTRADICTED`",
+            self.protocol,
+        )
+
+    def test_protocol_owns_exact_taxonomy_aggregation_and_precedence(self):
+        required = (
+            "Contract fidelity: `PASS | PARTIAL | FAIL`",
+            "YAGNI: `PASS | WARNING | FAIL`",
+            "Reuse: `PASS | WARNING | FAIL`",
+            "Documented drift: `NONE | ACCEPTED | QUESTIONABLE`",
+            "Undocumented drift: `NONE | PRESENT`",
+            "Overall verdict: `PASS | PASS WITH DOCUMENTED DRIFT | NEEDS HUMAN "
+            "REVIEW | CONTRACT VIOLATED`",
+            "Recommended next skill: `<ordered route>`",
+            "Contract fidelity owns Outcome, B/N/I/C clauses",
+            "YAGNI `FAIL`",
+            "YAGNI `WARNING`",
+            "Reuse `FAIL`",
+            "Reuse `WARNING`",
+            "Documented drift `NONE`",
+            "Documented drift `ACCEPTED`",
+            "Documented drift `QUESTIONABLE`",
+            "Undocumented drift `PRESENT`",
+            "Apply this exhaustive precedence after authority succeeds",
+        )
+        for phrase in required:
+            self.assertIn(phrase, self.flat_protocol)
+        self.assertRegex(
+            self.protocol,
+            r"\| 1 \|.*CONTRACT VIOLATED.*change-contract.*\n"
+            r"\| 2 \|.*CONTRACT VIOLATED.*exec-ticket.*clean-up.*\n"
+            r"\| 3 \|.*CONTRACT VIOLATED.*exec-ticket.*\n"
+            r"\| 4 \|.*NEEDS HUMAN REVIEW.*clean-up.*\n"
+            r"\| 5 \|.*NEEDS HUMAN REVIEW.*qa-ticket.*\n"
+            r"\| 6 \|.*NEEDS HUMAN REVIEW.*clean-up.*\n"
+            r"\| 7 \|.*PASS WITH DOCUMENTED DRIFT.*qa-pr.*qa-ticket.*\n"
+            r"\| 8 \|.*PASS.*qa-pr.*qa-ticket",
+        )
+
+    def test_protocol_owns_routes_and_stable_ids(self):
+        for row in (
+            "| Missing/incorrect behavior | `exec-ticket` |",
+            "| Correct behavior plus duplication/bloat/missed reuse | `clean-up` |",
+            "| Correctness and simplicity | `exec-ticket`, then `clean-up` |",
+            "| Contract obsolete/wrong | `change-contract` for a new human-approved version |",
+            "| Contract satisfied and lean | `qa-ticket` |",
+            "| Acceptance QA exists and review evidence is needed | `qa-pr` |",
+        ):
+            self.assertIn(row, self.protocol)
+        for phrase in (
+            "`O1` for Outcome",
+            "preserve authored `B*`, `N*`, `I*`, `C*`, and `R*`",
+            "`S1..Sn`",
+            "`K-MODULES`",
+            "`K-DEPENDENCIES`",
+            "`K-ABSTRACTIONS`",
+            "`K-CONFIGURATION`",
+            "`K-PUBLIC-INTERFACES`",
+            "`A-<B-id>`",
+            "preserve `D1..Dn`",
+            "`U1..Un`",
+            "`F1..Fn`",
+            "The route cites stable F/U/D IDs",
+        ):
+            self.assertIn(phrase, self.protocol)
+
+    def test_report_shape_and_rows_are_fixed(self):
+        headings = (
+            "# Contract Check: <ticket> — v<version>",
+            "Audit range: <full-base>..<full-head>",
+            "Worktree state: <clean or limitation>",
+            "Contract SHA-256: <digest>",
+            "## Code-first observed behavior",
+            "## Clause-by-clause fidelity",
+            "## YAGNI and reuse",
+            "## Drift reconciliation",
+            "## Ordered findings",
+            "## Verdict and route",
+            "<exact verdict block>",
+            "## Mutation attestation",
+        )
+        self.assert_ordered(self.skill, *headings)
+        self.assertIn(
+            "Clause rows contain ID, status, evidence, and reason",
+            self.flat_skill,
+        )
+        self.assertIn(
+            "Drift rows contain D/deviation ID, status, evidence, and documentation state",
+            self.flat_skill,
+        )
+        self.assertIn("stable finding IDs", self.flat_skill)
+
+    def test_final_resolution_and_atomic_replacement_are_adjacent(self):
+        step_six = self.skill[self.skill.index("### Step 6:"):]
+        self.assertRegex(
+            normalized(step_six).lower(),
+            r"render the complete report outside the repository\. Immediately "
+            r"rerun .*resolve-consumer.* require equality of the canonical "
+            r"root, full HEAD, active version, approval bytes and SHA-256, "
+            r"contract SHA-256, full base, branch/ticket identity, and ancestry\."
+            .lower(),
+        )
+        self.assert_ordered(
+            step_six,
+            "Immediately rerun",
+            "Atomically create or replace",
+        )
+        for phrase in (
+            "source",
+            "contract",
+            "ledger",
+            "status",
+            "prior report",
+            "guarded hashes",
+            "freshness mismatch",
+            "preserve the previous report",
+            "no other audit-caused final delta",
+        ):
+            self.assertIn(normalized(phrase), normalized(step_six))
+
+    def test_only_report_mutation_and_no_remediation_or_posting(self):
+        for phrase in (
+            "The only permitted repository mutation is atomic replacement",
+            "still-active `check-report.md`",
+            "Do not fix code",
+            "Do not edit the contract or ledger",
+            "Do not post",
+        ):
+            self.assertIn(normalized(phrase).lower(), self.flat_skill.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()
