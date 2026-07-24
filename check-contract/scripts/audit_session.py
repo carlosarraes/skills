@@ -32,6 +32,7 @@ import fcntl
 import errno
 import ctypes
 import queue
+import signal
 import threading
 import time
 import weakref
@@ -59,9 +60,11 @@ _TRACKED_TRANSACTION_OWNERSHIPS = set()
 _PENDING_LEASE_CLOSE_FDS = set()
 _PENDING_TRANSACTION_CLOSE_FDS = set()
 _CONSUMED_DESCRIPTOR_OWNERSHIPS = set()
+_QUARANTINED_DESCRIPTOR_OWNERSHIPS = set()
 _CLEANUP_QUEUE = queue.SimpleQueue()
 _CLEANUP_THREAD = None
 _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
+_CLOSE_ATTEMPT_LOCAL = threading.local()
 _LIBC = ctypes.CDLL(None, use_errno=True)
 _CLOSE_RANGE = getattr(_LIBC, "close_range", None)
 _KERNEL_FD_MAX = (
@@ -90,8 +93,12 @@ class _OneShotToken:
     def release(self) -> None:
         if self._released:
             return
+        try:
+            self._lock.release()
+        except RuntimeError:
+            self._released = True
+            return
         self._released = True
-        self._lock.release()
 
     def wait(self) -> None:
         self._lock.acquire()
@@ -266,6 +273,9 @@ def _close_owned_descriptor(descriptor: int) -> None:
             os.strerror(number),
             descriptor,
         )
+    attempt = getattr(_CLOSE_ATTEMPT_LOCAL, "current", None)
+    if attempt is not None and attempt.descriptor == descriptor:
+        attempt.completed_successfully = True
 
 
 def _require_kernel_fd(descriptor) -> None:
@@ -354,19 +364,80 @@ def _close_owned_record(kind: str, ownership) -> bool:
     return _forget_owned_record(kind, ownership)
 
 
+class _DescriptorCloseAttempt:
+    def __init__(self, descriptor: int):
+        self.descriptor = descriptor
+        self.completed_successfully = False
+
+
+@contextmanager
+def _defer_sigint():
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous_handler = signal.getsignal(signal.SIGINT)
+    deferred = []
+
+    def defer(signum, frame):
+        deferred.append((signum, frame))
+
+    signal.signal(signal.SIGINT, defer)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
+        if deferred and previous_handler != signal.SIG_IGN:
+            signum, frame = deferred[0]
+            if previous_handler == signal.SIG_DFL:
+                signal.raise_signal(signum)
+            else:
+                previous_handler(signum, frame)
+
+
+def _record_consumed_slot(ownership) -> None:
+    _CONSUMED_DESCRIPTOR_OWNERSHIPS.add(ownership)
+    _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
+
+
 def _consume_owned_slot(ownership) -> bool:
-    """Quarantine an exact slot before the close syscall can be interrupted."""
+    """Close an exact slot while preserving the syscall's known outcome."""
     if ownership in _CONSUMED_DESCRIPTOR_OWNERSHIPS:
         return True
-    _CONSUMED_DESCRIPTOR_OWNERSHIPS.add(ownership)
-    try:
-        _close_owned_descriptor(ownership[0])
-    except OSError:
-        _CONSUMED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
+    if ownership in _QUARANTINED_DESCRIPTOR_OWNERSHIPS:
         return False
-    except BaseException:
-        raise
-    return True
+    with _defer_sigint():
+        _QUARANTINED_DESCRIPTOR_OWNERSHIPS.add(ownership)
+        attempt = _DescriptorCloseAttempt(ownership[0])
+        previous_attempt = getattr(
+            _CLOSE_ATTEMPT_LOCAL,
+            "current",
+            None,
+        )
+        _CLOSE_ATTEMPT_LOCAL.current = attempt
+        try:
+            _close_owned_descriptor(ownership[0])
+        except OSError:
+            if attempt.completed_successfully:
+                _record_consumed_slot(ownership)
+                raise
+            _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
+            return False
+        except BaseException:
+            if attempt.completed_successfully:
+                _record_consumed_slot(ownership)
+            else:
+                _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(
+                    ownership
+                )
+            raise
+        else:
+            _record_consumed_slot(ownership)
+            return True
+        finally:
+            if previous_attempt is None:
+                del _CLOSE_ATTEMPT_LOCAL.current
+            else:
+                _CLOSE_ATTEMPT_LOCAL.current = previous_attempt
 
 
 def _forget_owned_record(kind: str, ownership) -> bool:
@@ -376,6 +447,7 @@ def _forget_owned_record(kind: str, ownership) -> bool:
     if kind == "lease":
         _LEASE_REFS.pop(ownership[1], None)
     _CONSUMED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
+    _QUARANTINED_DESCRIPTOR_OWNERSHIPS.discard(ownership)
     return True
 
 
@@ -614,31 +686,46 @@ class ClaimLease:
         self.digest = digest
         self._descriptor = descriptor
         self.closed = True
-        with _audit_fd_lifecycle(), _ownership_publication():
-            if not isinstance(owner, SessionStore):
-                raise SessionIntegrityError(
-                    "claim lease owner is invalid"
+        cleanup_ownership = None
+        try:
+            with _audit_fd_lifecycle(), _ownership_publication():
+                if not isinstance(owner, SessionStore):
+                    raise SessionIntegrityError(
+                        "claim lease owner is invalid"
+                    )
+                ownership = owner._tracked_claim_ownerships.get(
+                    descriptor
                 )
-            ownership = owner._tracked_claim_ownerships.get(
-                descriptor
-            )
-            if ownership is None:
-                raise SessionIntegrityError(
-                    "claim descriptor was not opened by this store"
+                if ownership is None:
+                    raise SessionIntegrityError(
+                        "claim descriptor was not opened by this store"
+                    )
+                ownerships = [
+                    candidate
+                    for candidate in _TRACKED_LEASE_OWNERSHIPS
+                    if candidate[0] == descriptor
+                ]
+                if ownerships != [ownership]:
+                    raise SessionIntegrityError(
+                        "claim descriptor ownership is ambiguous"
+                    )
+                self._tracking_token = ownership[1]
+                cleanup_ownership = ownership
+                _LEASE_REFS[self._tracking_token] = weakref.ref(self)
+                owner._tracked_claim_ownerships.pop(
+                    descriptor,
+                    None,
                 )
-            ownerships = [
-                candidate
-                for candidate in _TRACKED_LEASE_OWNERSHIPS
-                if candidate[0] == descriptor
-            ]
-            if ownerships != [ownership]:
-                raise SessionIntegrityError(
-                    "claim descriptor ownership is ambiguous"
+                self.closed = False
+        except BaseException:
+            if cleanup_ownership is not None:
+                self._descriptor = -1
+                self.closed = True
+                _schedule_pending_cleanup(
+                    "lease",
+                    cleanup_ownership,
                 )
-            self._tracking_token = ownership[1]
-            _LEASE_REFS[self._tracking_token] = weakref.ref(self)
-            owner._tracked_claim_ownerships.pop(descriptor, None)
-            self.closed = False
+            raise
 
     def close(self) -> None:
         if self.closed:
@@ -683,17 +770,30 @@ def _close_child_snapshot(ownerships) -> set:
     for ownership in ownerships:
         if ownership in _CONSUMED_DESCRIPTOR_OWNERSHIPS:
             continue
+        if ownership in _QUARANTINED_DESCRIPTOR_OWNERSHIPS:
+            failed.add(ownership)
+            continue
+        completed = False
         for _ in range(2):
             try:
                 consumed = _consume_owned_slot(ownership)
             except BaseException:
-                _CONSUMED_DESCRIPTOR_OWNERSHIPS.discard(
+                if (
                     ownership
-                )
+                    in _CONSUMED_DESCRIPTOR_OWNERSHIPS
+                ):
+                    completed = True
+                    break
+                if (
+                    ownership
+                    in _QUARANTINED_DESCRIPTOR_OWNERSHIPS
+                ):
+                    break
                 continue
             if consumed:
+                completed = True
                 break
-        else:
+        if not completed:
             failed.add(ownership)
     return failed
 
@@ -709,10 +809,15 @@ def _after_fork_child() -> None:
     global _PENDING_LEASE_CLOSE_FDS
     global _PENDING_TRANSACTION_CLOSE_FDS
     global _CONSUMED_DESCRIPTOR_OWNERSHIPS
+    global _QUARANTINED_DESCRIPTOR_OWNERSHIPS
     global _CLEANUP_QUEUE
     global _CLEANUP_THREAD
     global _CLEANUP_SUPERVISOR_LOCK
+    global _CLOSE_ATTEMPT_LOCAL
 
+    inherited_quarantines = set(
+        _QUARANTINED_DESCRIPTOR_OWNERSHIPS
+    )
     failed_leases = set(_TRACKED_LEASE_OWNERSHIPS)
     failed_transactions = set(
         _TRACKED_TRANSACTION_OWNERSHIPS
@@ -743,9 +848,14 @@ def _after_fork_child() -> None:
             failed_transactions
         )
         _CONSUMED_DESCRIPTOR_OWNERSHIPS = set()
+        _QUARANTINED_DESCRIPTOR_OWNERSHIPS = (
+            inherited_quarantines
+            & (failed_leases | failed_transactions)
+        )
         _CLEANUP_QUEUE = queue.SimpleQueue()
         _CLEANUP_THREAD = None
         _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
+        _CLOSE_ATTEMPT_LOCAL = threading.local()
         for ownership in failed_leases:
             _queue_cleanup("lease", ownership)
         for ownership in failed_transactions:
