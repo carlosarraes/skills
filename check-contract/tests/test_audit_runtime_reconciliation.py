@@ -3237,6 +3237,66 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                     ownership
                 )
 
+    def test_real_sigint_between_pending_publication_and_queue_recovers(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            lease = self.module.SessionStore(root).claim_lease(
+                started.session
+            )
+            session_module = sys.modules["audit_session"]
+            descriptor = lease._descriptor
+            ownership = (descriptor, lease._tracking_token)
+            original_queue = session_module._queue_cleanup
+            original_handler = signal.getsignal(signal.SIGINT)
+            queue_calls = 0
+
+            def interrupt_before_first_put(kind, value):
+                nonlocal queue_calls
+                queue_calls += 1
+                if queue_calls == 1 and value == ownership:
+                    os.kill(os.getpid(), signal.SIGINT)
+                return original_queue(kind, value)
+
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+            try:
+                with mock.patch.object(
+                    session_module,
+                    "_queue_cleanup",
+                    interrupt_before_first_put,
+                ):
+                    with self.assertRaises(KeyboardInterrupt):
+                        lease.close()
+
+                deadline = time.monotonic() + 1
+                while (
+                    ownership
+                    in session_module._TRACKED_LEASE_OWNERSHIPS
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail(
+                            "interrupted handoff was not recovered"
+                        )
+                    time.sleep(0.005)
+                self.assertGreaterEqual(queue_calls, 2)
+                self.assertTrue(lease.closed)
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+            finally:
+                signal.signal(signal.SIGINT, original_handler)
+                session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                    ownership
+                )
+                session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                    ownership
+                )
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
     def test_consumed_slot_survives_each_bookkeeping_failure(self):
         session_module = sys.modules["audit_session"]
 
@@ -4444,6 +4504,82 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                             os.close(descriptor)
                         except OSError:
                             pass
+
+    def test_claim_helper_sigint_cleans_without_exception_gc(self):
+        session_module = sys.modules["audit_session"]
+        original_helper = (
+            session_module._claim_constructor_ownership
+        )
+        original_handler = signal.getsignal(signal.SIGINT)
+        retained_errors = []
+        interrupted = False
+
+        def interrupt_inside_helper(owner, descriptor):
+            nonlocal interrupted
+            if not interrupted:
+                interrupted = True
+                os.kill(os.getpid(), signal.SIGINT)
+            return original_helper(owner, descriptor)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = self.module.SessionStore(Path(temporary))
+            descriptor = store._open_directory(temporary)
+            ownership = (descriptor, object())
+            store._tracked_claim_ownerships[descriptor] = ownership
+            session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+            try:
+                with mock.patch.object(
+                    session_module,
+                    "_claim_constructor_ownership",
+                    interrupt_inside_helper,
+                ):
+                    try:
+                        session_module.ClaimLease(
+                            store,
+                            "a" * 32,
+                            "b" * 64,
+                            descriptor,
+                        )
+                    except KeyboardInterrupt as error:
+                        retained_errors.append(error)
+                    else:
+                        self.fail("claim helper SIGINT was not raised")
+
+                self.assertEqual(len(retained_errors), 1)
+                self.assertNotIn(
+                    descriptor,
+                    store._tracked_claim_ownerships,
+                )
+                deadline = time.monotonic() + 1
+                while (
+                    ownership
+                    in session_module._TRACKED_LEASE_OWNERSHIPS
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail(
+                            "retained helper error blocked cleanup"
+                        )
+                    time.sleep(0.005)
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+            finally:
+                signal.signal(signal.SIGINT, original_handler)
+                retained_errors.clear()
+                store._tracked_claim_ownerships.pop(
+                    descriptor,
+                    None,
+                )
+                session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                    ownership
+                )
+                session_module._PENDING_LEASE_CLOSE_FDS.discard(
+                    ownership
+                )
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
 
     @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
     def test_child_cleanup_start_failure_can_be_retried(self):

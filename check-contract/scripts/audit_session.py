@@ -498,9 +498,22 @@ def _background_pending_cleanup() -> None:
 
 def _schedule_pending_cleanup(kind: str, ownership) -> None:
     pending, _ = _ownership_state(kind)
-    pending.add(ownership)
-    _queue_cleanup(kind, ownership)
-    _ensure_cleanup_worker()
+    try:
+        pending.add(ownership)
+        _queue_cleanup(kind, ownership)
+        _ensure_cleanup_worker()
+    except BaseException:
+        try:
+            try:
+                pending.add(ownership)
+            finally:
+                try:
+                    _queue_cleanup(kind, ownership)
+                finally:
+                    _ensure_cleanup_worker()
+        except BaseException:
+            pass
+        raise
 
 
 def _ensure_cleanup_worker() -> bool:
@@ -661,18 +674,20 @@ class ClaimLease:
     """Process-scoped capability proving ownership of one claimed transition."""
 
     def __init__(self, owner, run_id: str, digest: str, descriptor: int):
-        _require_kernel_fd(descriptor)
-        self._owner = owner
-        self._creator_pid = os.getpid()
-        self.run_id = run_id
-        self.digest = digest
-        self._descriptor = descriptor
-        self.closed = True
-        cleanup_ownership = _claim_constructor_ownership(
-            owner,
-            descriptor,
-        )
+        cleanup_ownership = None
         try:
+            self.closed = True
+            self._descriptor = -1
+            _require_kernel_fd(descriptor)
+            self._owner = owner
+            self._creator_pid = os.getpid()
+            self.run_id = run_id
+            self.digest = digest
+            self._descriptor = descriptor
+            cleanup_ownership = _claim_constructor_ownership(
+                owner,
+                descriptor,
+            )
             with _audit_fd_lifecycle(), _ownership_publication():
                 if not isinstance(owner, SessionStore):
                     raise SessionIntegrityError(
@@ -707,25 +722,35 @@ class ClaimLease:
                 )
                 self.closed = False
         except BaseException:
+            if cleanup_ownership is None:
+                cleanup_ownership = (
+                    _exact_claim_store_ownership(
+                        owner,
+                        descriptor,
+                    )
+                )
             if cleanup_ownership is not None:
                 self._descriptor = -1
                 self.closed = True
                 try:
-                    if (
-                        owner._tracked_claim_ownerships.get(
-                            descriptor
+                    try:
+                        if (
+                            owner._tracked_claim_ownerships.get(
+                                descriptor
+                            )
+                            is cleanup_ownership
+                        ):
+                            owner._tracked_claim_ownerships.pop(
+                                descriptor,
+                                None,
+                            )
+                    finally:
+                        _schedule_pending_cleanup(
+                            "lease",
+                            cleanup_ownership,
                         )
-                        is cleanup_ownership
-                    ):
-                        owner._tracked_claim_ownerships.pop(
-                            descriptor,
-                            None,
-                        )
-                finally:
-                    _schedule_pending_cleanup(
-                        "lease",
-                        cleanup_ownership,
-                    )
+                except BaseException:
+                    pass
             raise
 
     def close(self) -> None:
@@ -746,9 +771,18 @@ class ClaimLease:
 
 
 def _claim_constructor_ownership(owner, descriptor):
+    return _exact_claim_store_ownership(owner, descriptor)
+
+
+def _exact_claim_store_ownership(owner, descriptor):
     if not isinstance(owner, SessionStore):
         return None
-    ownership = owner._tracked_claim_ownerships.get(descriptor)
+    try:
+        ownership = owner._tracked_claim_ownerships.get(
+            descriptor
+        )
+    except (AttributeError, TypeError):
+        return None
     if ownership is None:
         return None
     try:
