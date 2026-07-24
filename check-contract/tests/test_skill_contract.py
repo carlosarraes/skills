@@ -39,6 +39,12 @@ class CheckContractSkillTests(unittest.TestCase):
         self.assertNotIn(-1, positions, phrases)
         self.assertEqual(positions, sorted(positions), phrases)
 
+    def assert_no_unscoped_proven_absence_rule(self, text):
+        self.assertNotIn(
+            "proven absence is `unmet`.",
+            normalized(text).lower(),
+        )
+
     def test_is_explicitly_user_invoked_and_compact(self):
         self.assertTrue(self.skill.startswith("---\n"))
         frontmatter = self.skill.split("---", 2)[1]
@@ -266,10 +272,15 @@ class CheckContractSkillTests(unittest.TestCase):
             required[5],
             required[6],
         )
-        self.assertNotIn(
-            "proven absence is `UNMET`.",
+        self.assert_no_unscoped_proven_absence_rule(
             self.flat_check_protocol,
         )
+
+    def test_absence_regression_guard_rejects_original_uppercase_sentence(self):
+        with self.assertRaises(AssertionError):
+            self.assert_no_unscoped_proven_absence_rule(
+                "Proven absence is `UNMET`."
+            )
 
     def test_protocol_owns_exact_taxonomy_aggregation_and_precedence(self):
         required = (
