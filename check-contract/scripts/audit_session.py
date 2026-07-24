@@ -117,6 +117,7 @@ class _DescriptorOwnershipGate:
         self._metadata = threading.Lock()
         self._publishers = set()
         self._cleanup = None
+        self._writer_intent = None
 
     def try_enter_publication(self):
         if not self._metadata.acquire(timeout=0.005):
@@ -127,6 +128,11 @@ class _DescriptorOwnershipGate:
                 for publisher in self._publishers
                 if publisher.locked()
             }
+            if (
+                self._writer_intent is not None
+                and self._writer_intent.locked()
+            ):
+                return None
             if self._cleanup is not None and self._cleanup.locked():
                 return None
             publisher = threading.Lock()
@@ -145,6 +151,12 @@ class _DescriptorOwnershipGate:
                 for publisher in self._publishers
                 if publisher.locked()
             }
+            if (
+                self._writer_intent is None
+                or not self._writer_intent.locked()
+            ):
+                self._writer_intent = threading.Lock()
+                self._writer_intent.acquire()
             if self._publishers:
                 return None
             if self._cleanup is not None and self._cleanup.locked():
@@ -152,13 +164,24 @@ class _DescriptorOwnershipGate:
             cleanup = threading.Lock()
             cleanup.acquire()
             self._cleanup = cleanup
-            return cleanup
+            return cleanup, self._writer_intent
         finally:
             self._metadata.release()
 
     @staticmethod
-    def exit(token) -> None:
+    def exit_publication(token) -> None:
         token.release()
+
+    @staticmethod
+    def exit_cleanup(
+        cleanup,
+        writer_intent,
+        *,
+        retain_intent: bool,
+    ) -> None:
+        if not retain_intent:
+            writer_intent.release()
+        cleanup.release()
 
 
 _DESCRIPTOR_OWNERSHIP_GATE = _DescriptorOwnershipGate()
@@ -180,18 +203,35 @@ def _ownership_publication():
     try:
         yield
     finally:
-        _DESCRIPTOR_OWNERSHIP_GATE.exit(token)
+        _DESCRIPTOR_OWNERSHIP_GATE.exit_publication(token)
+
+
+class _CleanupAdmission:
+    def __init__(self):
+        self.retain_intent = False
+
+    def retain(self) -> None:
+        self.retain_intent = True
 
 
 @contextmanager
 def _ownership_cleanup():
-    token = _DESCRIPTOR_OWNERSHIP_GATE.try_enter_cleanup()
-    if token is None:
+    admission_tokens = _DESCRIPTOR_OWNERSHIP_GATE.try_enter_cleanup()
+    if admission_tokens is None:
         raise SessionBusyError("descriptor ownership registry is active")
+    cleanup, writer_intent = admission_tokens
+    admission = _CleanupAdmission()
     try:
-        yield
+        yield admission
+    except BaseException:
+        admission.retain()
+        raise
     finally:
-        _DESCRIPTOR_OWNERSHIP_GATE.exit(token)
+        _DESCRIPTOR_OWNERSHIP_GATE.exit_cleanup(
+            cleanup,
+            writer_intent,
+            retain_intent=admission.retain_intent,
+        )
 
 
 def _ownership_state(kind: str):
@@ -226,23 +266,11 @@ def _close_owned_record(kind: str, ownership) -> bool:
 
 
 def _close_pending_ownership(kind: str, ownership) -> bool:
-    with _ownership_cleanup():
-        return _close_owned_record(kind, ownership)
-
-
-def _close_tracked_descriptor(descriptor: int) -> bool:
-    ownerships = [
-        ownership
-        for ownership in _TRACKED_LEASE_OWNERSHIPS
-        if ownership[0] == descriptor
-    ]
-    if not ownerships:
-        return True
-    if len(ownerships) != 1:
-        raise SessionIntegrityError(
-            "claim descriptor ownership is ambiguous"
-        )
-    return _close_owned_record("lease", ownerships[0])
+    with _ownership_cleanup() as admission:
+        closed = _close_owned_record(kind, ownership)
+        if not closed:
+            admission.retain()
+        return closed
 
 
 def _queue_cleanup(kind: str, ownership) -> None:
@@ -261,11 +289,10 @@ def _background_pending_cleanup() -> None:
             continue
         try:
             try:
-                with _ownership_cleanup():
-                    if kind == "lease-scan":
-                        closed = _close_tracked_descriptor(ownership)
-                    else:
-                        closed = _close_owned_record(kind, ownership)
+                with _ownership_cleanup() as admission:
+                    closed = _close_owned_record(kind, ownership)
+                    if not closed:
+                        admission.retain()
             except Exception:
                 closed = False
         finally:
@@ -296,17 +323,19 @@ def _ensure_cleanup_worker() -> bool:
             and _CLEANUP_THREAD.is_alive()
         ):
             return True
-        worker = threading.Thread(
-            target=_background_pending_cleanup,
-            daemon=True,
-            name="audit-fd-cleanup",
-        )
-        try:
-            worker.start()
-        except RuntimeError:
-            return False
-        _CLEANUP_THREAD = worker
-        return True
+        for _ in range(2):
+            worker = threading.Thread(
+                target=_background_pending_cleanup,
+                daemon=True,
+                name="audit-fd-cleanup",
+            )
+            try:
+                worker.start()
+            except RuntimeError:
+                continue
+            _CLEANUP_THREAD = worker
+            return True
+        return False
     finally:
         _CLEANUP_SUPERVISOR_LOCK.release()
 
@@ -431,6 +460,7 @@ class ClaimLease:
                 )
             self._tracking_token = ownerships[0][1]
             _LEASE_REFS[self._tracking_token] = weakref.ref(self)
+            owner._tracked_claim_ownerships.pop(descriptor, None)
 
     def close(self) -> None:
         if self.closed:
@@ -442,8 +472,13 @@ class ClaimLease:
         self.closed = True
         closed = False
         try:
-            with _audit_fd_lifecycle(), _ownership_cleanup():
+            with (
+                _audit_fd_lifecycle(),
+                _ownership_cleanup() as admission,
+            ):
                 closed = _close_owned_record("lease", ownership)
+                if not closed:
+                    admission.retain()
         except SessionBusyError:
             pass
         if not closed:
@@ -562,6 +597,7 @@ class SessionStore:
     def __init__(self, root: Path):
         self.root = Path(os.path.abspath(root))
         self._creator_pid = os.getpid()
+        self._tracked_claim_ownerships = {}
 
     def _require_current_process(self) -> None:
         if self._creator_pid != os.getpid():
@@ -599,20 +635,31 @@ class SessionStore:
                 )
             with _ownership_publication():
                 descriptor = self._open_directory(name, dir_fd=dir_fd)
-                _TRACKED_LEASE_OWNERSHIPS.add(
-                    (descriptor, object())
-                )
+                ownership = (descriptor, object())
+                _TRACKED_LEASE_OWNERSHIPS.add(ownership)
+                self._tracked_claim_ownerships[descriptor] = ownership
                 return descriptor
 
     def _close_tracked_claim_descriptor(self, descriptor: int) -> None:
+        ownership = self._tracked_claim_ownerships.pop(
+            descriptor,
+            None,
+        )
+        if ownership is None:
+            return
         closed = False
         try:
-            with _audit_fd_lifecycle(), _ownership_cleanup():
-                closed = _close_tracked_descriptor(descriptor)
+            with (
+                _audit_fd_lifecycle(),
+                _ownership_cleanup() as admission,
+            ):
+                closed = _close_owned_record("lease", ownership)
+                if not closed:
+                    admission.retain()
         except SessionBusyError:
             pass
         if not closed:
-            _schedule_pending_cleanup("lease-scan", descriptor)
+            _schedule_pending_cleanup("lease", ownership)
 
     def _open_base(self, *, create: bool) -> int:
         self._require_current_process()
@@ -1399,11 +1446,16 @@ class SessionStore:
         finally:
             closed = False
             try:
-                with _audit_fd_lifecycle(), _ownership_cleanup():
+                with (
+                    _audit_fd_lifecycle(),
+                    _ownership_cleanup() as admission,
+                ):
                     closed = _close_owned_record(
                         "transaction",
                         ownership,
                     )
+                    if not closed:
+                        admission.retain()
             except SessionBusyError:
                 pass
             if not closed:

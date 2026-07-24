@@ -2075,6 +2075,10 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             (descriptor, token)
         )
         store = self.module.SessionStore(Path("/unused"))
+        store._tracked_claim_ownerships[descriptor] = (
+            descriptor,
+            token,
+        )
         original_close = session_module.os.close
         attempts = 0
 
@@ -2283,6 +2287,120 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         self.assertLess(elapsed, 0.75)
         self.assertFalse(cleanup.is_alive())
 
+    def test_cleanup_writer_intent_stops_overlapping_publisher_relay(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        token = object()
+        ownership = (descriptor, token)
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        gate = session_module._DESCRIPTOR_OWNERSHIP_GATE
+        current = gate.try_enter_publication()
+        self.assertIsNotNone(current)
+        session_module._schedule_pending_cleanup("lease", ownership)
+        rejected = False
+        admitted = 0
+        started_relay = time.monotonic()
+        deadline = time.monotonic() + 0.6
+        try:
+            while time.monotonic() < deadline:
+                next_publisher = gate.try_enter_publication()
+                if next_publisher is None:
+                    rejected = True
+                    break
+                gate.exit_publication(current)
+                current = next_publisher
+                admitted += 1
+        finally:
+            gate.exit_publication(current)
+
+        self.assertTrue(rejected)
+        self.assertLess(time.monotonic() - started_relay, 0.25)
+        deadline = time.monotonic() + 1
+        while ownership in session_module._TRACKED_LEASE_OWNERSHIPS:
+            if time.monotonic() >= deadline:
+                self.fail("writer intent did not complete cleanup")
+            time.sleep(0.005)
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+        publisher = gate.try_enter_publication()
+        self.assertIsNotNone(publisher)
+        gate.exit_publication(publisher)
+
+    def test_cleanup_release_handoff_keeps_publication_excluded(self):
+        session_module = sys.modules["audit_session"]
+        gate = session_module._DescriptorOwnershipGate()
+        cleanup, writer_intent = gate.try_enter_cleanup()
+
+        writer_intent.release()
+        self.assertIsNone(gate.try_enter_publication())
+        self.assertIsNone(gate.try_enter_cleanup())
+        cleanup.release()
+
+        self.assertTrue(gate._writer_intent.locked())
+        self.assertIsNone(gate.try_enter_publication())
+        gate._writer_intent.release()
+
+    def test_stale_exact_cleanup_job_cannot_close_reused_descriptor(self):
+        session_module = sys.modules["audit_session"]
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = os.open(
+                temporary,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+            )
+            os.mkdir("replacement", dir_fd=parent)
+            descriptor = os.open(
+                "/dev/null",
+                os.O_RDONLY | os.O_CLOEXEC,
+            )
+            stale_token = object()
+            stale_ownership = (descriptor, stale_token)
+            session_module._TRACKED_LEASE_OWNERSHIPS.add(
+                stale_ownership
+            )
+            session_module._schedule_pending_cleanup(
+                "lease",
+                stale_ownership,
+            )
+            deadline = time.monotonic() + 1
+            while (
+                stale_ownership
+                in session_module._TRACKED_LEASE_OWNERSHIPS
+            ):
+                if time.monotonic() >= deadline:
+                    self.fail("stale ownership did not close")
+                time.sleep(0.005)
+
+            store = self.module.SessionStore(Path(temporary))
+            replacement = store._open_tracked_claim_directory(
+                "replacement",
+                dir_fd=parent,
+            )
+            self.assertEqual(replacement, descriptor)
+            lease = session_module.ClaimLease(
+                store,
+                "a" * 32,
+                "b" * 64,
+                replacement,
+            )
+            replacement_ownership = (
+                replacement,
+                lease._tracking_token,
+            )
+            session_module._schedule_pending_cleanup(
+                "lease",
+                stale_ownership,
+            )
+            time.sleep(0.05)
+
+            os.fstat(replacement)
+            self.assertFalse(lease.closed)
+            self.assertIn(
+                replacement_ownership,
+                session_module._TRACKED_LEASE_OWNERSHIPS,
+            )
+            lease.close()
+            os.close(parent)
+
     def test_scheduler_does_not_scan_a_concurrently_mutated_pending_set(self):
         session_module = sys.modules["audit_session"]
         original_pending = session_module._PENDING_LEASE_CLOSE_FDS
@@ -2356,6 +2474,59 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             session_module._CLEANUP_QUEUE = original_queue
             session_module._CLEANUP_THREAD = original_thread
 
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_one_schedule_recovers_one_shot_worker_start_failure(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        token = object()
+        ownership = (descriptor, token)
+        original_queue = session_module._CLEANUP_QUEUE
+        original_thread = session_module._CLEANUP_THREAD
+        replacement_queue = session_module.queue.SimpleQueue()
+        original_start = session_module.threading.Thread.start
+        starts = 0
+
+        class DeadThread:
+            def is_alive(self):
+                return False
+
+        def fail_once(thread):
+            nonlocal starts
+            starts += 1
+            if starts == 1:
+                raise RuntimeError("transient thread start failure")
+            return original_start(thread)
+
+        session_module._CLEANUP_QUEUE = replacement_queue
+        session_module._CLEANUP_THREAD = DeadThread()
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        try:
+            with mock.patch.object(
+                session_module.threading.Thread,
+                "start",
+                fail_once,
+            ):
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                deadline = time.monotonic() + 1
+                while (
+                    ownership
+                    in session_module._TRACKED_LEASE_OWNERSHIPS
+                ):
+                    if time.monotonic() >= deadline:
+                        self.fail(
+                            "one-shot start failure was not recovered"
+                        )
+                    time.sleep(0.005)
+        finally:
+            session_module._CLEANUP_QUEUE = original_queue
+            session_module._CLEANUP_THREAD = original_thread
+
+        self.assertGreaterEqual(starts, 2)
         with self.assertRaises(OSError):
             os.fstat(descriptor)
 
@@ -2956,6 +3127,34 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 self.generation_count(root, next_generation.session),
                 count,
             )
+
+    def test_out_of_phase_cleanup_contention_returns_session_busy(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            write_response(started.response_path, code_response(started))
+            next_generation = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+            session_module = sys.modules["audit_session"]
+
+            with session_module._ownership_cleanup():
+                before = time.monotonic()
+                result = self.runtime(root).advance(
+                    self.module.ContinueAudit(
+                        next_generation.session,
+                        next_generation.response_path,
+                    )
+                )
+                elapsed = time.monotonic() - before
+
+            self.assertLess(elapsed, 0.75)
+            self.assertEqual(result.code, "SESSION_BUSY")
 
     def test_abandoned_claim_is_closed_on_later_continue(self):
         with materialized_repo(
