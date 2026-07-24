@@ -1051,7 +1051,6 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             root = Path(temporary)
             started = self.start(repo, root)
             store = self.module.SessionStore(root)
-            original_state = store.load(started.session)
             run_id, digest = started.session.split(".", 1)
             descriptor = os.open(
                 root / run_id,
@@ -1061,29 +1060,17 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                 | os.O_CLOEXEC,
             )
             session_module = sys.modules["audit_session"]
-            forged = session_module.ClaimLease(
-                store,
-                run_id,
-                digest,
-                descriptor,
-            )
-            next_state = {
-                **original_state,
-                "phase": "reconciliation",
-                "nonce": "a" * 32,
-                "response_name": f"{'b' * 32}.json",
-            }
-
             try:
                 with self.assertRaises(self.module.SessionIntegrityError):
-                    store.append_claimed(
-                        started.session,
-                        next_state,
-                        {"schema_version": 1, "kind": "reconciliation"},
-                        lease=forged,
+                    session_module.ClaimLease(
+                        store,
+                        run_id,
+                        digest,
+                        descriptor,
                     )
+                os.fstat(descriptor)
             finally:
-                forged.close()
+                os.close(descriptor)
 
             self.assertFalse(
                 (root / run_id / "claims" / digest).exists()
@@ -2281,14 +2268,15 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             elapsed = time.monotonic() - before
             release_cleanup.set()
             cleanup.join(timeout=1)
-            replacement = self.module.SessionStore(
+            replacement_store = self.module.SessionStore(
                 Path(temporary)
-            )._open_tracked_claim_directory(
+            )
+            replacement = replacement_store._open_tracked_claim_directory(
                 "replacement",
                 dir_fd=parent,
             )
             lease = session_module.ClaimLease(
-                self.module.SessionStore(Path(temporary)),
+                replacement_store,
                 "a" * 32,
                 "b" * 64,
                 replacement,
@@ -2612,6 +2600,74 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertEqual(raised.exception.errno, errno.EPERM)
             os.fstat(descriptor)
         finally:
+            os.close(descriptor)
+
+    def test_single_slot_close_rejects_wrapped_kernel_fd_values(self):
+        session_module = sys.modules["audit_session"]
+        invalid_values = [
+            True,
+            False,
+            -1,
+            1 << 31,
+        ]
+        calls = []
+
+        def record_close_range(first, last, flags):
+            calls.append((first, last, flags))
+            return 0
+
+        with mock.patch.object(
+            session_module,
+            "_CLOSE_RANGE",
+            record_close_range,
+        ):
+            for value in invalid_values:
+                with self.subTest(value=value):
+                    with self.assertRaises((TypeError, ValueError)):
+                        session_module._close_owned_descriptor(value)
+
+        self.assertEqual(calls, [])
+
+        for offset in (1 << 32, -(1 << 32)):
+            descriptor = os.open(
+                "/dev/null",
+                os.O_RDONLY | os.O_CLOEXEC,
+            )
+            try:
+                with self.assertRaises((TypeError, ValueError)):
+                    session_module._close_owned_descriptor(
+                        descriptor + offset
+                    )
+                os.fstat(descriptor)
+            finally:
+                os.close(descriptor)
+
+    def test_crafted_lease_cannot_claim_a_tracked_integer(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        ownership = (descriptor, object())
+        store = self.module.SessionStore(Path("/unused"))
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        try:
+            with self.assertRaises(self.module.SessionIntegrityError):
+                session_module.ClaimLease(
+                    store,
+                    "a" * 32,
+                    "b" * 64,
+                    descriptor,
+                )
+            os.fstat(descriptor)
+            self.assertIn(
+                ownership,
+                session_module._TRACKED_LEASE_OWNERSHIPS,
+            )
+        finally:
+            session_module._TRACKED_LEASE_OWNERSHIPS.discard(
+                ownership
+            )
             os.close(descriptor)
 
     def test_unavailable_single_slot_close_never_uses_raw_close(self):
@@ -3051,6 +3107,9 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         session_module = sys.modules["audit_session"]
         descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
         store = self.module.SessionStore(Path("/unused"))
+        ownership = (descriptor, object())
+        store._tracked_claim_ownerships[descriptor] = ownership
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
         lease = session_module.ClaimLease(
             store,
             "a" * 32,
@@ -3124,8 +3183,12 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
     def test_lease_finalizer_keyboard_interrupt_queues_exact_cleanup(self):
         session_module = sys.modules["audit_session"]
         descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        store = self.module.SessionStore(Path("/unused"))
+        ownership = (descriptor, object())
+        store._tracked_claim_ownerships[descriptor] = ownership
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
         lease = session_module.ClaimLease(
-            self.module.SessionStore(Path("/unused")),
+            store,
             "a" * 32,
             "b" * 64,
             descriptor,

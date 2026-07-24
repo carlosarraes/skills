@@ -63,6 +63,9 @@ _CLEANUP_THREAD = None
 _CLEANUP_SUPERVISOR_LOCK = threading.Lock()
 _LIBC = ctypes.CDLL(None, use_errno=True)
 _CLOSE_RANGE = getattr(_LIBC, "close_range", None)
+_KERNEL_FD_MAX = (
+    1 << (ctypes.sizeof(ctypes.c_int) * 8 - 1)
+) - 1
 if _CLOSE_RANGE is not None:
     _CLOSE_RANGE.argtypes = (
         ctypes.c_uint,
@@ -212,7 +215,13 @@ _DESCRIPTOR_OWNERSHIP_GATE = _DescriptorOwnershipGate()
 
 
 def _close_owned_descriptor(descriptor: int) -> None:
-    """Close one Linux fd slot without surfacing per-descriptor errors."""
+    """Close one runtime-owned Linux fd slot without per-fd errors.
+
+    Callers own either the cleanup token or the post-fork snapshot. Raw
+    same-process close/rebind outside those boundaries is coordinated
+    descriptor tampering under the documented same-UID threat-model limit.
+    """
+    _require_kernel_fd(descriptor)
     if _CLOSE_RANGE is None:
         raise OSError(
             errno.ENOSYS,
@@ -227,6 +236,13 @@ def _close_owned_descriptor(descriptor: int) -> None:
             os.strerror(number),
             descriptor,
         )
+
+
+def _require_kernel_fd(descriptor) -> None:
+    if isinstance(descriptor, bool) or not isinstance(descriptor, int):
+        raise TypeError("owned descriptor must be an integer fd")
+    if descriptor < 0 or descriptor > _KERNEL_FD_MAX:
+        raise ValueError("owned descriptor is outside the kernel fd range")
 
 
 @contextmanager
@@ -530,28 +546,38 @@ class ClaimLease:
     """Process-scoped capability proving ownership of one claimed transition."""
 
     def __init__(self, owner, run_id: str, digest: str, descriptor: int):
+        _require_kernel_fd(descriptor)
         self._owner = owner
         self._creator_pid = os.getpid()
         self.run_id = run_id
         self.digest = digest
         self._descriptor = descriptor
-        self.closed = False
+        self.closed = True
         with _audit_fd_lifecycle(), _ownership_publication():
+            if not isinstance(owner, SessionStore):
+                raise SessionIntegrityError(
+                    "claim lease owner is invalid"
+                )
+            ownership = owner._tracked_claim_ownerships.get(
+                descriptor
+            )
+            if ownership is None:
+                raise SessionIntegrityError(
+                    "claim descriptor was not opened by this store"
+                )
             ownerships = [
-                ownership
-                for ownership in _TRACKED_LEASE_OWNERSHIPS
-                if ownership[0] == descriptor
+                candidate
+                for candidate in _TRACKED_LEASE_OWNERSHIPS
+                if candidate[0] == descriptor
             ]
-            if not ownerships:
-                ownerships = [(descriptor, object())]
-                _TRACKED_LEASE_OWNERSHIPS.add(ownerships[0])
-            if len(ownerships) != 1:
+            if ownerships != [ownership]:
                 raise SessionIntegrityError(
                     "claim descriptor ownership is ambiguous"
                 )
-            self._tracking_token = ownerships[0][1]
+            self._tracking_token = ownership[1]
             _LEASE_REFS[self._tracking_token] = weakref.ref(self)
             owner._tracked_claim_ownerships.pop(descriptor, None)
+            self.closed = False
 
     def close(self) -> None:
         if self.closed:
