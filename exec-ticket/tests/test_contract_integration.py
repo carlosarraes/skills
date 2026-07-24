@@ -243,9 +243,46 @@ class ContractIntegrationTests(unittest.TestCase):
             "absolute directory containing this loaded `SKILL.md`",
             "Read the sibling protocol completely",
             "Sanitize the full branch",
-            "Look for `current.json`",
+            "Inspect both candidate roots",
             "scripts/contract_state.py verify",
         )
+
+    def test_consumer_discovery_inspects_both_contract_roots(self):
+        for phrase in (
+            "Consumers inspect both candidate roots",
+            "`.notes/<branch-dir>/contract/`",
+            "`ai_docs/<branch-dir>/contract/`",
+            "before selecting contract or legacy mode",
+        ):
+            self.assertIn(normalized(phrase), self.protocol_normalized)
+
+        for phrase in (
+            "Inspect both candidate roots",
+            "`.notes/<branch-dir>/contract`",
+            "`ai_docs/<branch-dir>/contract`",
+            "Exactly one active `current.json` selects that root",
+        ):
+            self.assertIn(normalized(phrase), self.skill_normalized)
+
+    def test_consumer_discovery_rejects_ambiguous_and_orphaned_state(self):
+        for phrase in (
+            "Active pointers in both roots are ambiguous and a hard stop",
+            "No active pointer",
+            "published/non-staging contract state",
+            "is partial or orphaned state and a hard stop",
+        ):
+            self.assertIn(normalized(phrase), self.skill_normalized)
+
+    def test_consumer_discovery_ignores_only_hidden_staging_before_legacy(self):
+        for phrase in (
+            "Ignore hidden staging artifacts",
+            "`.vN-*`",
+            "`.current.json-*`",
+            "Only when both roots have neither an active pointer nor "
+            "published/non-staging contract state, use legacy mode",
+            "do not create or request contract state",
+        ):
+            self.assertIn(normalized(phrase), self.skill_normalized)
 
     def test_present_pointer_requires_full_identity_and_integrity_gate(self):
         for phrase in (
@@ -314,7 +351,8 @@ class ContractIntegrationTests(unittest.TestCase):
 
     def test_legacy_flow_preserves_original_tdd_and_report(self):
         for phrase in (
-            "When `current.json` is absent, use legacy mode",
+            "Only when both roots have neither an active pointer nor "
+            "published/non-staging contract state, use legacy mode",
             "do not create or request contract state",
             "Ticket and branch",
             "Behaviors implemented, with the test that pins each",

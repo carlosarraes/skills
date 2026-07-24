@@ -46,18 +46,21 @@ absolute directory containing this loaded `SKILL.md`; resolve its sibling
 Read the sibling protocol completely at
 `<change-contract-skill-dir>/references/contract-protocol.md`.
 
-Sanitize the full branch using that protocol's exact algorithm. Choose `.notes`
-when it exists, otherwise `ai_docs`, and form
-`<notes-root>/<branch-dir>/contract`. Look for `current.json` there.
+Sanitize the full branch using that protocol's exact algorithm. Inspect both
+candidate roots, `.notes/<branch-dir>/contract` and
+`ai_docs/<branch-dir>/contract`. Exactly one active `current.json` selects that
+root. Active pointers in both roots are ambiguous and a hard stop. No active
+pointer with published/non-staging contract state such as `vN/` in either root
+is partial or orphaned state and a hard stop. Ignore hidden staging artifacts
+`.vN-*` and `.current.json-*`. Only when both roots have neither an active
+pointer nor published/non-staging contract state, use legacy mode and do not
+create or request contract state.
 
-When `current.json` is absent, use legacy mode and do not create or request
-contract state.
-
-When it is present, run the actual absolute helper:
+For the selected `<contract-root>`, run the actual absolute helper:
 
 ```bash
 python <change-contract-skill-dir>/scripts/contract_state.py verify \
-  --root <notes-root>/<branch-dir>/contract
+  --root <contract-root>
 ```
 
 Require `"valid": true`. Read `current.json` and the returned `approval_path`;
