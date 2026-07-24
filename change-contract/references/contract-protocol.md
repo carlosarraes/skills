@@ -188,11 +188,10 @@ Recommended next skill: `<ordered route>`
 Assign one clause status per stable clause ID:
 
 - Judge each clause's exact approved predicate; do not substitute a broader or
-  narrower proxy. For example, a prohibition on a class hierarchy is not a
-  prohibition on every private class. Implementation path, expected surface,
-  reuse, simplicity, and complexity-budget facts do not alter an Outcome/B
-  clause status unless they change its approved behavior, public contract, or
-  risk boundary; they aggregate through dedicated axes.
+  narrower implementation proxy. Implementation path, expected surface, reuse,
+  simplicity, and complexity-budget facts do not alter an Outcome/B clause
+  status unless they change its approved behavior, public contract, or risk
+  boundary; they aggregate through dedicated axes.
 - For positive clauses (O/B/I/C/R/A), `MET` means Git-object or acceptance
   evidence proves the approved predicate; `UNMET` means determinate evidence
   proves it false or missing; `EXCEEDED` means it is met but shipped behavior,

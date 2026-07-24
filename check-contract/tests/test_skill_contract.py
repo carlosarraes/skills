@@ -142,7 +142,8 @@ class CheckContractSkillTests(unittest.TestCase):
             self.skill.index("### Step 3:")
         ]
         for phrase in (
-            "`git diff <base>..<full-head>`",
+            "`git diff <base>..<full-head> -- "
+            "<implementation-source/test-paths>`",
             "renames",
             "contract artifacts",
             "changed source/tests",
@@ -156,8 +157,7 @@ class CheckContractSkillTests(unittest.TestCase):
             self.assertIn(normalized(phrase), normalized(step_two))
         self.assertIn(
             normalized(
-                "Do not read the ledger, report, supplied summary, or PR "
-                "narrative"
+                "Do not read the contents of changed contract artifacts"
             ),
             normalized(step_two),
         )
@@ -193,7 +193,8 @@ class CheckContractSkillTests(unittest.TestCase):
         if "### Step 3:" in step_two:
             step_two = step_two.split("### Step 3:", 1)[0]
         for phrase in (
-            "`git diff <base>..<full-head>`",
+            "`git diff <base>..<full-head> -- "
+            "<implementation-source/test-paths>`",
             "`git show <full-head>:<path>`",
             "every code-as-shipped byte",
             "Git object",
@@ -204,11 +205,12 @@ class CheckContractSkillTests(unittest.TestCase):
             self.assertIn(normalized(phrase), normalized(step_two))
         self.assert_ordered(
             step_two,
-            "`git diff <base>..<full-head>`",
+            "`git diff <base>..<full-head> -- "
+            "<implementation-source/test-paths>`",
             "`git show <full-head>:<path>`",
         )
 
-    def test_inspection_is_bounded_static_and_d_probes_are_isolated(self):
+    def test_evidence_collection_has_executable_caps_and_stop_rule(self):
         step_two = self.skill[
             self.skill.index("### Step 2:"):
             self.skill.index("### Step 3:")
@@ -217,14 +219,27 @@ class CheckContractSkillTests(unittest.TestCase):
             self.skill.index("### Step 5:"):
             self.skill.index("### Step 6:")
         ]
-        for phrase in (
-            "one bounded static inspection pass",
-            "`git diff --name-status --find-renames <base>..<full-head>`",
-            "Do not rerun a completed read or search",
-            "Never run general target tests",
-            "never import or execute target code",
-        ):
+        required = (
+            "record the monotonic start",
+            "start plus 180 seconds",
+            "caller deadline minus a 60-second finalization reserve",
+            "exactly one name inventory",
+            "one batched recorded-HEAD implementation read",
+            "one batched repository-wide responsibility/reuse search",
+            "never reread, retry, or issue per-path or per-responsibility queries",
+            "three batches finish, immediately freeze the code-as-shipped "
+            "account",
+            "evidence deadline arrives first, stop evidence collection",
+            "mark every uncollected clause or search result `INDETERMINATE`",
+            "proceed through Steps 3-6",
+            "reserve at least 60 seconds for Steps 5-6",
+        )
+        for phrase in required:
             self.assertIn(normalized(phrase), normalized(step_two))
+        self.assert_ordered(
+            normalized(step_two),
+            *[normalized(phrase) for phrase in required],
+        )
         for phrase in (
             "D-stated replay probe",
             "complete stated probe",
@@ -237,42 +252,73 @@ class CheckContractSkillTests(unittest.TestCase):
             self.assertIn(normalized(phrase), normalized(step_five))
 
     def test_compound_a_hard_stop_is_a_strict_phase_boundary(self):
+        heading = "## Compound A-then-B boundary"
+        self.assertEqual(self.skill.count(heading), 1)
+        compound = self.skill[
+            self.skill.index(heading):
+            self.skill.index("### Step 1:")
+        ]
         required = (
             "For a compound A-then-B request",
             "hash A's existing report sentinel as opaque bytes without parsing",
             "resolve A",
-            "attest failed authority, zero writes, and unchanged sentinel bytes",
-            "never access or mutate A again",
-            "before beginning B",
-            "after any B repository action starts",
+            "complete A's failed-authority, zero-write, and "
+            "sentinel-preservation attestation before any B repository action",
             "resolve B independently",
+            "After any B repository action begins, run no command against A, "
+            "read no A path, and make no later path reference to A",
         )
         for phrase in required:
-            self.assertIn(normalized(phrase), self.flat_skill)
+            self.assertIn(normalized(phrase), normalized(compound))
         self.assert_ordered(
-            self.flat_skill,
+            normalized(compound),
             *[normalized(phrase) for phrase in required],
         )
+        remainder = self.skill[self.skill.index("### Step 1:"):]
+        for prohibited in (
+            "command against A",
+            "read no A path",
+            "path reference to A",
+            "access or mutate A",
+        ):
+            self.assertNotIn(
+                normalized(prohibited),
+                normalized(remainder),
+            )
 
-    def test_code_first_inventory_defers_all_narrative_contents(self):
+    def test_code_first_freezes_before_approved_contract_and_narratives(self):
         step_two = self.skill[
             self.skill.index("### Step 2:"):
             self.skill.index("### Step 3:")
         ]
-        required = (
+        for phrase in (
             "inventory names first",
             "`git diff --name-status --find-renames <base>..<full-head>`",
             "path-filtered Git-object operations",
             "implementation source and tests only",
-            "defer the contents of contract artifacts, the ledger, reports, "
-            "worker summaries, PR narratives, and other author narratives",
-            "Step 5",
-        )
-        for phrase in required:
+            "Do not read the contents of changed contract artifacts, the "
+            "active ledger, prior report, supplied or worker summaries, PR "
+            "narratives, or other author narratives yet",
+            "freeze the code-as-shipped account",
+            "read the immutable approved contract body from the verified "
+            "`contract_path` bytes",
+        ):
             self.assertIn(normalized(phrase), normalized(step_two))
-        self.assert_ordered(
+        self.assertNotIn(
+            "defer the contents of contract artifacts",
             normalized(step_two),
-            *[normalized(phrase) for phrase in required],
+        )
+        self.assert_ordered(
+            normalized(self.skill),
+            normalized("implementation source and tests only"),
+            normalized("freeze the code-as-shipped account"),
+            normalized(
+                "read the immutable approved contract body from the verified "
+                "`contract_path` bytes"
+            ),
+            normalized("### Step 3: Classify contract fidelity"),
+            normalized("### Step 5: Reconcile ledger and narrative"),
+            normalized("Only now read the guarded active ledger"),
         )
 
     def test_acceptance_rows_prove_exact_predicates_without_axis_leakage(self):
@@ -282,13 +328,14 @@ class CheckContractSkillTests(unittest.TestCase):
             "An adjacent behavior, happy path, or non-boundary example",
             "missing or non-demonstrative evidence is `INDETERMINATE`",
             "Judge each clause's exact approved predicate",
-            "a prohibition on a class hierarchy is not a prohibition on every "
-            "private class",
+            "do not substitute a broader or narrower implementation proxy",
             "Implementation path, expected surface, reuse, simplicity, and "
             "complexity-budget facts do not alter an Outcome/B clause status",
             "dedicated axes",
         ):
             self.assertIn(phrase, self.flat_check_protocol)
+        for fixture_specific in ("class hierarchy", "private class"):
+            self.assertNotIn(fixture_specific, self.flat_check_protocol)
 
     def test_yagni_requires_an_evidenced_unearned_added_construct(self):
         required = (
@@ -306,12 +353,17 @@ class CheckContractSkillTests(unittest.TestCase):
         )
 
     def test_reuse_pass_requires_full_head_full_tree_search_evidence(self):
+        step_two = self.skill[
+            self.skill.index("### Step 2:"):
+            self.skill.index("### Step 3:")
+        ]
         step_four = self.skill[
             self.skill.index("### Step 4:"):
             self.skill.index("### Step 5:")
         ]
         for phrase in (
-            "recorded full-HEAD full-tree search",
+            "one batched repository-wide responsibility/reuse search",
+            "Use the batched recorded full-HEAD full-tree search evidence",
             "every changed responsibility",
             "before Reuse can be `PASS`",
             "missing search evidence cannot yield `PASS`",
@@ -319,8 +371,48 @@ class CheckContractSkillTests(unittest.TestCase):
             "duplicated or bypassed",
             "Reuse `FAIL`",
         ):
-            source = step_four if "full-tree" in phrase else self.check_protocol
+            if "repository-wide" in phrase:
+                source = step_two
+            elif "full-tree" in phrase:
+                source = step_four
+            else:
+                source = self.check_protocol
             self.assertIn(normalized(phrase), normalized(source))
+        self.assertNotIn(
+            "Perform a recorded full-HEAD full-tree search",
+            step_four,
+        )
+
+    def test_head_only_rule_is_implementation_scoped(self):
+        step_two = self.skill[
+            self.skill.index("### Step 2:"):
+            self.skill.index("### Step 3:")
+        ]
+        step_five = self.skill[
+            self.skill.index("### Step 5:"):
+            self.skill.index("### Step 6:")
+        ]
+        self.assertIn(
+            normalized(
+                "Later implementation/code reads and searches use recorded "
+                "full-HEAD objects, never worktree files"
+            ),
+            normalized(step_two),
+        )
+        self.assertNotIn(
+            normalized(
+                "Later reads and searches use recorded full-HEAD objects"
+            ),
+            normalized(step_two),
+        )
+        self.assertIn(
+            normalized(
+                "read the guarded active ledger, prior report, supplied "
+                "summary, PR claims, and other narratives from their guarded "
+                "sources"
+            ),
+            normalized(step_five),
+        )
 
     def test_ledger_verification_is_factual_and_chronological(self):
         for phrase in (

@@ -1,30 +1,33 @@
 ---
 name: check-contract
-description: Use only when explicitly asked to audit an approved change contract against the current branch implementation.
+description: Use only for explicit contract audits.
 disable-model-invocation: true
 ---
 
 # Check Contract
 
-Audit code as shipped against immutable approved authority. The only permitted
+Audit shipped code against immutable approved authority. The only permitted
 repository mutation is atomic replacement of the still-active
 `check-report.md`. Do not fix code. Do not edit the contract or ledger. Do not
 post results. Do not commit. Do not push. Do not approve anything. Do not invoke
 the recommended skill. Routes are advisory only.
 
+## Compound A-then-B boundary
+
 For a compound A-then-B request, hash A's existing report sentinel as opaque
-bytes without parsing, then resolve A. On hard stop, attest failed authority,
-zero writes, and unchanged sentinel bytes; never access or mutate A
-again—before beginning B or after any B repository action starts. Then resolve
-B independently without carrying A evidence.
+bytes without parsing, then resolve A. On hard stop, complete A's
+failed-authority, zero-write, and sentinel-preservation attestation before any B
+repository action. Then resolve B independently. After any B repository action
+begins, run no command against A, read no A path, and make no later path
+reference to A.
 
 ### Step 1: Resolve and verify authority
 
-Resolve the ticket and full branch. Resolve `<check-contract-skill-dir>` as the
-absolute directory containing this loaded `SKILL.md`, then its sibling
+Resolve ticket and full branch. Resolve `<check-contract-skill-dir>` as the
+absolute directory containing this loaded `SKILL.md` and sibling
 `<change-contract-skill-dir>`. Read the sibling protocol completely at
 `<change-contract-skill-dir>/references/contract-protocol.md` before authority
-resolution; it owns all check semantics.
+resolution.
 
 From any path inside the target repository, run:
 
@@ -36,81 +39,90 @@ python <change-contract-skill-dir>/scripts/contract_state.py resolve-consumer \
   --allow-missing-ledger
 ```
 
-Require its canonical `git rev-parse --show-toplevel` root and verified
-two-root result for `.notes/<branch-dir>/contract` and
-`ai_docs/<branch-dir>/contract`. Ambiguous pointers, orphaned state, malformed
-authority, identity/hash failure, or non-ancestor base are hard stops. `absent`
-must be true absence across both roots and is also a hard stop.
+Require its canonical `git rev-parse --show-toplevel` root and verified two-root
+result for `.notes/<branch-dir>/contract` and `ai_docs/<branch-dir>/contract`.
+Ambiguous pointers, orphaned state, malformed authority, identity/hash failure,
+non-ancestor base, and `absent` unless true absence spans both roots are hard
+stops.
 
-For approved state, snapshot active version, approval version, branch, ticket,
-approval bytes and approval SHA-256, contract SHA-256, full base, full HEAD,
-ancestry, paths, and worktree state. Guard source, contract, ledger, and
-`git status --porcelain=v1` hashes.
-Guard the prior report's existence and bytes too. Hard-stop true absence or any
-authority failure before implementation narrative is read; preserve any
-existing report.
+For approved state, snapshot active version/approval version, branch, ticket,
+approval bytes/approval SHA-256, contract SHA-256, full base/full HEAD,
+ancestry, paths, and worktree state.
+Guard source, contract, ledger, prior-report, supplied-narrative, and
+`git status --porcelain=v1` bytes without parsing narratives. Hard-stop true
+absence or any authority failure before implementation narrative is read;
+preserve any existing report.
 
-**Complete when:** immutable authority and guards are recorded.
+**Complete when:** authority guarded.
 
 ### Step 2: Derive code-as-shipped first
 
-From the canonical root, inventory names first with
-`git diff --name-status --find-renames <base>..<full-head>` and separate
-renames, contract artifacts, and narratives from implementation. In one
-bounded static inspection pass, use path-filtered Git-object operations on the
-`git diff <base>..<full-head>` range only as
-`git diff <base>..<full-head> -- <implementation-source/test-paths>` to read
-implementation source and tests only: every code-as-shipped byte in changed
-source/tests and enough surrounding code from the recorded Git object via
-`git show <full-head>:<path>`. Do not rerun a completed read or search.
-Later reads and searches use recorded full-HEAD objects, never worktree files.
-Never run general target tests; never import or execute target code. After
-implementation reads, defer the contents of contract artifacts, the ledger,
-reports, worker summaries, PR narratives, and other author narratives until
-Step 5. Do not read
-the ledger, report, supplied summary, or PR narrative yet. A dirty worktree is
-a non-authoritative limitation; use source Git-object IDs as guards. Account
-for public contracts, side effects, persisted state, and integrations with
-`file:line` evidence.
+At Step 2 start, record the monotonic start. Set the evidence deadline to start
+plus 180 seconds, shortened to a supplied caller deadline minus a 60-second
+finalization reserve. Then inventory names first in exactly one name inventory
+with
+`git diff --name-status --find-renames <base>..<full-head>`; record renames and
+contract artifacts.
 
-**Complete when:** code-first behavior and surface are evidenced.
+Before the deadline, run one batched recorded-HEAD implementation read with
+path-filtered Git-object operations:
+`git diff <base>..<full-head> -- <implementation-source/test-paths>` and the
+recorded Git object via batched `git show <full-head>:<path>`. Read
+implementation source and tests
+only—every code-as-shipped byte in changed source/tests and enough surrounding
+code. Run one batched repository-wide responsibility/reuse search with
+`git grep <patterns> <full-head>`; never reread, retry, or issue per-path or
+per-responsibility queries. Never run general target tests; never import or
+execute target code.
+Later implementation/code reads and searches use recorded full-HEAD objects,
+never worktree files.
+
+Do not read the contents of changed contract artifacts, the active ledger,
+prior report, supplied or worker summaries, PR narratives, or other author
+narratives yet. Account for public contracts, side effects, persisted state,
+and integrations with `file:line` evidence. A dirty worktree is a
+non-authoritative limitation; use source Git-object IDs as guards.
+
+When the three batches finish, immediately freeze the code-as-shipped account.
+If the evidence deadline arrives first, stop evidence collection, mark every
+uncollected clause or search result `INDETERMINATE`, then freeze the partial
+account. After either path, read the immutable approved contract body from the
+verified `contract_path` bytes; proceed through Steps 3-6; reserve at least 60
+seconds for Steps 5-6.
+
+**Complete when:** ready for classification.
 
 ### Step 3: Classify contract fidelity
 
-Assign the protocol-defined clause status to Outcome and every B/N/I/C/R,
+Assign protocol-defined clause status to Outcome, every B/N/I/C/R,
 expected-surface, complexity-budget, and acceptance-evidence clause. Check each
-`A-<B-id>` against its behavior and aggregate Contract fidelity only by the
-protocol.
+`A-<B-id>` and aggregate Contract fidelity only by protocol.
 
-**Complete when:** clauses are evidenced; fidelity is derived.
+**Complete when:** fidelity is derived.
 
 ### Step 4: Audit YAGNI and reuse
 
-Perform a recorded full-HEAD full-tree search with `git grep` for existing
-helpers, components, services, and platform features for every changed
-responsibility.
-Judge every new abstraction, dependency, configuration, module, public
-interface, layer/wrapper, defensive branch, duplicate, and
-implementation-coupled test as earned or unearned. Correctness requirements are
-not bloat. Derive YAGNI and Reuse only by protocol rules.
+Use the batched recorded full-HEAD full-tree search evidence for every changed
+responsibility. Judge new structures, dependencies, interfaces, branches,
+duplicates, and implementation-coupled tests as earned or unearned.
+Correctness is not bloat. Derive YAGNI and Reuse only by protocol.
 
-**Complete when:** responsibilities and both axes are evidenced.
+**Complete when:** axes are derived.
 
 ### Step 5: Reconcile ledger and narrative
 
-Only now read the ledger and supplied summary or PR claims; a missing ledger or
-narrative means empty and is never created. Verify D entries, classify
-deviations, generate sorted D/U/F IDs, and compare claims with the code-first
-account. Apply protocol precedence and routes; derive Documented drift and
-Undocumented drift.
+Only now read the guarded active ledger, prior report, supplied summary, PR
+claims, and other narratives from their guarded sources. Missing narrative is
+empty and never created. Verify D entries; classify deviations; generate sorted
+D/U/F IDs; compare claims; apply protocol precedence/routes; derive Documented drift
+and Undocumented drift.
 
-For a D-stated replay probe only, create a disposable temporary tree outside
-the target repository, materialize recorded HEAD with
-`git archive <full-head>` using `tar -x -C <outside-temp-dir>`, run the complete
-stated probe there under `PYTHONDONTWRITEBYTECODE=1`, then remove the temporary
-tree; never mutate the target. Otherwise run no target code.
+For a D-stated replay probe only, materialize `git archive <full-head>` as a
+disposable temporary tree outside the target repository. Run the complete
+stated probe there with `PYTHONDONTWRITEBYTECODE=1`, remove the temporary tree,
+and never mutate the target. Otherwise run no target code.
 
-**Complete when:** drift, findings, verdict, and ID-citing route are derived.
+**Complete when:** verdict is routed.
 
 ### Step 6: Replace report and route
 
@@ -125,7 +137,7 @@ Atomically create or replace only
 `<selected-root>/v<active-version>/check-report.md`; verify no other
 audit-caused final delta, emit the exact verdict and route, and stop.
 
-Use this exact report shape:
+Report shape:
 
 ```markdown
 # Contract Check: <ticket> — v<version>
@@ -149,4 +161,4 @@ D/deviation ID, status, evidence, and documentation state. The route cites
 stable finding IDs and relevant U/D IDs when present; otherwise it uses the
 protocol's explicit-none form.
 
-**Complete when:** only the active report is replaced and attested.
+**Complete when:** report is attested.
