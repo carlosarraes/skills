@@ -175,3 +175,45 @@ class ReplayProbeTests(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaises(ValueError):
                     REPLAY_PROBE.parse_replay_probe(descriptor)
+
+    def test_rejects_empty_case_list(self):
+        descriptor = {**DESCRIPTOR, "cases": []}
+
+        with self.assertRaisesRegex(ValueError, "at least one case"):
+            REPLAY_PROBE.parse_replay_probe(descriptor)
+
+    def test_rejects_duplicate_cases_after_parsing(self):
+        descriptor = {
+            **DESCRIPTOR,
+            "cases": [
+                {
+                    "args": [-1],
+                    "expect": "raises",
+                    "exception": "ValueError",
+                },
+                {
+                    "exception": "ValueError",
+                    "expect": "raises",
+                    "args": [-1],
+                },
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "duplicate case"):
+            REPLAY_PROBE.parse_replay_probe(descriptor)
+
+    def test_bool_and_numeric_cases_remain_distinct(self):
+        descriptor = {
+            **DESCRIPTOR,
+            "cases": [
+                {"args": [True], "expect": "returns"},
+                {"args": [1], "expect": "returns"},
+            ],
+        }
+
+        probe = REPLAY_PROBE.parse_replay_probe(descriptor)
+
+        self.assertEqual(
+            tuple(case.args for case in probe.cases),
+            ((True,), (1,)),
+        )

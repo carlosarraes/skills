@@ -84,9 +84,22 @@ def parse_replay_probe(value: object) -> PythonCallProbe:
         raise ValueError("invalid python-call-v1 callable")
     if type(value["cases"]) is not list:
         raise ValueError("python-call-v1 cases must be a list")
+    cases = tuple(_parse_case(case) for case in value["cases"])
+    if not cases:
+        raise ValueError("python-call-v1 requires at least one case")
+    case_keys = {
+        (
+            tuple((type(arg), arg) for arg in case.args),
+            case.expect,
+            case.exception,
+        )
+        for case in cases
+    }
+    if len(case_keys) != len(cases):
+        raise ValueError("python-call-v1 contains a duplicate case")
 
     return PythonCallProbe(
         module=value["module"],
         callable=value["callable"],
-        cases=tuple(_parse_case(case) for case in value["cases"]),
+        cases=cases,
     )
