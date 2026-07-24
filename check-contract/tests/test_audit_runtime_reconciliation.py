@@ -335,6 +335,37 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
                     2,
                 )
 
+    def test_duplicate_json_keys_are_terminal_even_when_last_value_matches(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            valid = json.dumps(
+                code_response(started),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            duplicated = valid.replace(
+                '"nonce":',
+                f'"nonce":"{"0" * 32}","nonce":',
+                1,
+            )
+            started.response_path.write_text(
+                duplicated + "\n",
+                encoding="utf-8",
+            )
+
+            result = self.runtime(root).advance(
+                self.module.ContinueAudit(
+                    started.session,
+                    started.response_path,
+                )
+            )
+
+            self.assertIsInstance(result, self.module.AuditStopped)
+            self.assertEqual(result.code, "RESPONSE_INVALID")
+
     def test_invalid_json_missing_file_wrong_path_symlink_and_oversize_are_terminal(self):
         cases = ("invalid-json", "missing", "wrong-path", "symlink", "oversize")
         for name in cases:

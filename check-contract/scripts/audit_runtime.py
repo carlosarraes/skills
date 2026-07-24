@@ -263,8 +263,18 @@ class AuditRuntime:
         )
 
     def _response_envelope(self, raw, token, state):
+        def closed_object(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise AuditInputError(
+                        f"response JSON contains duplicate key {key!r}"
+                    )
+                value[key] = item
+            return value
+
         try:
-            value = json.loads(raw)
+            value = json.loads(raw, object_pairs_hook=closed_object)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise AuditInputError(
                 "response must be one UTF-8 JSON object"
