@@ -1518,6 +1518,11 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             second_lease.close()
             self.assertLess(elapsed, 0.75)
             self.assertFalse(worker.is_alive())
+            deadline = time.monotonic() + 1
+            while session_module._TRACKED_TRANSACTION_OWNERSHIPS:
+                if time.monotonic() >= deadline:
+                    self.fail("transaction cleanup did not finish")
+                time.sleep(0.005)
             self.assertEqual(
                 session_module._TRACKED_TRANSACTION_OWNERSHIPS,
                 set(),
@@ -1611,34 +1616,28 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             lease = store.claim_lease(started.session)
             descriptor = lease._descriptor
             session_module = sys.modules["audit_session"]
-            original_pending = session_module._PENDING_LEASE_CLOSE_FDS
-            add_paused = threading.Event()
-            release_add = threading.Event()
-
-            class PausingSet(set):
-                def add(self, value):
-                    add_paused.set()
-                    if not release_add.wait(2):
-                        raise AssertionError("pending add was not released")
-                    return super().add(value)
-
-            session_module._PENDING_LEASE_CLOSE_FDS = PausingSet(
-                original_pending
-            )
             session_module._before_fork()
             closer = threading.Thread(target=lease.close)
             closer.start()
-            self.assertTrue(add_paused.wait(1))
-            session_module._after_fork_parent()
-            release_add.set()
             closer.join(timeout=1)
-            pending = session_module._PENDING_LEASE_CLOSE_FDS
-            session_module._PENDING_LEASE_CLOSE_FDS = original_pending
-
             self.assertFalse(closer.is_alive())
+            os.fstat(descriptor)
+            session_module._after_fork_parent()
+            deadline = time.monotonic() + 1
+            while (
+                (descriptor, lease._tracking_token)
+                in session_module._TRACKED_LEASE_OWNERSHIPS
+            ):
+                if time.monotonic() >= deadline:
+                    self.fail("queued lease cleanup was not resumed")
+                time.sleep(0.005)
+
             with self.assertRaises(OSError):
                 os.fstat(descriptor)
-            self.assertEqual(pending, set())
+            self.assertEqual(
+                session_module._PENDING_LEASE_CLOSE_FDS,
+                set(),
+            )
             self.assertEqual(
                 session_module._TRACKED_LEASE_OWNERSHIPS,
                 set(),
@@ -1653,21 +1652,9 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             store = self.module.SessionStore(root)
             lease = store.claim_lease(started.session)
             session_module = sys.modules["audit_session"]
-            original_pending = (
-                session_module._PENDING_TRANSACTION_CLOSE_FDS
-            )
             transaction_entered = threading.Event()
             exit_transaction = threading.Event()
-            add_paused = threading.Event()
-            release_add = threading.Event()
             captured = []
-
-            class PausingSet(set):
-                def add(self, value):
-                    add_paused.set()
-                    if not release_add.wait(2):
-                        raise AssertionError("pending add was not released")
-                    return super().add(value)
 
             def hold_transaction():
                 with store._successor_transaction_lock(lease):
@@ -1682,23 +1669,25 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             worker = threading.Thread(target=hold_transaction)
             worker.start()
             self.assertTrue(transaction_entered.wait(1))
-            session_module._PENDING_TRANSACTION_CLOSE_FDS = PausingSet(
-                original_pending
-            )
             session_module._before_fork()
             exit_transaction.set()
-            self.assertTrue(add_paused.wait(1))
-            session_module._after_fork_parent()
-            release_add.set()
             worker.join(timeout=1)
-            pending = session_module._PENDING_TRANSACTION_CLOSE_FDS
-            session_module._PENDING_TRANSACTION_CLOSE_FDS = original_pending
+            self.assertFalse(worker.is_alive())
+            os.fstat(captured[0])
+            session_module._after_fork_parent()
+            deadline = time.monotonic() + 1
+            while session_module._TRACKED_TRANSACTION_OWNERSHIPS:
+                if time.monotonic() >= deadline:
+                    self.fail("queued transaction cleanup was not resumed")
+                time.sleep(0.005)
             lease.close()
 
-            self.assertFalse(worker.is_alive())
             with self.assertRaises(OSError):
                 os.fstat(captured[0])
-            self.assertEqual(pending, set())
+            self.assertEqual(
+                session_module._PENDING_TRANSACTION_CLOSE_FDS,
+                set(),
+            )
             self.assertEqual(
                 session_module._TRACKED_TRANSACTION_OWNERSHIPS,
                 set(),
@@ -1890,7 +1879,6 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         token = object()
         ownership = (descriptor, token)
         session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
-        session_module._PENDING_LEASE_CLOSE_FDS.add(ownership)
         original_close = session_module.os.close
         parent_pid = os.getpid()
         close_paused = threading.Event()
@@ -1907,11 +1895,16 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             "close",
             paused_parent_close,
         ):
-            before = time.monotonic()
-            child = os.fork()
-            elapsed = time.monotonic() - before
-            if child == 0:
-                os._exit(0)
+            with session_module._ownership_publication():
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                before = time.monotonic()
+                child = os.fork()
+                elapsed = time.monotonic() - before
+                if child == 0:
+                    os._exit(0)
             _, status = os.waitpid(child, 0)
             self.assertLess(elapsed, 0.75)
             self.assertTrue(close_paused.wait(1))
@@ -1940,7 +1933,10 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             ownership = (descriptor, token)
             session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
             session_module._PENDING_LEASE_CLOSE_FDS.add(ownership)
-            session_module._schedule_pending_cleanup()
+            session_module._schedule_pending_cleanup(
+                "lease",
+                ownership,
+            )
             deadline = time.monotonic() + 1
             while time.monotonic() < deadline:
                 try:
@@ -1967,7 +1963,6 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         token = object()
         ownership = (descriptor, token)
         session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
-        session_module._PENDING_LEASE_CLOSE_FDS.add(ownership)
         original_close = session_module.os.close
         attempts = 0
 
@@ -1980,6 +1975,7 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             return original_close(value)
 
         session_module._before_fork()
+        session_module._schedule_pending_cleanup("lease", ownership)
         with mock.patch.object(
             session_module.os,
             "close",
@@ -2161,7 +2157,10 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             return original_close(value)
 
         with mock.patch.object(session_module.os, "close", transient_close):
-            session_module._schedule_pending_cleanup()
+            session_module._schedule_pending_cleanup(
+                "lease",
+                (descriptor, token),
+            )
             deadline = time.monotonic() + 1
             while attempts < 2 and time.monotonic() < deadline:
                 time.sleep(0.005)
@@ -2221,6 +2220,359 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
         session_module._TRACKED_LEASE_OWNERSHIPS.discard(
             (descriptor, replacement_token)
         )
+
+    def test_cleanup_exclusion_precedes_reused_fd_publication(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        stale_token = object()
+        stale_ownership = (descriptor, stale_token)
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(stale_ownership)
+        session_module._PENDING_LEASE_CLOSE_FDS.add(stale_ownership)
+        original_close = session_module.os.close
+        physically_closed = threading.Event()
+        release_cleanup = threading.Event()
+
+        def close_then_pause(value):
+            original_close(value)
+            if value == descriptor:
+                physically_closed.set()
+                release_cleanup.wait(2)
+
+        cleanup = threading.Thread(
+            target=session_module._close_pending_ownership,
+            args=("lease", stale_ownership),
+        )
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(
+            session_module.os,
+            "close",
+            close_then_pause,
+        ):
+            parent = os.open(
+                temporary,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+            )
+            os.mkdir("replacement", dir_fd=parent)
+            cleanup.start()
+            self.assertTrue(physically_closed.wait(1))
+            before = time.monotonic()
+            with self.assertRaises(self.module.SessionBusyError):
+                self.module.SessionStore(
+                    Path(temporary)
+                )._open_tracked_claim_directory(
+                    "replacement",
+                    dir_fd=parent,
+                )
+            elapsed = time.monotonic() - before
+            release_cleanup.set()
+            cleanup.join(timeout=1)
+            replacement = self.module.SessionStore(
+                Path(temporary)
+            )._open_tracked_claim_directory(
+                "replacement",
+                dir_fd=parent,
+            )
+            lease = session_module.ClaimLease(
+                self.module.SessionStore(Path(temporary)),
+                "a" * 32,
+                "b" * 64,
+                replacement,
+            )
+            lease.close()
+            os.close(parent)
+
+        self.assertLess(elapsed, 0.75)
+        self.assertFalse(cleanup.is_alive())
+
+    def test_scheduler_does_not_scan_a_concurrently_mutated_pending_set(self):
+        session_module = sys.modules["audit_session"]
+        original_pending = session_module._PENDING_LEASE_CLOSE_FDS
+        errors = []
+
+        class NoScanSet(set):
+            def __iter__(self):
+                raise AssertionError("scheduler scanned pending ownership")
+
+        first = (10_000_001, object())
+        second = (10_000_002, object())
+        session_module._PENDING_LEASE_CLOSE_FDS = NoScanSet({first})
+        stop_mutating = threading.Event()
+
+        def mutate():
+            while not stop_mutating.is_set():
+                session_module._PENDING_LEASE_CLOSE_FDS.add(second)
+                session_module._PENDING_LEASE_CLOSE_FDS.discard(second)
+
+        def schedule_many():
+            try:
+                for _ in range(100):
+                    session_module._schedule_pending_cleanup(
+                        "lease",
+                        first,
+                    )
+            except Exception as error:
+                errors.append(error)
+
+        mutator = threading.Thread(target=mutate)
+        worker = threading.Thread(target=schedule_many)
+        mutator.start()
+        worker.start()
+        worker.join(timeout=1)
+        stop_mutating.set()
+        mutator.join(timeout=1)
+        session_module._PENDING_LEASE_CLOSE_FDS = original_pending
+
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(mutator.is_alive())
+        self.assertEqual(errors, [])
+
+    def test_dead_cleanup_executor_is_restarted_by_later_schedule(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        token = object()
+        ownership = (descriptor, token)
+        original_queue = session_module._CLEANUP_QUEUE
+        original_thread = session_module._CLEANUP_THREAD
+        replacement_queue = session_module.queue.SimpleQueue()
+
+        class DeadThread:
+            def is_alive(self):
+                return False
+
+        session_module._CLEANUP_QUEUE = replacement_queue
+        session_module._CLEANUP_THREAD = DeadThread()
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        session_module._PENDING_LEASE_CLOSE_FDS.add(ownership)
+        try:
+            session_module._schedule_pending_cleanup(
+                "lease",
+                ownership,
+            )
+            deadline = time.monotonic() + 1
+            while ownership in session_module._TRACKED_LEASE_OWNERSHIPS:
+                if time.monotonic() >= deadline:
+                    self.fail("dead cleanup executor was not restarted")
+                time.sleep(0.005)
+        finally:
+            session_module._CLEANUP_QUEUE = original_queue
+            session_module._CLEANUP_THREAD = original_thread
+
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_cleanup_worker_contains_unexpected_job_exception(self):
+        session_module = sys.modules["audit_session"]
+        descriptor = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        token = object()
+        ownership = (descriptor, token)
+        original_close_record = session_module._close_owned_record
+        attempts = 0
+
+        def fail_once(kind, value):
+            nonlocal attempts
+            if value == ownership:
+                attempts += 1
+                if attempts == 1:
+                    raise RuntimeError("unexpected cleanup failure")
+            return original_close_record(kind, value)
+
+        session_module._TRACKED_LEASE_OWNERSHIPS.add(ownership)
+        with mock.patch.object(
+            session_module,
+            "_close_owned_record",
+            fail_once,
+        ):
+            session_module._schedule_pending_cleanup(
+                "lease",
+                ownership,
+            )
+            deadline = time.monotonic() + 1
+            while ownership in session_module._TRACKED_LEASE_OWNERSHIPS:
+                if time.monotonic() >= deadline:
+                    self.fail("cleanup worker did not contain and retry")
+                time.sleep(0.005)
+
+        self.assertGreaterEqual(attempts, 2)
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_child_cleanup_start_failure_can_be_retried(self):
+        session_module = sys.modules["audit_session"]
+        original_start = session_module.threading.Thread.start
+        parent_pid = os.getpid()
+        failed = False
+        result_read, result_write = os.pipe()
+
+        def fail_first_child_start(thread):
+            nonlocal failed
+            if os.getpid() != parent_pid and not failed:
+                failed = True
+                raise RuntimeError("child thread unavailable")
+            return original_start(thread)
+
+        with mock.patch.object(
+            session_module.threading.Thread,
+            "start",
+            fail_first_child_start,
+        ):
+            child = os.fork()
+            if child == 0:
+                original_close = os.close
+                original_close(result_read)
+                descriptor = os.open(
+                    "/dev/null",
+                    os.O_RDONLY | os.O_CLOEXEC,
+                )
+                token = object()
+                ownership = (descriptor, token)
+                session_module._TRACKED_LEASE_OWNERSHIPS.add(
+                    ownership
+                )
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                session_module._schedule_pending_cleanup(
+                    "lease",
+                    ownership,
+                )
+                deadline = time.monotonic() + 1
+                while time.monotonic() < deadline:
+                    try:
+                        os.fstat(descriptor)
+                    except OSError:
+                        os.write(result_write, b"closed")
+                        os._exit(0)
+                    time.sleep(0.005)
+                os.write(result_write, b"open")
+                os._exit(1)
+
+            os.close(result_write)
+            outcome = os.read(result_read, 1024)
+            _, status = os.waitpid(child, 0)
+            os.close(result_read)
+
+        self.assertEqual(outcome, b"closed")
+        self.assertTrue(os.WIFEXITED(status))
+        self.assertEqual(os.WEXITSTATUS(status), 0)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_child_snapshot_retries_one_shot_close_eio(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            lease = self.module.SessionStore(root).claim_lease(
+                started.session
+            )
+            descriptor = lease._descriptor
+            session_module = sys.modules["audit_session"]
+            original_close = session_module.os.close
+            parent_pid = os.getpid()
+            failed = False
+            result_read, result_write = os.pipe()
+
+            def one_shot_child_eio(value):
+                nonlocal failed
+                if (
+                    os.getpid() != parent_pid
+                    and value == descriptor
+                    and not failed
+                ):
+                    failed = True
+                    raise OSError(errno.EIO, "transient child close failure")
+                return original_close(value)
+
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                one_shot_child_eio,
+            ):
+                child = os.fork()
+                if child == 0:
+                    original_close(result_read)
+                    try:
+                        os.fstat(descriptor)
+                    except OSError:
+                        outcome = b"closed"
+                    else:
+                        outcome = b"open"
+                    os.write(result_write, outcome)
+                    os._exit(0)
+
+                original_close(result_write)
+                outcome = os.read(result_read, 1024)
+                _, status = os.waitpid(child, 0)
+                original_close(result_read)
+            lease.close()
+
+            self.assertEqual(outcome, b"closed")
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires os.fork")
+    def test_child_persistent_snapshot_eio_retains_cleanup_authority(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            started = self.start(repo, root)
+            lease = self.module.SessionStore(root).claim_lease(
+                started.session
+            )
+            descriptor = lease._descriptor
+            token = lease._tracking_token
+            ownership = (descriptor, token)
+            session_module = sys.modules["audit_session"]
+            original_close = session_module.os.close
+            parent_pid = os.getpid()
+            child_attempts = 0
+            result_read, result_write = os.pipe()
+
+            def two_child_eios(value):
+                nonlocal child_attempts
+                if os.getpid() != parent_pid and value == descriptor:
+                    child_attempts += 1
+                    if child_attempts <= 2:
+                        raise OSError(
+                            errno.EIO,
+                            "persistent child close failure",
+                        )
+                return original_close(value)
+
+            with mock.patch.object(
+                session_module.os,
+                "close",
+                two_child_eios,
+            ):
+                child = os.fork()
+                if child == 0:
+                    original_close(result_read)
+                    session_module._schedule_pending_cleanup(
+                        "lease",
+                        ownership,
+                    )
+                    deadline = time.monotonic() + 1
+                    while time.monotonic() < deadline:
+                        try:
+                            os.fstat(descriptor)
+                        except OSError:
+                            os.write(result_write, b"closed")
+                            os._exit(0)
+                        time.sleep(0.005)
+                    os.write(result_write, b"open")
+                    os._exit(1)
+
+                original_close(result_write)
+                outcome = os.read(result_read, 1024)
+                _, status = os.waitpid(child, 0)
+                original_close(result_read)
+            lease.close()
+
+            self.assertEqual(outcome, b"closed")
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEqual(os.WEXITSTATUS(status), 0)
 
     def test_dropped_unclosed_lease_is_finalized_and_recoverable(self):
         with materialized_repo(

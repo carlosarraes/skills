@@ -638,6 +638,12 @@ class AuditRuntime:
                     error,
                     lease,
                 )
+            except SessionBusyError as error:
+                return self._stopped(
+                    "SESSION_BUSY",
+                    error,
+                    state.get("target", "session"),
+                )
             except (SessionIntegrityError, OSError, ValueError) as error:
                 return self._stopped(
                     "SESSION_INVALID",
