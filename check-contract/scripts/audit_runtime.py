@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import stat
+import sys
 import tempfile
 import time
 from collections.abc import Mapping
@@ -263,13 +264,21 @@ class AuditRuntime:
         self.git_runner = git_runner or LocalGitRunner(clock)
         self.nonce_factory = nonce_factory or (lambda: secrets.token_hex(16))
 
-    def _stopped(self, code, reason, target="primary"):
+    def _stopped(
+        self,
+        code,
+        reason,
+        target="primary",
+        *,
+        prior_report_preserved=True,
+        zero_target_writes=True,
+    ):
         return AuditStopped(
             code=code,
             reason=str(reason),
             target=target,
-            prior_report_preserved=True,
-            zero_target_writes=True,
+            prior_report_preserved=prior_report_preserved,
+            zero_target_writes=zero_target_writes,
         )
 
     def advance(self, transition):
@@ -280,12 +289,152 @@ class AuditRuntime:
                 "TRANSITION_INVALID",
                 "transition must be StartAudit or ContinueAudit",
             )
-        if transition.then is not None:
+        if transition.then is None:
+            return self._start(transition)
+        if not isinstance(transition.primary, AuditTarget):
             return self._stopped(
-                "COMPOUND_UNAVAILABLE",
-                "compound audit transitions are deferred",
+                "TARGET_INVALID",
+                "primary must be an AuditTarget",
             )
-        return self._start(transition)
+        if not isinstance(transition.then, AuditTarget):
+            return self._stopped(
+                "TARGET_INVALID",
+                "then must be an AuditTarget",
+                "then",
+            )
+        if (
+            type(transition.deadline_seconds) is not int
+            or transition.deadline_seconds <= 0
+        ):
+            return self._stopped(
+                "DEADLINE_INVALID",
+                "deadline_seconds must be a positive integer",
+            )
+        absolute_deadline = self.clock() + min(
+            transition.deadline_seconds, 300
+        )
+        result = self._start(
+            transition,
+            absolute_deadline=absolute_deadline,
+            compound_then=transition.then,
+        )
+        if not isinstance(result, AuditStopped):
+            return result
+        if result.code not in {"AUTHORITY_INVALID", "CONTRACT_INVALID"}:
+            return result
+        closed_target = self._closure_summary(
+            outcome="authority-stopped",
+            zero_writes=True,
+            report_only_write=False,
+            prior_report_preserved=True,
+            sealed_value={
+                "target": self._target_value(transition.primary),
+                "terminal_code": result.code,
+            },
+        )
+        then_target = transition.then
+        transition = None
+        result = None
+        try:
+            self._seal_initial_closure(
+                closed_target,
+                absolute_deadline,
+            )
+        except (SessionIntegrityError, OSError, ValueError) as error:
+            return self._stopped("SESSION_FAILURE", error)
+        return self._start(
+            StartAudit(
+                primary=then_target,
+            ),
+            target_name="then",
+            absolute_deadline=absolute_deadline,
+            closed_target=closed_target,
+        )
+
+    @staticmethod
+    def _target_value(target):
+        return {
+            "repo": str(target.repo),
+            "branch": target.branch,
+            "ticket": target.ticket,
+            "narrative_paths": [
+                str(path) for path in target.narrative_paths
+            ],
+        }
+
+    @staticmethod
+    def _restore_target(value):
+        require_exact_keys(
+            value,
+            {"repo", "branch", "ticket", "narrative_paths"},
+            "compound then target",
+        )
+        return AuditTarget(
+            repo=Path(value["repo"]),
+            branch=value["branch"],
+            ticket=value["ticket"],
+            narrative_paths=tuple(
+                Path(path) for path in value["narrative_paths"]
+            ),
+        )
+
+    def _closure_summary(
+        self,
+        *,
+        outcome,
+        zero_writes,
+        report_only_write,
+        prior_report_preserved,
+        sealed_value,
+    ):
+        public_value = {
+            "target": "primary",
+            "outcome": outcome,
+            "zero_writes": zero_writes,
+            "report_only_write": report_only_write,
+            "prior_report_preserved": prior_report_preserved,
+        }
+        digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "summary": public_value,
+                    "sealed_target": sealed_value,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("ascii")
+        ).hexdigest()
+        return {**public_value, "closure_digest": digest}
+
+    def _closed_state(self, closed_target, absolute_deadline):
+        return {
+            "schema_version": 1,
+            "phase": "closed",
+            "target": "primary",
+            "absolute_deadline": absolute_deadline,
+            "nonce": self._nonce(),
+            "response_name": f"{self._nonce()}.json",
+            "a_closure_digest": closed_target["closure_digest"],
+            "closed_target": dict(closed_target),
+        }
+
+    def _seal_initial_closure(self, closed_target, absolute_deadline):
+        SessionStore(self.session_root).create(
+            self._closed_state(closed_target, absolute_deadline),
+            {"schema_version": 1, "kind": "terminal"},
+        )
+
+    @staticmethod
+    def _next_command(generation):
+        return (
+            sys.executable,
+            str(Path(__file__).resolve().with_name("check_contract.py")),
+            "continue",
+            "--session",
+            generation.token,
+            "--response",
+            str(generation.response_path),
+        )
 
     def _nonce(self):
         value = self.nonce_factory()
@@ -543,6 +692,9 @@ class AuditRuntime:
                 probe_ids,
             ),
         }
+        if "a_closure_digest" in state:
+            packet["a_closure_digest"] = state["a_closure_digest"]
+            packet["closed_target"] = state["closed_target"]
         generation = store.append_claimed(
             token,
             next_state,
@@ -556,15 +708,10 @@ class AuditRuntime:
             packet_path=generation.packet_path,
             packet_sha256=generation.packet_sha256,
             response_path=generation.response_path,
-            next_command=(
-                "check-contract-runtime",
-                "continue",
-                "--session",
-                generation.token,
-                "--response",
-                str(generation.response_path),
-            ),
+            next_command=self._next_command(generation),
             nonce=nonce,
+            a_closure_digest=state.get("a_closure_digest"),
+            closed_target=state.get("closed_target"),
         )
 
     def _resolve_acceptance_qa(self, narratives, state):
@@ -1175,10 +1322,63 @@ class AuditRuntime:
                     state,
                 )
                 if state["phase"] == "reconciliation":
-                    return self._close_reconciliation(
+                    completion = self._close_reconciliation(
                         state,
                         packet,
                         judgment_value,
+                    )
+                    then_value = state.get("compound_then")
+                    if then_value is None:
+                        return completion
+                    closed_target = self._closure_summary(
+                        outcome="closed",
+                        zero_writes=False,
+                        report_only_write=bool(
+                            completion.mutation_attestation[
+                                "only_active_report_changed"
+                            ]
+                        ),
+                        prior_report_preserved=not bool(
+                            state["report_guard"]["exists"]
+                        ),
+                        sealed_value={
+                            "state": {
+                                key: value
+                                for key, value in state.items()
+                                if key != "compound_then"
+                            },
+                            "verdict": completion.verdict,
+                            "route": list(completion.route),
+                            "report_sha256": (
+                                completion.report_sha256
+                            ),
+                            "mutation_attestation": dict(
+                                completion.mutation_attestation
+                            ),
+                        },
+                    )
+                    then_target = self._restore_target(then_value)
+                    absolute_deadline = state["absolute_deadline"]
+                    store.tombstone_claimed(
+                        request.session,
+                        self._closed_state(
+                            closed_target,
+                            absolute_deadline,
+                        ),
+                        lease=lease,
+                    )
+                    lease.close()
+                    lease = None
+                    state = None
+                    packet = None
+                    judgment_value = None
+                    completion = None
+                    request = None
+                    return self._start(
+                        StartAudit(primary=then_target),
+                        target_name="then",
+                        absolute_deadline=absolute_deadline,
+                        closed_target=closed_target,
                     )
                 code_judgment = validate_code_judgment(
                     packet,
@@ -1260,12 +1460,21 @@ class AuditRuntime:
             if lease is not None:
                 lease.close()
 
-    def _start(self, request: StartAudit):
+    def _start(
+        self,
+        request: StartAudit,
+        *,
+        target_name="primary",
+        absolute_deadline=None,
+        compound_then=None,
+        closed_target=None,
+    ):
         target = request.primary
         if not isinstance(target, AuditTarget):
             return self._stopped(
                 "TARGET_INVALID",
                 "primary must be an AuditTarget",
+                target_name,
             )
         if (
             type(request.deadline_seconds) is not int
@@ -1274,9 +1483,18 @@ class AuditRuntime:
             return self._stopped(
                 "DEADLINE_INVALID",
                 "deadline_seconds must be a positive integer",
+                target_name,
             )
-        started_at = self.clock()
-        absolute_deadline = started_at + min(request.deadline_seconds, 300)
+        if absolute_deadline is None:
+            absolute_deadline = self.clock() + min(
+                request.deadline_seconds, 300
+            )
+        if self.clock() > absolute_deadline:
+            return self._stopped(
+                "DEADLINE_EXPIRED",
+                "audit deadline expired before target start",
+                target_name,
+            )
         try:
             authority = self.authority_resolver(
                 Path(target.repo),
@@ -1284,7 +1502,7 @@ class AuditRuntime:
                 target.ticket,
             )
         except (AuthorityError, OSError, ValueError) as error:
-            return self._stopped("AUTHORITY_INVALID", error)
+            return self._stopped("AUTHORITY_INVALID", error, target_name)
         try:
             repository_root = Path(authority["repository_root"]).resolve()
             resolved_session_root = self.session_root.resolve(strict=False)
@@ -1295,6 +1513,7 @@ class AuditRuntime:
                 return self._stopped(
                     "SESSION_LOCATION_INVALID",
                     "session storage must be outside the target repository",
+                    target_name,
                 )
             contract_bytes = Path(authority["contract_path"]).read_bytes()
             contract_buffer_sha256 = hashlib.sha256(
@@ -1342,7 +1561,7 @@ class AuditRuntime:
                 "report_path": str(report_path),
             }
         except (ContractParseError, KeyError, OSError, ValueError) as error:
-            return self._stopped("CONTRACT_INVALID", error)
+            return self._stopped("CONTRACT_INVALID", error, target_name)
         try:
             captured = capture_code_evidence(
                 authority,
@@ -1353,7 +1572,7 @@ class AuditRuntime:
                 absolute_deadline,
             )
         except (EvidenceError, OSError, ValueError) as error:
-            return self._stopped("EVIDENCE_FAILURE", error)
+            return self._stopped("EVIDENCE_FAILURE", error, target_name)
         clauses = [
             {
                 "clause_id": clause.clause_id,
@@ -1392,21 +1611,25 @@ class AuditRuntime:
             "evidence_ids": list(captured["evidence"]),
             "reuse_coverage_indeterminate": captured["reuse_truncated"],
         }
-        nonce = self.nonce_factory()
-        if not isinstance(nonce, str) or not re.fullmatch(
-            r"[0-9a-f]{32}", nonce
-        ):
+        if closed_target is not None:
+            packet["a_closure_digest"] = closed_target["closure_digest"]
+            packet["closed_target"] = dict(closed_target)
+        try:
+            nonce = self._nonce()
+            response_name = f"{self._nonce()}.json"
+        except SessionIntegrityError as error:
             return self._stopped(
                 "SESSION_FAILURE",
-                "nonce factory returned an invalid nonce",
+                error,
+                target_name,
             )
         state = {
             "schema_version": 1,
             "phase": "code",
-            "target": "primary",
+            "target": target_name,
             "absolute_deadline": absolute_deadline,
             "nonce": nonce,
-            "response_name": f"{self.nonce_factory()}.json",
+            "response_name": response_name,
             "target_identity": {
                 "repository_root": str(repository_root),
                 "branch": target.branch,
@@ -1452,26 +1675,30 @@ class AuditRuntime:
                 "reuse_truncated": captured["reuse_truncated"],
             },
         }
+        if compound_then is not None:
+            state["compound_then"] = self._target_value(compound_then)
+        if closed_target is not None:
+            state["a_closure_digest"] = closed_target["closure_digest"]
+            state["closed_target"] = dict(closed_target)
         try:
             generation = SessionStore(self.session_root).create(state, packet)
         except (SessionIntegrityError, OSError, ValueError) as error:
-            return self._stopped("SESSION_FAILURE", error)
+            return self._stopped("SESSION_FAILURE", error, target_name)
         return NeedJudgment(
             session=generation.token,
-            target="primary",
+            target=target_name,
             kind="code",
             packet_path=generation.packet_path,
             packet_sha256=generation.packet_sha256,
             response_path=generation.response_path,
-            next_command=(
-                "check-contract-runtime",
-                "continue",
-                "--session",
-                generation.token,
-                "--response",
-                str(generation.response_path),
-            ),
+            next_command=self._next_command(generation),
             nonce=nonce,
+            a_closure_digest=(
+                closed_target["closure_digest"]
+                if closed_target is not None
+                else None
+            ),
+            closed_target=closed_target,
         )
 
 
