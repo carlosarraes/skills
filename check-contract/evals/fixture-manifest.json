@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "canonical": {
+    "fixture": "contract-repo",
+    "branch": "feature/proj-123",
+    "head": "41958d7a6d6eb7282ebcd58ac657410652097a43",
+    "base": "7aa39139c43dfcb9ff54474abfbacc9da3799937"
+  },
+  "scenarios": {
+    "contract-compliant-overengineered": {
+      "targets": {
+        "target": {
+          "expected_head": "d3d02eaa6d8dc88fc43611c57f1dd89948bdd4c3",
+          "ledger": "empty",
+          "inventory": [
+            {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/approval.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/contract.md"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/execution-ledger.md"},
+            {"status": "M", "path": "src/checkout.py"},
+            {"status": "M", "path": "src/pricing.py"},
+            {"status": "M", "path": "tests/test_checkout.py"}
+          ]
+        }
+      }
+    },
+    "contract-violated-summary": {
+      "targets": {
+        "target-a": {
+          "expected_head": "0c3a0ba9fc813c9a22e1f642126175aea6d0642e",
+          "ledger": "empty",
+          "inventory": [
+            {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/approval.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/check-report.md"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/contract.md"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/execution-ledger.md"},
+            {"status": "M", "path": "src/checkout.py"},
+            {"status": "M", "path": "src/pricing.py"},
+            {"status": "M", "path": "tests/test_checkout.py"}
+          ]
+        },
+        "target-b": {
+          "expected_head": "851cd76f31ba4db10bc149710db0f8ecb7f3d1bb",
+          "ledger": "missing",
+          "inventory": [
+            {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/approval.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/contract.md"},
+            {"status": "A", "path": ".worker-results/implementation-summary.md"},
+            {"status": "M", "path": "src/checkout.py"},
+            {"status": "M", "path": "src/pricing.py"},
+            {"status": "M", "path": "tests/test_checkout.py"}
+          ]
+        }
+      }
+    },
+    "documented-drift": {
+      "targets": {
+        "target": {
+          "expected_head": "5fb9f31bc13d312753668bca15678e44cc9f1c0a",
+          "ledger": "d1",
+          "inventory": [
+            {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/approval.json"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/contract.md"},
+            {"status": "A", "path": ".notes/feature-proj-123/contract/v1/execution-ledger.md"},
+            {"status": "M", "path": "src/checkout.py"},
+            {"status": "M", "path": "src/pricing.py"},
+            {"status": "M", "path": "tests/test_checkout.py"}
+          ]
+        }
+      }
+    }
+  }
+}
