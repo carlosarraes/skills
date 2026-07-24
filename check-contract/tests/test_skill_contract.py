@@ -11,18 +11,36 @@ def normalized(text):
     return " ".join(text.split())
 
 
+def read_optional(path):
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
+def section_from(text, heading):
+    position = text.find(heading)
+    return "" if position < 0 else text[position:]
+
+
 class CheckContractSkillTests(unittest.TestCase):
     def setUp(self):
-        self.skill = SKILL.read_text(encoding="utf-8")
-        self.protocol = PROTOCOL.read_text(encoding="utf-8")
+        self.skill = read_optional(SKILL)
+        self.protocol = read_optional(PROTOCOL)
+        self.check_protocol = section_from(
+            self.protocol,
+            "## Contract check vocabulary",
+        )
         self.flat_skill = normalized(self.skill)
-        self.flat_protocol = normalized(self.protocol)
+        self.flat_check_protocol = normalized(self.check_protocol)
 
     def assert_ordered(self, text, *phrases):
-        positions = [text.index(phrase) for phrase in phrases]
+        positions = [text.find(phrase) for phrase in phrases]
+        self.assertNotIn(-1, positions, phrases)
         self.assertEqual(positions, sorted(positions), phrases)
 
     def test_is_explicitly_user_invoked_and_compact(self):
+        self.assertTrue(self.skill.startswith("---\n"))
         frontmatter = self.skill.split("---", 2)[1]
         self.assertIn("name: check-contract", frontmatter)
         self.assertIn("disable-model-invocation: true", frontmatter)
@@ -118,10 +136,10 @@ class CheckContractSkillTests(unittest.TestCase):
             self.skill.index("### Step 3:")
         ]
         for phrase in (
-            "`<base>..<HEAD>`",
+            "`git diff <base>..<full-head>`",
             "renames",
             "contract artifacts",
-            "changed source and tests",
+            "changed source/tests",
             "surrounding code",
             "public contracts",
             "side effects",
@@ -129,7 +147,7 @@ class CheckContractSkillTests(unittest.TestCase):
             "integrations",
             "`file:line`",
         ):
-            self.assertIn(phrase, step_two)
+            self.assertIn(normalized(phrase), normalized(step_two))
         self.assertIn(
             normalized(
                 "Do not read the ledger, report, supplied summary, or PR "
@@ -154,12 +172,69 @@ class CheckContractSkillTests(unittest.TestCase):
             self.assertIn(token, self.skill)
         self.assertIn(
             "Clause status: `MET | UNMET | EXCEEDED | INDETERMINATE`",
-            self.protocol,
+            self.check_protocol,
         )
         self.assertIn(
             "Ledger status: `VERIFIED | QUESTIONABLE | CONTRADICTED`",
-            self.protocol,
+            self.check_protocol,
         )
+
+    def test_code_as_shipped_uses_only_recorded_head_git_objects(self):
+        step_two = section_from(
+            self.skill,
+            "### Step 2: Derive code-as-shipped first",
+        )
+        if "### Step 3:" in step_two:
+            step_two = step_two.split("### Step 3:", 1)[0]
+        for phrase in (
+            "`git diff <base>..<full-head>`",
+            "`git show <full-head>:<path>`",
+            "every code-as-shipped byte",
+            "Git object",
+            "source Git-object IDs",
+            "dirty worktree",
+            "non-authoritative limitation",
+        ):
+            self.assertIn(normalized(phrase), normalized(step_two))
+        self.assert_ordered(
+            step_two,
+            "`git diff <base>..<full-head>`",
+            "`git show <full-head>:<path>`",
+        )
+
+    def test_skill_does_not_duplicate_protocol_owned_enumerations(self):
+        self.assertIn(
+            "protocol-defined clause status",
+            self.skill,
+        )
+        for enumeration in (
+            "MET | UNMET | EXCEEDED | INDETERMINATE",
+            "VERIFIED | QUESTIONABLE | CONTRADICTED",
+            "PASS | PARTIAL | FAIL",
+            "PASS | WARNING | FAIL",
+            "NONE | ACCEPTED | QUESTIONABLE",
+            "NONE | PRESENT",
+            "PASS | PASS WITH DOCUMENTED DRIFT",
+        ):
+            self.assertNotIn(enumeration, self.skill)
+
+    def test_protocol_defines_total_clause_and_ledger_semantics(self):
+        for phrase in (
+            "For positive clauses (O/B/I/C/R/A)",
+            "For non-goals (N)",
+            "For expected-surface clauses (S)",
+            "For complexity-budget clauses (K)",
+            "`INDETERMINATE` means",
+            "`VERIFIED` means",
+            "`QUESTIONABLE` means",
+            "`CONTRADICTED` means",
+            "A fidelity-owned `EXCEEDED` that does not change an approved "
+            "behavior, public contract, or risk boundary",
+            "two or more localized items are proven unearned",
+            "one or more questionable localized items",
+            "when no F/U/D IDs exist, state `IDs: none`",
+        ):
+            self.assertIn(phrase, self.flat_check_protocol)
 
     def test_protocol_owns_exact_taxonomy_aggregation_and_precedence(self):
         required = (
@@ -183,9 +258,9 @@ class CheckContractSkillTests(unittest.TestCase):
             "Apply this exhaustive precedence after authority succeeds",
         )
         for phrase in required:
-            self.assertIn(phrase, self.flat_protocol)
+            self.assertIn(phrase, self.flat_check_protocol)
         self.assertRegex(
-            self.protocol,
+            self.check_protocol,
             r"\| 1 \|.*CONTRACT VIOLATED.*change-contract.*\n"
             r"\| 2 \|.*CONTRACT VIOLATED.*exec-ticket.*clean-up.*\n"
             r"\| 3 \|.*CONTRACT VIOLATED.*exec-ticket.*\n"
@@ -205,7 +280,7 @@ class CheckContractSkillTests(unittest.TestCase):
             "| Contract satisfied and lean | `qa-ticket` |",
             "| Acceptance QA exists and review evidence is needed | `qa-pr` |",
         ):
-            self.assertIn(row, self.protocol)
+            self.assertIn(row, self.check_protocol)
         for phrase in (
             "`O1` for Outcome",
             "preserve authored `B*`, `N*`, `I*`, `C*`, and `R*`",
@@ -219,9 +294,9 @@ class CheckContractSkillTests(unittest.TestCase):
             "preserve `D1..Dn`",
             "`U1..Un`",
             "`F1..Fn`",
-            "The route cites stable F/U/D IDs",
+            "when no F/U/D IDs exist, state `IDs: none`",
         ):
-            self.assertIn(phrase, self.protocol)
+            self.assertIn(normalized(phrase), normalized(self.check_protocol))
 
     def test_report_shape_and_rows_are_fixed(self):
         headings = (
@@ -250,7 +325,10 @@ class CheckContractSkillTests(unittest.TestCase):
         self.assertIn("stable finding IDs", self.flat_skill)
 
     def test_final_resolution_and_atomic_replacement_are_adjacent(self):
-        step_six = self.skill[self.skill.index("### Step 6:"):]
+        step_six = section_from(
+            self.skill,
+            "### Step 6: Replace report and route",
+        )
         self.assertRegex(
             normalized(step_six).lower(),
             r"render the complete report outside the repository\. Immediately "
@@ -277,13 +355,18 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), normalized(step_six))
 
-    def test_only_report_mutation_and_no_remediation_or_posting(self):
+    def test_only_report_mutation_and_routes_are_advisory(self):
         for phrase in (
             "The only permitted repository mutation is atomic replacement",
             "still-active `check-report.md`",
             "Do not fix code",
             "Do not edit the contract or ledger",
             "Do not post",
+            "Do not commit",
+            "Do not push",
+            "Do not approve",
+            "Do not invoke the recommended skill",
+            "Routes are advisory only",
         ):
             self.assertIn(normalized(phrase).lower(), self.flat_skill.lower())
 

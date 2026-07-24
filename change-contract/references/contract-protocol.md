@@ -183,6 +183,41 @@ Overall verdict: `PASS | PASS WITH DOCUMENTED DRIFT | NEEDS HUMAN REVIEW | CONTR
 
 Recommended next skill: `<ordered route>`
 
+### Status semantics
+
+Assign one clause status per stable clause ID:
+
+- For positive clauses (O/B/I/C/R/A), `MET` means Git-object or acceptance
+  evidence proves the approved predicate; `UNMET` means determinate evidence
+  proves it false or missing; `EXCEEDED` means it is met but shipped behavior,
+  contract, risk, or responsibility goes beyond its approved boundary.
+- For non-goals (N), `MET` means the excluded behavior is absent; `UNMET` means
+  it is present; `EXCEEDED` means the implementation also excludes behavior
+  outside the named non-goal.
+- For expected-surface clauses (S), `MET` means the responsibility shipped in
+  the predicted surface; `UNMET` means the responsibility did not ship
+  anywhere; `EXCEEDED` means it shipped through additional or different paths
+  or responsibilities.
+- For complexity-budget clauses (K), `MET` means actual count and named items
+  are within the cap (using less is `MET`); `UNMET` means an explicitly
+  required named item is absent and its present requirement is unsatisfied;
+  `EXCEEDED` means the count exceeds the cap or an unapproved item appears in
+  that category.
+- `INDETERMINATE` means available evidence cannot establish the applicable
+  predicate, path, item, or count. Missing, unreadable, or conflicting evidence
+  is indeterminate; proven absence is `UNMET`.
+
+Assign ledger status independently:
+
+- `VERIFIED` means every required D field is complete and Git-object or command
+  evidence confirms its affected clauses, discovered fact, actual approach,
+  timing, and bounded classification.
+- `QUESTIONABLE` means the entry is not disproved, but a required field,
+  evidence, timing, affected clause, or bounded classification is incomplete
+  or ambiguous.
+- `CONTRADICTED` means repository evidence falsifies a material claim or the
+  entry describes a contract-changing rather than bounded deviation.
+
 ### Aggregation
 
 Contract fidelity owns Outcome, B/N/I/C clauses, and whether each B's
@@ -194,16 +229,20 @@ while simplicity and drift remain visible.
 
 - Contract fidelity `FAIL`: any Outcome/B/N/I/C is `UNMET`, or `EXCEEDED` in a
   way that changes an approved behavior, public contract, or risk boundary.
+- A fidelity-owned `EXCEEDED` that does not change an approved behavior, public
+  contract, or risk boundary is determinate and satisfied for fidelity; its
+  consequences still aggregate into YAGNI, Reuse, and drift where applicable.
 - Contract fidelity `PARTIAL`: no `FAIL` condition, but any fidelity-owned
   clause or mapped acceptance proof is `INDETERMINATE`.
 - Contract fidelity `PASS`: every fidelity-owned clause is determinate and
   satisfied.
 - YAGNI `FAIL`: any proven unearned item adds a module, runtime dependency,
   configuration, public interface, violates a numeric complexity budget of
-  zero, or two or more localized unearned layers, wrappers, or branches exist.
-- YAGNI `WARNING`: exactly one localized item is plausibly unearned but does
-  not violate an explicit zero budget. YAGNI `PASS`: no proven or questionable
-  item exists.
+  zero, or two or more localized items are proven unearned.
+- YAGNI `WARNING`: no `FAIL` condition exists, and either exactly one localized
+  item is proven unearned or one or more questionable localized items (or any
+  other questionable item) exist. YAGNI `PASS`: no proven or questionable item
+  exists.
 - Reuse `FAIL`: a compatible current helper, component, service, or platform
   feature is demonstrably duplicated or bypassed. Reuse `WARNING`:
   compatibility remains indeterminate or only a near-duplicate exists. Reuse
@@ -260,4 +299,5 @@ Generate stable IDs before aggregation:
 - `F1..Fn` for findings sorted by verdict precedence, then clause/deviation ID,
   then file/line.
 
-The route cites stable F/U/D IDs.
+The route cites every applicable stable F/U/D ID when present; when no F/U/D
+IDs exist, state `IDs: none`.

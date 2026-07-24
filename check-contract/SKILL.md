@@ -9,7 +9,8 @@ disable-model-invocation: true
 Audit code as shipped against immutable approved authority. The only permitted
 repository mutation is atomic replacement of the still-active
 `check-report.md`. Do not fix code. Do not edit the contract or ledger. Do not
-post results.
+post results. Do not commit. Do not push. Do not approve anything. Do not invoke
+the recommended skill. Routes are advisory only.
 
 ### Step 1: Resolve and verify authority
 
@@ -49,33 +50,37 @@ audit range, ancestry, worktree disclosure, and guards are recorded.
 
 ### Step 2: Derive code-as-shipped first
 
-Inventory exact `<base>..<HEAD>` with renames and separate contract artifacts
-from implementation. Read changed source and tests plus enough surrounding code
-to account for public contracts, side effects, persisted state, and
-integrations with `file:line` evidence. Do not read the ledger, report, supplied
-summary, or PR narrative yet.
+From the canonical root, run `git diff <base>..<full-head>` and inventory its
+renames, separating contract artifacts from implementation. Read every
+code-as-shipped byte—including changed source/tests and enough surrounding
+code—from the recorded Git object with `git show <full-head>:<path>`. All later
+code reads and searches use that full-HEAD tree, never worktree files. A dirty
+worktree is disclosed only as a non-authoritative limitation. Use source
+Git-object IDs as the source guards. Account for public contracts, side
+effects, persisted state, and integrations with `file:line` evidence. Do not
+read the ledger, report, supplied summary, or PR narrative yet.
 
 **Complete when:** the code-first behavior and exact implementation surface are
 evidenced independently of claims.
 
 ### Step 3: Classify contract fidelity
 
-Using only protocol vocabulary, assign
-`MET | UNMET | EXCEEDED | INDETERMINATE` to Outcome and every B/N/I/C/R,
-expected-surface, complexity-budget, and acceptance-evidence clause. Check
-whether each `A-<B-id>` actually demonstrates its behavior. Aggregate Contract
-fidelity exactly as the protocol specifies.
+Assign the protocol-defined clause status to Outcome and every B/N/I/C/R,
+expected-surface, complexity-budget, and acceptance-evidence clause. Check each
+`A-<B-id>` against its behavior and aggregate Contract fidelity only by the
+protocol.
 
 **Complete when:** every clause family has a stable ID, status, evidence, and
 reason, and Contract fidelity is derived.
 
 ### Step 4: Audit YAGNI and reuse
 
-Search current code for existing helpers, components, services, and platform
-features. Judge every new abstraction, dependency, configuration, module,
-public interface, layer/wrapper, defensive branch, touched responsibility,
-duplicate, and implementation-coupled test as earned or unearned. Correctness
-requirements are not bloat. Derive YAGNI and Reuse only by protocol rules.
+Search the recorded full-HEAD tree for existing helpers, components, services,
+and platform features. Judge every new abstraction, dependency, configuration,
+module, public interface, layer/wrapper, defensive branch, touched
+responsibility, duplicate, and implementation-coupled test as earned or
+unearned. Correctness requirements are not bloat. Derive YAGNI and Reuse only
+by protocol rules.
 
 **Complete when:** every changed responsibility has evidenced reuse/no-reuse
 and earned/unearned decisions and both audit axes are derived.
@@ -127,7 +132,8 @@ Contract SHA-256: <digest>
 
 Clause rows contain ID, status, evidence, and reason. Drift rows contain
 D/deviation ID, status, evidence, and documentation state. The route cites
-stable finding IDs and relevant U/D IDs.
+stable finding IDs and relevant U/D IDs when present; otherwise it uses the
+protocol's explicit-none form.
 
 **Complete when:** the active report alone is atomically replaced from a fresh,
 unchanged authority snapshot and its mutation attestation is verified.
