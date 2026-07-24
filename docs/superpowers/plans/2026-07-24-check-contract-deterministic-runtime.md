@@ -1158,7 +1158,7 @@ git commit -m "feat: expose compound contract audit runtime"
 - Produces: an explicit-only skill that performs no direct repository
   inspection and follows only runtime-issued packets/next commands
 
-- [ ] **Step 1: Replace prose-structure tests with behavior-bearing skill tests**
+- [x] **Step 1: Replace prose-structure tests with behavior-bearing skill tests**
 
 Remove tests that require six prose headings. Add exact constraints:
 
@@ -1183,7 +1183,7 @@ def test_skill_is_thin_runtime_choreography(self):
 
 Require at most 500 words and installed-sibling portability.
 
-- [ ] **Step 2: Run the focused skill tests and verify RED**
+- [x] **Step 2: Run the focused skill tests and verify RED**
 
 Run:
 
@@ -1194,7 +1194,7 @@ python -m unittest discover -s check-contract/tests \
 
 Expected: FAIL because the skill still owns the six-step prompt workflow.
 
-- [ ] **Step 3: Rewrite `SKILL.md` around the continuation protocol**
+- [x] **Step 3: Rewrite `SKILL.md` around the continuation protocol**
 
 The skill must contain only:
 
@@ -1214,7 +1214,7 @@ The skill must contain only:
 For a compound request, pass both targets to one `start`; never create a second
 runtime session.
 
-- [ ] **Step 4: Run all structural and unit suites**
+- [x] **Step 4: Run all structural and unit suites**
 
 Run:
 
@@ -1228,7 +1228,7 @@ git diff --check
 
 Expected: all tests PASS, skill is at most 500 words, diff check clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 git add check-contract/SKILL.md \
