@@ -301,14 +301,14 @@ Obtain a fresh independent task review before Task 2.
 - Produces: one preserved canary, 18 immutable paired samples, benchmark/viewer,
   and independent `ACCEPT` or `REJECT`
 
-- [ ] **Step 1: Freeze and verify the reviewed runtime**
+- [x] **Step 1: Freeze and verify the reviewed runtime**
 
 Record the exact reviewed HEAD and SHA-256 for the complete transitive runtime
 inventory. Require clean source bytes, read-only snapshot permissions, direct
 `check_contract.py --help`, all shared suites, and assertion-contract v2
 preflight.
 
-- [ ] **Step 2: Run one treatment-only canary**
+- [x] **Step 2: Run one treatment-only canary**
 
 Use `contract-compliant-overengineered`, a fresh materialized fixture/session,
 Claude Code `2.1.218`, `claude-sonnet-5`, high effort, bubblewrap isolation,
