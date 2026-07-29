@@ -13,6 +13,7 @@ from pathlib import Path
 class RequestEnvelope:
     request_id: str
     manifest_sha256: str
+    manifest_json: str
 
 
 class RequestError(RuntimeError):
@@ -103,7 +104,11 @@ class RequestStore:
         self._write_new(
             self.marker, self._bytes({"request_id": request_id})
         )
-        return RequestEnvelope(request_id, hashlib.sha256(raw).hexdigest())
+        return RequestEnvelope(
+            request_id,
+            hashlib.sha256(raw).hexdigest(),
+            raw.decode("utf-8"),
+        )
 
     def consume(self, request_id):
         if (

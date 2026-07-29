@@ -20,6 +20,7 @@ from audit_runtime import (
     NeedJudgment,
     StartAudit,
 )
+from audit_session import SessionStore
 
 
 REQUEST_LIMIT = 3 * 1024 * 1024
@@ -28,9 +29,10 @@ SOCKET_TIMEOUT_SECONDS = 10
 
 
 class BrokerError(RuntimeError):
-    def __init__(self, code, reason):
+    def __init__(self, code, reason, *, zero_target_writes=True):
         super().__init__(str(reason))
         self.code = code
+        self.zero_target_writes = zero_target_writes
 
 
 def _public_value(value):
@@ -50,21 +52,82 @@ def _public_value(value):
     return dict(value) if hasattr(value, "items") else value
 
 
-def _report_relative(path):
-    parts = Path(path).parts
+def subject_report_path(repository_root, report_path, public_target_root):
+    """Map a host result through one authenticated repository authority."""
+    repository_root = Path(repository_root).resolve(strict=False)
+    report_path = Path(report_path).resolve(strict=False)
+    public_target_root = Path(public_target_root)
+    if not public_target_root.is_absolute():
+        raise BrokerError(
+            "BROKER_RESULT_INVALID", "public target root is not absolute"
+        )
     try:
-        index = parts.index(".notes")
+        relative = report_path.relative_to(repository_root)
     except ValueError as error:
         raise BrokerError(
-            "BROKER_RESULT_INVALID", "runtime report path is not target-relative"
+            "BROKER_RESULT_INVALID",
+            "runtime report path is outside its authorized repository",
         ) from error
-    return Path(*parts[index:]).as_posix()
+    return (public_target_root / relative).as_posix()
+
+
+def _manifest_repositories(envelope):
+    if not isinstance(getattr(envelope, "manifest_json", None), str):
+        raise TypeError("broker requires its host-issued request envelope")
+    raw = envelope.manifest_json.encode("utf-8")
+    if not hashlib.sha256(raw).hexdigest() == envelope.manifest_sha256:
+        raise ValueError("request envelope manifest digest is invalid")
+    try:
+        manifest = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("request envelope manifest is invalid") from error
+    if (
+        type(manifest) is not dict
+        or set(manifest)
+        != {"schema_version", "request_id", "primary", "then"}
+        or manifest.get("schema_version") != 1
+        or manifest.get("request_id") != envelope.request_id
+        or type(manifest.get("primary")) is not dict
+        or (
+            manifest.get("then") is not None
+            and type(manifest.get("then")) is not dict
+        )
+    ):
+        raise ValueError("request envelope manifest is invalid")
+    repositories = []
+    for target in (manifest["primary"], manifest["then"]):
+        if target is None:
+            continue
+        repo = target.get("repo")
+        if not isinstance(repo, str) or not Path(repo).is_absolute():
+            raise ValueError("request envelope repository is invalid")
+        repositories.append(Path(repo).resolve(strict=False))
+    return tuple(repositories)
+
+
+def _validated_public_targets(envelope, public_targets):
+    if type(public_targets) is not dict:
+        raise TypeError("broker public target mapping must be a dictionary")
+    normalized = {}
+    for host_root, public_root in public_targets.items():
+        host = Path(host_root).resolve(strict=False)
+        public = Path(public_root)
+        if not public.is_absolute() or Path(os.path.normpath(public)) != public:
+            raise ValueError("broker public target root is invalid")
+        normalized[host] = public
+    repositories = _manifest_repositories(envelope)
+    if any(repository not in normalized for repository in repositories):
+        raise ValueError("request repository has no public target mapping")
+    public_roots = [normalized[repository] for repository in repositories]
+    if len(set(public_roots)) != len(public_roots):
+        raise ValueError("request repositories require distinct public targets")
+    return {repository: normalized[repository] for repository in repositories}
 
 
 class HostAuditBroker:
     """Own runtime authority and expose only start/continue protocol bytes."""
 
-    def __init__(self, runtime: AuditRuntime, envelope):
+    def __init__(self, runtime: AuditRuntime, envelope, public_targets):
         if not all(
             isinstance(getattr(envelope, field, None), str)
             for field in ("request_id", "manifest_sha256")
@@ -73,21 +136,42 @@ class HostAuditBroker:
         self.runtime = runtime
         self.request_id = envelope.request_id
         self.manifest_sha256 = envelope.manifest_sha256
+        self.public_targets = _validated_public_targets(
+            envelope, public_targets
+        )
         self._responses = {}
         self._lock = threading.Lock()
 
     @staticmethod
-    def _stopped(code):
+    def _stopped(code, *, zero_target_writes=True):
         return {
             "result": "AuditStopped",
             "code": code,
             "reason": "audit stopped",
             "target": "broker",
             "prior_report_preserved": True,
-            "zero_target_writes": True,
+            "zero_target_writes": zero_target_writes,
         }
 
-    def _export(self, result):
+    def _session_repository_root(self, session):
+        state = SessionStore(self.runtime.session_root).load(session)
+        try:
+            repository_root = Path(
+                state["target_identity"]["repository_root"]
+            ).resolve(strict=False)
+        except (KeyError, TypeError, ValueError) as error:
+            raise BrokerError(
+                "BROKER_RESULT_INVALID",
+                "runtime session repository authority is invalid",
+            ) from error
+        if repository_root not in self.public_targets:
+            raise BrokerError(
+                "BROKER_RESULT_INVALID",
+                "runtime session repository is not request-authorized",
+            )
+        return repository_root
+
+    def _export(self, result, repository_root=None):
         if isinstance(result, NeedJudgment):
             packet_bytes = result.packet_path.read_bytes()
             if hashlib.sha256(packet_bytes).hexdigest() != result.packet_sha256:
@@ -107,8 +191,12 @@ class HostAuditBroker:
                     "BROKER_RESULT_INVALID",
                     "issued packet request binding changed",
                 )
+            issued_repository = self._session_repository_root(result.session)
             with self._lock:
-                self._responses[result.session] = result.response_path
+                self._responses[result.session] = (
+                    result.response_path,
+                    issued_repository,
+                )
             public = _public_value(result)
             for field in ("packet_path", "response_path", "next_command"):
                 public.pop(field, None)
@@ -120,8 +208,30 @@ class HostAuditBroker:
             )
             return public
         if isinstance(result, AuditComplete):
-            public = _public_value(result)
-            public["report_path"] = _report_relative(result.report_path)
+            try:
+                if repository_root not in self.public_targets:
+                    raise BrokerError(
+                        "BROKER_RESULT_INVALID",
+                        "completed audit has no authorized public target",
+                    )
+                public = _public_value(result)
+                public["report_path"] = subject_report_path(
+                    repository_root,
+                    result.report_path,
+                    self.public_targets[repository_root],
+                )
+            except BrokerError as error:
+                raise BrokerError(
+                    error.code,
+                    error,
+                    zero_target_writes=False,
+                ) from error
+            except (OSError, TypeError, ValueError) as error:
+                raise BrokerError(
+                    "BROKER_RESULT_INVALID",
+                    "completed report path mapping failed",
+                    zero_target_writes=False,
+                ) from error
             public["result"] = "AuditComplete"
             return public
         if isinstance(result, AuditStopped):
@@ -169,11 +279,12 @@ class HostAuditBroker:
                 "BROKER_REQUEST_INVALID", "response exceeds the byte limit"
             )
         with self._lock:
-            response_path = self._responses.pop(session, None)
-        if response_path is None:
+            response_context = self._responses.pop(session, None)
+        if response_context is None:
             raise BrokerError(
                 "BROKER_SESSION_INVALID", "session was not issued by this broker"
             )
+        response_path, repository_root = response_context
         descriptor = os.open(
             response_path,
             os.O_WRONLY
@@ -191,7 +302,8 @@ class HostAuditBroker:
         finally:
             os.close(descriptor)
         return self._export(
-            self.runtime.advance(ContinueAudit(session, response_path))
+            self.runtime.advance(ContinueAudit(session, response_path)),
+            repository_root,
         )
 
     def handle(self, request):
@@ -249,7 +361,10 @@ class _Handler(socketserver.BaseRequestHandler):
                 response = self.server.broker.handle(request)
             except (BrokerError, UnicodeDecodeError, json.JSONDecodeError) as error:
                 response = self.server.broker._stopped(
-                    getattr(error, "code", "BROKER_REQUEST_INVALID")
+                    getattr(error, "code", "BROKER_REQUEST_INVALID"),
+                    zero_target_writes=getattr(
+                        error, "zero_target_writes", True
+                    ),
                 )
             except (OSError, ValueError, TypeError):
                 response = self.server.broker._stopped("BROKER_FAILURE")
@@ -261,10 +376,10 @@ class _Handler(socketserver.BaseRequestHandler):
 
 
 class AuditBrokerServer(socketserver.UnixStreamServer):
-    def __init__(self, socket_path, runtime, envelope):
+    def __init__(self, socket_path, runtime, envelope, *, public_targets):
         self.socket_path = Path(socket_path)
+        self.broker = HostAuditBroker(runtime, envelope, public_targets)
         self.socket_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.broker = HostAuditBroker(runtime, envelope)
         super().__init__(str(self.socket_path), _Handler)
 
     @contextmanager

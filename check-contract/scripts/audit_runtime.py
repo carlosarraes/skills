@@ -85,6 +85,7 @@ RULES_PATH = (
     / "contract-check-rules.json"
 )
 RECONCILIATION_FINALIZATION_GRACE_SECONDS = 45
+PUBLICATION_COMMIT_RESERVE_SECONDS = 1
 
 
 class _CloseError(RuntimeError):
@@ -686,10 +687,14 @@ class AuditRuntime:
         return self.clock() > deadline
 
     def _require_publication_deadline(self, state):
-        if self._deadline_expired(state):
+        publication_deadline = (
+            self._operation_deadline(state)
+            - PUBLICATION_COMMIT_RESERVE_SECONDS
+        )
+        if self.clock() >= publication_deadline:
             raise _CloseError(
                 "DEADLINE_EXPIRED",
-                "reconciliation finalization grace expired before publication commit",
+                "reconciliation publication commit reserve expired",
             )
 
     def _stop_consumed(self, store, token, state):

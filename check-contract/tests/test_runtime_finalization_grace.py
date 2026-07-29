@@ -1,4 +1,5 @@
 import tempfile
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -191,6 +192,45 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             self.assertEqual(
                 result.deadline_stage, "reconciliation-finalization"
             )
+            self.assertTrue(result.prior_report_preserved)
+            self.assertTrue(result.zero_target_writes)
+            self.assertEqual(
+                self.module._identity_guard_path(report_path), before_guard
+            )
+            self.assertEqual(
+                self.module.capture_target_state(repo), before_state
+            )
+
+    def test_replace_cannot_cross_the_reserved_publication_boundary(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report_path = self.report_path(repo)
+            report_path.write_bytes(b"PRIOR REPORT\n")
+            clock, runtime, issued = self.issue_with_clock(repo, root)
+            clock.value = 1344.5
+            before_guard = self.module._identity_guard_path(report_path)
+            before_state = self.module.capture_target_state(repo)
+            report_module = sys.modules["audit_report"]
+            real_replace = report_module.os.replace
+
+            def replace_after_boundary(*args, **kwargs):
+                clock.value = 1345
+                return real_replace(*args, **kwargs)
+
+            with mock.patch.object(
+                report_module.os,
+                "replace",
+                side_effect=replace_after_boundary,
+            ) as replaced:
+                result = self.close(runtime, issued)
+
+            self.assertEqual(result.code, "DEADLINE_EXPIRED")
+            self.assertEqual(
+                result.deadline_stage, "reconciliation-finalization"
+            )
+            self.assertFalse(replaced.called)
             self.assertTrue(result.prior_report_preserved)
             self.assertTrue(result.zero_target_writes)
             self.assertEqual(

@@ -1,11 +1,13 @@
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from runtime_fixtures import materialized_repo
 from test_audit_runtime_close import reconciliation_response
@@ -66,8 +68,155 @@ class AuditBrokerTests(unittest.TestCase):
             socket_path,
             runtime,
             envelope,
+            public_targets={
+                repo.resolve(): Path("/tmp/workspace/fixture/target")
+            },
         )
         return host_private, envelope, socket_path, server
+
+    def test_report_mapping_is_relative_to_the_authorized_repository_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / ".notes/ancestor/repository"
+            notes_report = (
+                repo
+                / ".notes/feature-proj-123/contract/v1/check-report.md"
+            )
+            docs_report = (
+                repo
+                / "ai_docs/feature-proj-123/contract/v1/check-report.md"
+            )
+            public = Path("/tmp/workspace/fixture/target")
+
+            self.assertEqual(
+                self.broker_module.subject_report_path(
+                    repo, notes_report, public
+                ),
+                "/tmp/workspace/fixture/target/.notes/feature-proj-123/contract/v1/check-report.md",
+            )
+            self.assertEqual(
+                self.broker_module.subject_report_path(
+                    repo, docs_report, public
+                ),
+                "/tmp/workspace/fixture/target/ai_docs/feature-proj-123/contract/v1/check-report.md",
+            )
+            with self.assertRaises(self.broker_module.BrokerError):
+                self.broker_module.subject_report_path(
+                    repo, root / "outside/check-report.md", public
+                )
+
+    def test_broker_rejects_missing_public_mapping_before_start(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = self.runtime_module.AuditRuntime(
+                session_root=root / "sessions"
+            )
+            envelope = runtime.issue_request(self.target(repo))
+            report = (
+                repo
+                / ".notes/feature-proj-123/contract/v1/check-report.md"
+            )
+
+            with self.assertRaises(ValueError):
+                self.broker_module.AuditBrokerServer(
+                    root / "broker/audit.sock",
+                    runtime,
+                    envelope,
+                    public_targets={},
+                )
+
+            self.assertFalse(report.exists())
+            self.assertEqual(
+                self.runtime_module.RequestStore(
+                    runtime.session_root
+                ).enforced_id(),
+                envelope.request_id,
+            )
+
+    def test_compound_target_b_mapping_is_prevalidated_and_distinct(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as primary, materialized_repo(
+            "contract-compliant-overengineered"
+        ) as then, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = self.runtime_module.AuditRuntime(
+                session_root=root / "sessions"
+            )
+            envelope = runtime.issue_request(
+                self.target(primary), self.target(then)
+            )
+            primary_public = Path("/tmp/workspace/fixture/primary")
+
+            for mappings in (
+                {primary.resolve(): primary_public},
+                {
+                    primary.resolve(): primary_public,
+                    then.resolve(): primary_public,
+                },
+            ):
+                with self.subTest(mappings=mappings), self.assertRaises(
+                    ValueError
+                ):
+                    self.broker_module.AuditBrokerServer(
+                        root / "broker/audit.sock",
+                        runtime,
+                        envelope,
+                        public_targets=mappings,
+                    )
+
+            self.assertEqual(
+                self.runtime_module.RequestStore(
+                    runtime.session_root
+                ).enforced_id(),
+                envelope.request_id,
+            )
+
+    def test_post_publication_mapping_failure_never_claims_zero_writes(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = self.runtime_module.AuditRuntime(
+                session_root=root / "sessions"
+            )
+            envelope = runtime.issue_request(self.target(repo))
+            broker = self.broker_module.HostAuditBroker(
+                runtime,
+                envelope,
+                {repo.resolve(): Path("/tmp/workspace/fixture/target")},
+            )
+            complete = self.runtime_module.AuditComplete(
+                verdict="ready",
+                route=(),
+                report_path=root / "outside/check-report.md",
+                report_sha256="0" * 64,
+                mutation_attestation={},
+            )
+
+            with self.assertRaises(
+                self.broker_module.BrokerError
+            ) as raised:
+                broker._export(complete, repo.resolve())
+
+            stopped = broker._stopped(
+                raised.exception.code,
+                zero_target_writes=raised.exception.zero_target_writes,
+            )
+            self.assertFalse(stopped["zero_target_writes"])
+
+            with mock.patch.object(
+                self.broker_module,
+                "subject_report_path",
+                side_effect=OSError("mapping storage unavailable"),
+            ), self.assertRaises(
+                self.broker_module.BrokerError
+            ) as unexpected:
+                broker._export(complete, repo.resolve())
+
+            self.assertFalse(unexpected.exception.zero_target_writes)
 
     def test_subject_cannot_replace_manifest_or_erase_consumption_ledger(self):
         with materialized_repo(
@@ -222,8 +371,10 @@ class AuditBrokerTests(unittest.TestCase):
     def test_read_only_bwrap_subject_reaches_host_owned_audit_complete(self):
         with materialized_repo(
             "documented-drift"
-        ) as repo, tempfile.TemporaryDirectory() as temporary:
+        ) as source_repo, tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            repo = root / ".notes/ancestor/repository"
+            shutil.copytree(source_repo, repo)
             before = self.runtime_module.capture_target_state(repo)
             host_private, envelope, socket_path, server = self.start_broker(
                 root, repo
@@ -323,8 +474,9 @@ class AuditBrokerTests(unittest.TestCase):
             )
             self.assertEqual(
                 complete["report_path"],
-                ".notes/feature-proj-123/contract/v1/check-report.md",
+                "/tmp/workspace/fixture/target/.notes/feature-proj-123/contract/v1/check-report.md",
             )
+            self.assertNotIn(str(repo), complete_process.stdout)
             after = self.runtime_module.capture_target_state(repo)
             attestation = self.runtime_module.mutation_attestation(
                 before,
