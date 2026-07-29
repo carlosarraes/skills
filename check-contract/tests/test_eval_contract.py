@@ -3,7 +3,6 @@ import hashlib
 import importlib.util
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -16,6 +15,7 @@ EVALS = ROOT / "evals" / "evals.json"
 MANIFEST = ROOT / "evals" / "fixture-manifest.json"
 MATERIALIZER = ROOT / "evals" / "materialize_fixture.py"
 ASSERTIONS_PATH = ROOT / "evals" / "assertion_contract.py"
+SEMANTIC_ORACLE_PATH = ROOT / "evals" / "semantic_oracle.py"
 SPEC = importlib.util.spec_from_file_location("check_assertions", ASSERTIONS_PATH)
 ASSERTIONS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ASSERTIONS)
@@ -35,19 +35,7 @@ RUNNER_SPEC.loader.exec_module(RUNNER)
 sys.path.pop(0)
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-from audit_domain import (  # noqa: E402
-    AxisItem,
-    ClauseJudgment,
-    CodeJudgment,
-    Deviation,
-    DeviationMatch,
-    LedgerEntry,
-    PathAssessment,
-    ReconciliationJudgment,
-    SurfaceJudgment,
-    load_rules,
-)
-from audit_policy import aggregate  # noqa: E402
+from audit_domain import load_rules  # noqa: E402
 sys.path.pop(0)
 RULES = (
     ROOT.parent
@@ -579,7 +567,10 @@ class EvalContractTests(unittest.TestCase):
         ledger = (documented / VERSION / "execution-ledger.md").read_text()
         self.assertIn("_validate_percentage(percentage)", checkout)
         self.assertIn("apply_discount(10.01, 50), 5.00", acceptance)
-        self.assertIn("- Affected clauses: R2, S1", ledger)
+        self.assertIn(
+            "- Affected clauses: R2, S1, K-ABSTRACTIONS",
+            ledger,
+        )
         self.assertIn("internal `_validate_percentage`", ledger)
 
     def test_compound_prompt_requires_one_start_session(self):
@@ -596,6 +587,58 @@ class EvalContractTests(unittest.TestCase):
         self.assertNotIn("separate execution", combined.lower())
 
     def test_materialized_semantic_golden_vectors_reach_v3_outcomes(self):
+        self.assertTrue(
+            SEMANTIC_ORACLE_PATH.is_file(),
+            "the fact-derived semantic oracle is missing",
+        )
+        spec = importlib.util.spec_from_file_location(
+            "check_semantic_oracle",
+            SEMANTIC_ORACLE_PATH,
+        )
+        semantic_oracle = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = semantic_oracle
+        spec.loader.exec_module(semantic_oracle)
+
+        n4_cases = {
+            "multiple-unrelated-private-classes": (
+                {"src/checkout.py": ""},
+                {
+                    "src/checkout.py": (
+                        "class _First:\n    pass\n\n"
+                        "class _Second:\n    pass\n"
+                    )
+                },
+                "MET",
+            ),
+            "actual-class-hierarchy": (
+                {"src/checkout.py": ""},
+                {
+                    "src/checkout.py": (
+                        "class _Base:\n    pass\n\n"
+                        "class _Child(_Base):\n    pass\n"
+                    )
+                },
+                "UNMET",
+            ),
+            "new-module": (
+                {"src/checkout.py": ""},
+                {
+                    "src/checkout.py": "",
+                    "src/discounts.py": "VALUE = 1\n",
+                },
+                "UNMET",
+            ),
+        }
+        for name, (base_sources, head_sources, expected) in n4_cases.items():
+            with self.subTest(n4=name):
+                self.assertEqual(
+                    semantic_oracle.derive_n4_status(
+                        base_sources,
+                        head_sources,
+                    ),
+                    expected,
+                )
+
         expected_outcomes = getattr(
             ASSERTIONS,
             "EXPECTED_SEMANTIC_OUTCOMES",
@@ -604,222 +647,32 @@ class EvalContractTests(unittest.TestCase):
         self.assertIsNotNone(expected_outcomes)
         rules = load_rules(RULES)
 
-        def judgment(clause_id, status="MET", boundary_changed=False):
-            return ClauseJudgment(
-                clause_id=clause_id,
-                status=status,
-                evidence_ids=(f"fixture:{clause_id}",),
-                reason=f"Materialized fixture determines {clause_id} as {status}.",
-                contract_boundary_changed=boundary_changed,
-            )
-
-        def item(item_id, kind):
-            return AxisItem(
-                item_id=item_id,
-                kind=kind,
-                evidence_ids=(f"fixture:{item_id}",),
-                reason=f"Materialized fixture determines {kind}.",
-            )
-
-        def deviation(index, source_id):
-            return Deviation(
-                deviation_id=f"U{index}",
-                source_kind="fixture-fact",
-                source_id=source_id,
-                path_id="P1",
-                line=index,
-                description=f"Fixture deviation for {source_id}.",
-                evidence_ids=(f"fixture:U{index}",),
-                reason=f"Materialized fixture deviates from {source_id}.",
-            )
-
-        def decision_for(scenario, repo, base):
-            contract = (repo / VERSION / "contract.md").read_text()
-            checkout = (repo / "src/checkout.py").read_text()
-            acceptance = (repo / "tests/test_checkout.py").read_text()
-            pricing = (repo / "src/pricing.py").read_text()
-            outcome = contract.split("## Outcome\n\n", 1)[1].split(
-                "\n\n## Required behaviors", 1
-            )[0]
-            tree = ast.parse(checkout)
-            private_classes = [
-                node
-                for node in tree.body
-                if isinstance(node, ast.ClassDef) and node.name.startswith("_")
-            ]
-            new_public = public_functions(repo, "HEAD") - public_functions(
-                repo, base
-            )
-            rounding_is_demonstrated = (
-                "apply_discount(10.01, 50), 5.00" in acceptance
-            )
-
-            overrides = {
-                "O1": (
-                    "UNMET"
-                    if "structure" in outcome.lower()
-                    else "MET"
-                ),
-                "N4": "MET" if len(private_classes) <= 1 else "UNMET",
-                "A-B2": "MET" if rounding_is_demonstrated else "INDETERMINATE",
-                "K-PUBLIC-INTERFACES": (
-                    "MET" if len(new_public) <= 1 else "EXCEEDED"
-                ),
-            }
-            if scenario == "contract-violated-summary":
-                clamp_present = "min(percentage, 100)" in checkout
-                overrides.update(
-                    {
-                        "B4": "UNMET" if clamp_present else "MET",
-                        "I2": "UNMET" if clamp_present else "MET",
-                    }
-                )
-
-            clause_ids = (
-                "O1",
-                "B1",
-                "B2",
-                "B3",
-                "B4",
-                "N1",
-                "N2",
-                "N3",
-                "N4",
-                "I1",
-                "I2",
-                "C1",
-                "C2",
-                "R1",
-                "R2",
-                "R3",
-                "S1",
-                "S2",
-                "K-MODULES",
-                "K-DEPENDENCIES",
-                "K-ABSTRACTIONS",
-                "K-CONFIGURATION",
-                "K-PUBLIC-INTERFACES",
-                "A-B1",
-                "A-B2",
-                "A-B3",
-                "A-B4",
-            )
-            clauses = tuple(
-                judgment(clause_id, overrides.get(clause_id, "MET"))
-                for clause_id in clause_ids
-            )
-
-            if scenario == "contract-compliant-overengineered":
-                inline_validation = (
-                    "percentage < 0 or percentage > 100" in checkout
-                )
-                helper_bypassed = (
-                    "def _validate_percentage(" in pricing
-                    and "_validate_percentage(percentage)" not in checkout
-                )
-                yagni_items = tuple(
-                    candidate
-                    for candidate in (
-                        item("Y1", "UNEARNED_LOCAL") if private_classes else None,
-                        item("Y2", "UNEARNED_LOCAL") if inline_validation else None,
-                    )
-                    if candidate is not None
-                )
-                reuse_items = (
-                    (item("R2", "DUPLICATED"),)
-                    if helper_bypassed and inline_validation
-                    else (item("R2", "REUSED"),)
-                )
-                deviations = tuple(
-                    deviation(index, source_id)
-                    for index, source_id in enumerate(
-                        ("R2", "S1", "K-ABSTRACTIONS"), 1
-                    )
-                )
-                ledger_entries = ()
-                matches = ()
-            elif scenario == "documented-drift":
-                helper_reused = "_validate_percentage(percentage)" in checkout
-                yagni_items = (
-                    (item("Y1", "UNEARNED_PUBLIC_INTERFACE"),)
-                    if len(new_public) > 1
-                    else ()
-                )
-                reuse_items = (
-                    (item("R2", "REUSED"),)
-                    if helper_reused
-                    else (item("R2", "BYPASSED"),)
-                )
-                source_ids = ["R2", "S1"]
-                if len(new_public) > 1:
-                    source_ids.append("K-PUBLIC-INTERFACES")
-                deviations = tuple(
-                    deviation(index, source_id)
-                    for index, source_id in enumerate(source_ids, 1)
-                )
-                ledger = (repo / VERSION / "execution-ledger.md").read_text()
-                affected_line = re.search(
-                    r"^- Affected clauses: (.+)$",
-                    ledger,
-                    flags=re.MULTILINE,
-                )
-                affected = set()
-                if affected_line:
-                    affected = {
-                        value.strip()
-                        for value in affected_line.group(1).split(",")
-                    }
-                ledger_entries = (LedgerEntry("D1", "VERIFIED"),)
-                matches = tuple(
-                    DeviationMatch(entry.deviation_id, "D1")
-                    for entry in deviations
-                    if entry.source_id in affected
-                )
-            else:
-                yagni_items = ()
-                reuse_items = (item("R2", "REUSED"),)
-                deviations = (deviation(1, "S1"),)
-                ledger_entries = ()
-                matches = ()
-
-            code = CodeJudgment(
-                clauses=clauses,
-                path_assessments=(
-                    PathAssessment(
-                        path_id="P1",
-                        surface=SurfaceJudgment(
-                            status="EXCEEDED" if deviations else "MET",
-                            evidence_ids=("fixture:P1",),
-                            reason="Materialized fixture path assessment.",
-                        ),
-                        yagni_items=yagni_items,
-                        reuse_items=reuse_items,
-                    ),
-                ),
-                deviations=deviations,
-            )
-            reconciliation = ReconciliationJudgment(
-                ledger_entries=ledger_entries,
-                deviation_matches=matches,
-                contract_obsolete=False,
-                acceptance_qa_exists=False,
-            )
-            return aggregate(code, reconciliation, rules)
-
+        derived = {}
         for scenario in (
             "contract-compliant-overengineered",
             "documented-drift",
         ):
             value = self.outputs[scenario]["targets"]["target"]
-            decision = decision_for(
-                scenario,
+            derived[scenario] = semantic_oracle.evaluate_materialized_fixture(
                 Path(value["destination"]),
                 value["base"],
+                rules,
             )
             self.assertEqual(
-                semantic_outcome(decision),
+                semantic_outcome(derived[scenario].decision),
                 expected_outcomes[scenario],
             )
+
+        documented = derived["documented-drift"]
+        self.assertEqual(
+            set(documented.deviation_sources),
+            {"R2", "S1", "K-ABSTRACTIONS"},
+        )
+        self.assertEqual(documented.ledger_statuses, {"D1": "VERIFIED"})
+        self.assertEqual(
+            documented.affected_clauses,
+            {"D1": ("R2", "S1", "K-ABSTRACTIONS")},
+        )
 
         compound = self.outputs["contract-violated-summary"]["targets"]
         target_a = Path(compound["target-a"]["destination"])
@@ -832,14 +685,41 @@ class EvalContractTests(unittest.TestCase):
             target_a_approval["contract_sha256"],
         )
         target_b_value = compound["target-b"]
-        target_b = decision_for(
-            "contract-violated-summary",
+        target_b = semantic_oracle.evaluate_materialized_fixture(
             Path(target_b_value["destination"]),
             target_b_value["base"],
+            rules,
         )
         self.assertEqual(
-            semantic_outcome(target_b),
+            semantic_outcome(target_b.decision),
             expected_outcomes["contract-violated-summary"],
+        )
+
+        ledger_path = (
+            Path(
+                self.outputs["documented-drift"]["targets"]["target"][
+                    "destination"
+                ]
+            )
+            / VERSION
+            / "execution-ledger.md"
+        )
+        incomplete_ledger = ledger_path.read_bytes().replace(
+            b"R2, S1, K-ABSTRACTIONS",
+            b"R2, S1",
+        )
+        incomplete = semantic_oracle.evaluate_materialized_fixture(
+            ledger_path.parents[4],
+            self.outputs["documented-drift"]["targets"]["target"]["base"],
+            rules,
+            ledger_content=incomplete_ledger,
+        )
+        self.assertEqual(incomplete.ledger_statuses, {"D1": "QUESTIONABLE"})
+        self.assertEqual(incomplete.decision.documented_drift, "QUESTIONABLE")
+        self.assertEqual(incomplete.decision.undocumented_drift, "PRESENT")
+        self.assertNotEqual(
+            semantic_outcome(incomplete.decision),
+            expected_outcomes["documented-drift"],
         )
 
     def test_fixture_behavior_is_green_and_encodes_scenarios(self):

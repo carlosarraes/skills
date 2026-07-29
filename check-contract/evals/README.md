@@ -25,10 +25,12 @@ compound-only: it contributes to `compound_pass`, never `target_b_pass`.
 Report delivery and mutation scope are distinct assertions. Historical
 assertions and grades must not be rewritten.
 
-The v3 semantic golden test keeps only fixture-specific fact-to-judgment
-vectors. It loads the canonical rule pack and calls the live pure audit policy
-for axis aggregation, precedence, verdict, and routing, so it does not maintain
-a second production policy implementation.
+The v3 semantic golden test derives every fixture judgment from the exact
+approved contract, base-to-HEAD trees and inventory, source/test ASTs, observed
+behavior, execution ledger, replay probe, and commit chronology. It loads the
+canonical rule pack and calls the live pure audit policy for axis aggregation,
+precedence, verdict, and routing, so it does not maintain a second production
+policy implementation.
 
 Treatment runs freeze the installed `check-contract` skill and deterministic
 runtime as one reviewed snapshot. The skill starts one runtime session, reads
