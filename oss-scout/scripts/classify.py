@@ -98,17 +98,21 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="max repos this run (0=all)")
     args = ap.parse_args()
 
-    pending = read_jsonl(PENDING)
-    if not pending:
+    all_pending = read_jsonl(PENDING)
+    if not all_pending:
         log("nothing pending; run scripts/discover.py first")
         return
-    if args.limit:
-        pending = pending[:args.limit]
-    log(f"classifying {len(pending)} repos via {args.provider}/{args.model}")
+    todo = all_pending[:args.limit] if args.limit else all_pending
+    deferred = all_pending[len(todo):]  # beyond --limit, keep untouched
+    log(f"classifying {len(todo)} repos via {args.provider}/{args.model}")
 
-    done, failed = [], []
-    for n in range(0, len(pending), args.batch_size):
-        batch = pending[n:n + args.batch_size]
+    # Checkpointed per batch: a kill mid-run must not discard model calls we
+    # already paid for.
+    remaining = list(todo)
+    total_done = 0
+    for n in range(0, len(todo), args.batch_size):
+        batch = todo[n:n + args.batch_size]
+        done, failed = [], []
         allowed = {r["repo"] for r in batch}
         rows = None
         for attempt in range(2):
@@ -120,7 +124,6 @@ def main():
                 time.sleep(3)
         if rows is None:
             # Left in pending so the next run retries; never silently dropped.
-            failed.extend(batch)
             continue
 
         by_repo = {}
@@ -139,13 +142,17 @@ def main():
                              "issues": r["issues"]})
             else:
                 failed.append(r)
-        log(f"  batch {n // args.batch_size}: {len(by_repo)}/{len(batch)} classified")
 
-    if done:
-        append_jsonl(CORPUS, done)
-    remaining = failed + read_jsonl(PENDING)[len(pending):]
-    write_jsonl(PENDING, remaining)
-    log(f"\nclassified {len(done)}; {len(remaining)} left pending (retried next run)")
+        if done:
+            append_jsonl(CORPUS, done)
+            got = {r["repo"] for r in done}
+            remaining = [r for r in remaining if r["repo"] not in got]
+            write_jsonl(PENDING, remaining + deferred)  # checkpoint
+            total_done += len(done)
+        log(f"  batch {n // args.batch_size}: {len(done)}/{len(batch)} classified "
+            f"({total_done} total, {len(remaining)} still pending)")
+
+    log(f"\nclassified {total_done}; {len(remaining)} left pending (retried next run)")
     log("next: scripts/report.py --theme systems")
 
 
