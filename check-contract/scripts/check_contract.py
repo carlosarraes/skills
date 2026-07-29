@@ -23,9 +23,10 @@ def parser():
     commands = root.add_subparsers(dest="command", required=True)
 
     start = commands.add_parser("start")
-    start.add_argument("--repo", type=Path, required=True)
-    start.add_argument("--branch", required=True)
-    start.add_argument("--ticket", required=True)
+    start.add_argument("--repo", type=Path)
+    start.add_argument("--branch")
+    start.add_argument("--ticket")
+    start.add_argument("--request-id")
     start.add_argument("--narrative", type=Path, action="append", default=[])
     start.add_argument("--then-repo", type=Path)
     start.add_argument("--then-branch")
@@ -47,6 +48,17 @@ def command_from(args, argument_parser):
             session=args.session,
             response_path=args.response,
         )
+    primary_values = (args.repo, args.branch, args.ticket)
+    if any(value is not None for value in primary_values) and not all(
+        value is not None for value in primary_values
+    ):
+        argument_parser.error(
+            "--repo, --branch, and --ticket must be supplied together"
+        )
+    if args.request_id is None and args.repo is None:
+        argument_parser.error(
+            "manual start requires --repo, --branch, and --ticket"
+        )
     then_values = (args.then_repo, args.then_branch, args.then_ticket)
     if any(value is not None for value in then_values) and not all(
         value is not None for value in then_values
@@ -59,11 +71,17 @@ def command_from(args, argument_parser):
         argument_parser.error(
             "--then-narrative requires a complete then target"
         )
-    primary = AuditTarget(
-        repo=args.repo,
-        branch=args.branch,
-        ticket=args.ticket,
-        narrative_paths=tuple(args.narrative),
+    if args.narrative and args.repo is None:
+        argument_parser.error("--narrative requires a complete primary target")
+    primary = (
+        AuditTarget(
+            repo=args.repo,
+            branch=args.branch,
+            ticket=args.ticket,
+            narrative_paths=tuple(args.narrative),
+        )
+        if args.repo is not None
+        else None
     )
     then = None
     if args.then_repo is not None:
@@ -77,6 +95,7 @@ def command_from(args, argument_parser):
         primary=primary,
         then=then,
         deadline_seconds=args.deadline_seconds,
+        request_id=args.request_id,
     )
 
 
@@ -119,6 +138,9 @@ def as_public_dict(result):
     ):
         raise TypeError("runtime returned an unknown result")
     public = {"result": type(result).__name__, **_public_value(result)}
+    for optional in ("request_id", "deadline_stage"):
+        if public.get(optional) is None:
+            public.pop(optional, None)
     if isinstance(result, AuditStopped):
         public["reason"] = "audit stopped"
     return public

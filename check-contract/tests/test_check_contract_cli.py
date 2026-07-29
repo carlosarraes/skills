@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from runtime_fixtures import materialized_repo, packet_of
 from test_audit_runtime_close import reconciliation_response
-from test_audit_runtime_reconciliation import valid_code_judgment
+from test_audit_runtime_reconciliation import load_modules, valid_code_judgment
 
 
 ROOT = Path(__file__).parents[2]
@@ -17,6 +17,10 @@ CLI = ROOT / "check-contract" / "scripts" / "check_contract.py"
 
 
 class CheckContractCliTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.runtime_module, _ = load_modules()
+
     def run_cli(self, cwd, *args, session_root):
         session_root.mkdir(parents=True, exist_ok=True)
         environment = {
@@ -171,6 +175,36 @@ class CheckContractCliTests(unittest.TestCase):
                 + "\n",
             )
             self.assertEqual(completed.stderr, "")
+
+    def test_enforced_start_uses_only_trusted_request_identity(self):
+        with materialized_repo(
+            "contract-compliant-overengineered"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            temp_root = root / "sessions"
+            runtime = self.runtime_module.AuditRuntime(
+                session_root=temp_root / "contract-audit-sessions"
+            )
+            envelope = runtime.issue_request(
+                self.runtime_module.AuditTarget(
+                    repo=repo,
+                    branch="feature/proj-123",
+                    ticket="PROJ-123",
+                )
+            )
+
+            completed = self.run_cli(
+                root,
+                "start",
+                "--request-id",
+                envelope.request_id,
+                session_root=temp_root,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            public = json.loads(completed.stdout)
+            self.assertEqual(public["request_id"], envelope.request_id)
+            self.assertNotIn(str(repo), completed.stdout)
 
     def test_public_stop_sanitizes_internal_target_diagnostics(self):
         with tempfile.TemporaryDirectory() as temporary:

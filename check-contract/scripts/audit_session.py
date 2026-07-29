@@ -1249,6 +1249,26 @@ class SessionStore:
             or not packet["kind"]
         ):
             raise SessionIntegrityError("packet schema is invalid")
+        request_id = state.get("request_id")
+        request_digest = state.get("request_manifest_sha256")
+        if (request_id is None) != (request_digest is None):
+            raise SessionIntegrityError("request binding is incomplete")
+        if request_id is not None:
+            if (
+                not isinstance(request_id, str)
+                or re.fullmatch(r"[0-9a-f]{64}", request_id) is None
+                or not isinstance(request_digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
+            ):
+                raise SessionIntegrityError("request binding is invalid")
+            packet_request = packet.get("request")
+            if packet.get("kind") != "terminal" and packet_request != {
+                "id": request_id,
+                "manifest_sha256": request_digest,
+            }:
+                raise SessionIntegrityError(
+                    "packet request binding does not match session state"
+                )
 
     def _response_name(self, state: Mapping[str, object]) -> str:
         response_name = state.get("response_name")

@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 
@@ -54,6 +54,7 @@ from audit_report import (
     render_report,
     restore_report,
 )
+from audit_request import RequestEnvelope, RequestError, RequestStore
 from audit_session import (
     ClaimedResponseError,
     GenerationConsumedError,
@@ -83,6 +84,7 @@ RULES_PATH = (
     / "references"
     / "contract-check-rules.json"
 )
+RECONCILIATION_FINALIZATION_GRACE_SECONDS = 45
 
 
 class _CloseError(RuntimeError):
@@ -187,9 +189,11 @@ class AuditTarget:
 
 @dataclass(frozen=True)
 class StartAudit:
-    primary: AuditTarget
+    primary: AuditTarget | None = None
     then: AuditTarget | None = None
     deadline_seconds: int = 300
+    request_id: str | None = None
+    request_manifest_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -210,6 +214,7 @@ class NeedJudgment:
     nonce: str
     a_closure_digest: str | None = None
     closed_target: Mapping[str, object] | None = None
+    request_id: str | None = None
 
     def __post_init__(self):
         if self.closed_target is not None:
@@ -229,6 +234,8 @@ class AuditComplete:
     report_path: Path
     report_sha256: str
     mutation_attestation: Mapping[str, object]
+    request_id: str | None = None
+    deadline_stage: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.mutation_attestation, Mapping):
@@ -247,6 +254,8 @@ class AuditStopped:
     target: str
     prior_report_preserved: bool
     zero_target_writes: bool
+    request_id: str | None = None
+    deadline_stage: str | None = None
 
 
 class AuditRuntime:
@@ -270,6 +279,28 @@ class AuditRuntime:
         self.git_runner = git_runner or LocalGitRunner(clock)
         self.nonce_factory = nonce_factory or (lambda: secrets.token_hex(16))
 
+    @staticmethod
+    def _manifest_target(target):
+        if not isinstance(target, AuditTarget):
+            raise TypeError("request target must be an AuditTarget")
+        return {
+            "repo": str(Path(target.repo).resolve(strict=False)),
+            "branch": target.branch,
+            "ticket": target.ticket,
+            "narrative_paths": [
+                str(Path(path).resolve(strict=False))
+                for path in target.narrative_paths
+            ],
+        }
+
+    def issue_request(self, primary, then=None):
+        """Issue one enforced request from the trusted harness boundary."""
+        manifest = {
+            "primary": self._manifest_target(primary),
+            "then": self._manifest_target(then) if then is not None else None,
+        }
+        return RequestStore(self.session_root).issue(manifest)
+
     def _stopped(
         self,
         code,
@@ -278,6 +309,8 @@ class AuditRuntime:
         *,
         prior_report_preserved=True,
         zero_target_writes=True,
+        request_id=None,
+        deadline_stage=None,
     ):
         return AuditStopped(
             code=code,
@@ -285,7 +318,77 @@ class AuditRuntime:
             target=target,
             prior_report_preserved=prior_report_preserved,
             zero_target_writes=zero_target_writes,
+            request_id=request_id,
+            deadline_stage=deadline_stage,
         )
+
+    def _enforced_start(self, transition):
+        store = RequestStore(self.session_root)
+        try:
+            enforced = store.enforced_id()
+        except RequestError as error:
+            return self._stopped(error.code, error)
+        if enforced is None:
+            if transition.request_id is not None:
+                return self._stopped(
+                    "REQUEST_INVALID",
+                    "request identity is not issued",
+                    request_id=transition.request_id,
+                )
+            return transition
+        if transition.request_id is None:
+            return self._stopped(
+                "REQUEST_REQUIRED",
+                "this runtime root requires its harness-issued request",
+            )
+        try:
+            manifest, digest = store.consume(transition.request_id)
+        except RequestError as error:
+            return self._stopped(
+                error.code,
+                error,
+                request_id=transition.request_id,
+            )
+        primary = self._restore_target(manifest["primary"])
+        then = (
+            self._restore_target(manifest["then"])
+            if manifest["then"] is not None
+            else None
+        )
+        supplied_primary = transition.primary
+        supplied_then = transition.then
+        if (
+            supplied_primary is not None
+            and self._manifest_target(supplied_primary) != manifest["primary"]
+        ) or (
+            supplied_then is not None
+            and (
+                manifest["then"] is None
+                or self._manifest_target(supplied_then) != manifest["then"]
+            )
+        ):
+            return self._stopped(
+                "REQUEST_TARGET_MISMATCH",
+                "start target does not match the trusted request manifest",
+                request_id=transition.request_id,
+            )
+        return StartAudit(
+            primary=primary,
+            then=then,
+            deadline_seconds=transition.deadline_seconds,
+            request_id=transition.request_id,
+            request_manifest_sha256=digest,
+        )
+
+    @staticmethod
+    def _bind_request_result(result, transition):
+        if (
+            transition.request_id is not None
+            and isinstance(result, (NeedJudgment, AuditStopped))
+            and result.request_id is None
+        ):
+            return replace(result, request_id=transition.request_id)
+        return result
 
     def advance(self, transition):
         if isinstance(transition, ContinueAudit):
@@ -295,8 +398,13 @@ class AuditRuntime:
                 "TRANSITION_INVALID",
                 "transition must be StartAudit or ContinueAudit",
             )
+        transition = self._enforced_start(transition)
+        if isinstance(transition, AuditStopped):
+            return transition
         if transition.then is None:
-            return self._start(transition)
+            return self._bind_request_result(
+                self._start(transition), transition
+            )
         if not isinstance(transition.primary, AuditTarget):
             return self._stopped(
                 "TARGET_INVALID",
@@ -341,7 +449,7 @@ class AuditRuntime:
         if not isinstance(result, AuditStopped):
             return result
         if result.code not in {"AUTHORITY_INVALID", "CONTRACT_INVALID"}:
-            return result
+            return self._bind_request_result(result, transition)
         closed_target = self._closure_summary(
             outcome="authority-stopped",
             zero_writes=True,
@@ -353,22 +461,32 @@ class AuditRuntime:
             },
         )
         then_target = transition.then
+        request_id = transition.request_id
+        request_manifest_sha256 = transition.request_manifest_sha256
         transition = None
         result = None
         try:
             self._seal_initial_closure(
                 closed_target,
                 absolute_deadline,
+                request_id=request_id,
+                request_manifest_sha256=request_manifest_sha256,
             )
         except (SessionIntegrityError, OSError, ValueError) as error:
             return self._stopped("SESSION_FAILURE", error)
-        return self._start(
-            StartAudit(
-                primary=then_target,
+        then_request = StartAudit(
+            primary=then_target,
+            request_id=request_id,
+            request_manifest_sha256=request_manifest_sha256,
+        )
+        return self._bind_request_result(
+            self._start(
+                then_request,
+                target_name="then",
+                absolute_deadline=absolute_deadline,
+                closed_target=closed_target,
             ),
-            target_name="then",
-            absolute_deadline=absolute_deadline,
-            closed_target=closed_target,
+            then_request,
         )
 
     @staticmethod
@@ -431,8 +549,15 @@ class AuditRuntime:
         ).hexdigest()
         return {**public_value, "closure_digest": digest}
 
-    def _closed_state(self, closed_target, absolute_deadline):
-        return {
+    def _closed_state(
+        self,
+        closed_target,
+        absolute_deadline,
+        *,
+        request_id=None,
+        request_manifest_sha256=None,
+    ):
+        value = {
             "schema_version": 1,
             "phase": "closed",
             "target": "primary",
@@ -443,9 +568,26 @@ class AuditRuntime:
             "closed_target": dict(closed_target),
         }
 
-    def _seal_initial_closure(self, closed_target, absolute_deadline):
+        if request_id is not None:
+            value["request_id"] = request_id
+            value["request_manifest_sha256"] = request_manifest_sha256
+        return value
+
+    def _seal_initial_closure(
+        self,
+        closed_target,
+        absolute_deadline,
+        *,
+        request_id=None,
+        request_manifest_sha256=None,
+    ):
         SessionStore(self.session_root).create(
-            self._closed_state(closed_target, absolute_deadline),
+            self._closed_state(
+                closed_target,
+                absolute_deadline,
+                request_id=request_id,
+                request_manifest_sha256=request_manifest_sha256,
+            ),
             {"schema_version": 1, "kind": "terminal"},
         )
 
@@ -508,7 +650,29 @@ class AuditRuntime:
             code,
             reason,
             state.get("target", "session"),
+            request_id=state.get("request_id"),
+            deadline_stage=(
+                "reconciliation-finalization"
+                if code == "DEADLINE_EXPIRED"
+                and state.get("phase") == "reconciliation"
+                else "normal" if code == "DEADLINE_EXPIRED" else None
+            ),
         )
+
+    @staticmethod
+    def _operation_deadline(state):
+        if state.get("phase") == "reconciliation":
+            return state.get(
+                "reconciliation_finalization_deadline",
+                state["absolute_deadline"],
+            )
+        return state["absolute_deadline"]
+
+    def _deadline_expired(self, state):
+        deadline = self._operation_deadline(state)
+        if state.get("phase") == "reconciliation":
+            return self.clock() >= deadline
+        return self.clock() > deadline
 
     def _stop_consumed(self, store, token, state):
         try:
@@ -643,7 +807,7 @@ class AuditRuntime:
             narratives,
             state,
         )
-        if self.clock() > state["absolute_deadline"]:
+        if self.clock() >= state["absolute_deadline"]:
             return self._stop_after_claim(
                 store,
                 token,
@@ -701,6 +865,10 @@ class AuditRuntime:
             "deviation_semantics": deviation_semantics,
             "ledger_unbounded_clause_ids": code_packet["semantics"]
             ["ledger_reconciliation"]["unbounded_clause_ids"],
+            "reconciliation_finalization_deadline": (
+                state["absolute_deadline"]
+                + RECONCILIATION_FINALIZATION_GRACE_SECONDS
+            ),
         }
         packet = {
             "schema_version": 1,
@@ -741,10 +909,32 @@ class AuditRuntime:
                 code_packet["semantics"]["generation"],
                 code_packet["chronology"]["generation"],
             ),
+            "deadline": {
+                "normal_absolute": state["absolute_deadline"],
+                "reconciliation_finalization_absolute": (
+                    state["absolute_deadline"]
+                    + RECONCILIATION_FINALIZATION_GRACE_SECONDS
+                ),
+                "scope": "existing reconciliation nonce only",
+            },
         }
+        if "request_id" in state:
+            packet["request"] = {
+                "id": state["request_id"],
+                "manifest_sha256": state["request_manifest_sha256"],
+            }
         if "a_closure_digest" in state:
             packet["a_closure_digest"] = state["a_closure_digest"]
             packet["closed_target"] = state["closed_target"]
+        if self.clock() >= state["absolute_deadline"]:
+            return self._stop_after_claim(
+                store,
+                token,
+                state,
+                "DEADLINE_EXPIRED",
+                "audit deadline expired before reconciliation issuance",
+                lease,
+            )
         generation = store.append_claimed(
             token,
             next_state,
@@ -762,6 +952,7 @@ class AuditRuntime:
             nonce=nonce,
             a_closure_digest=state.get("a_closure_digest"),
             closed_target=state.get("closed_target"),
+            request_id=state.get("request_id"),
         )
 
     def _resolve_acceptance_qa(self, narratives, state):
@@ -1026,7 +1217,7 @@ class AuditRuntime:
                 disposable_root=self.session_root,
                 git_runner=self.git_runner,
                 clock=self.clock,
-                absolute_deadline=state["absolute_deadline"],
+                absolute_deadline=self._operation_deadline(state),
             )
         except (EvidenceError, OSError, TypeError, ValueError) as error:
             return ProbeObservation(
@@ -1073,7 +1264,7 @@ class AuditRuntime:
         result = self.git_runner.run(
             args,
             cwd=state["target_identity"]["repository_root"],
-            deadline=state["absolute_deadline"],
+            deadline=self._operation_deadline(state),
             output_limit=output_limit,
         )
         if result.timed_out:
@@ -1184,7 +1375,7 @@ class AuditRuntime:
             )
 
     def _verify_freshness(self, state):
-        if self.clock() > state["absolute_deadline"]:
+        if self._deadline_expired(state):
             raise _CloseError(
                 "DEADLINE_EXPIRED",
                 "audit deadline expired before final freshness",
@@ -1252,7 +1443,7 @@ class AuditRuntime:
                 "FRESHNESS_FAILED", "worktree status changed"
             )
         self._verify_source_guards(state)
-        if self.clock() > state["absolute_deadline"]:
+        if self._deadline_expired(state):
             raise _CloseError(
                 "DEADLINE_EXPIRED",
                 "audit deadline expired during final freshness",
@@ -1289,7 +1480,7 @@ class AuditRuntime:
                 "MUTATION_DETECTED",
                 "target mutation detected before report publication",
             )
-        if self.clock() > state["absolute_deadline"]:
+        if self._deadline_expired(state):
             raise _CloseError(
                 "DEADLINE_EXPIRED",
                 "audit deadline expired before report publication",
@@ -1304,6 +1495,11 @@ class AuditRuntime:
                 raise ReportError(
                     "final target mutation set is not the active report only"
                 )
+            if self._deadline_expired(state):
+                raise _CloseError(
+                    "DEADLINE_EXPIRED",
+                    "reconciliation finalization grace expired during publication",
+                )
         except BaseException as error:
             current = (
                 report_path.read_bytes() if report_path.exists() else None
@@ -1311,6 +1507,8 @@ class AuditRuntime:
             if current != prior_report:
                 restore_report(report_path, prior_report)
             if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                raise
+            if isinstance(error, _CloseError):
                 raise
             if isinstance(error, ReportError):
                 raise
@@ -1323,6 +1521,12 @@ class AuditRuntime:
             report_path=report_path,
             report_sha256=report_sha256,
             mutation_attestation=attestation,
+            request_id=state.get("request_id"),
+            deadline_stage=(
+                "finalization-grace"
+                if self.clock() > state["absolute_deadline"]
+                else None
+            ),
         )
 
     def _continue(self, request):
@@ -1403,7 +1607,7 @@ class AuditRuntime:
                     error,
                     state.get("target", "session"),
                 )
-            if self.clock() > state["absolute_deadline"]:
+            if self._deadline_expired(state):
                 return self._stop_after_claim(
                     store,
                     request.session,
@@ -1456,12 +1660,20 @@ class AuditRuntime:
                     )
                     then_target = self._restore_target(then_value)
                     absolute_deadline = state["absolute_deadline"]
+                    request_id = state.get("request_id")
+                    request_manifest_sha256 = state.get(
+                        "request_manifest_sha256"
+                    )
                     try:
                         store.tombstone_claimed(
                             request.session,
                             self._closed_state(
                                 closed_target,
                                 absolute_deadline,
+                                request_id=state.get("request_id"),
+                                request_manifest_sha256=state.get(
+                                    "request_manifest_sha256"
+                                ),
                             ),
                             lease=lease,
                         )
@@ -1490,7 +1702,11 @@ class AuditRuntime:
                     completion = None
                     request = None
                     return self._start(
-                        StartAudit(primary=then_target),
+                        StartAudit(
+                            primary=then_target,
+                            request_id=request_id,
+                            request_manifest_sha256=request_manifest_sha256,
+                        ),
                         target_name="then",
                         absolute_deadline=absolute_deadline,
                         closed_target=closed_target,
@@ -1757,6 +1973,11 @@ class AuditRuntime:
             "semantics": semantics,
             "chronology": chronology,
         }
+        if request.request_id is not None:
+            packet["request"] = {
+                "id": request.request_id,
+                "manifest_sha256": request.request_manifest_sha256,
+            }
         if closed_target is not None:
             packet["a_closure_digest"] = closed_target["closure_digest"]
             packet["closed_target"] = dict(closed_target)
@@ -1821,6 +2042,11 @@ class AuditRuntime:
                 "reuse_truncated": captured["reuse_truncated"],
             },
         }
+        if request.request_id is not None:
+            state["request_id"] = request.request_id
+            state["request_manifest_sha256"] = (
+                request.request_manifest_sha256
+            )
         if compound_then is not None:
             state["compound_then"] = self._target_value(compound_then)
         if closed_target is not None:
@@ -1845,6 +2071,7 @@ class AuditRuntime:
                 else None
             ),
             closed_target=closed_target,
+            request_id=request.request_id,
         )
 
 
@@ -1867,6 +2094,7 @@ __all__ = [
     "NeedJudgment",
     "PathAssessment",
     "ReconciliationJudgment",
+    "RequestEnvelope",
     "RulePack",
     "SessionIntegrityError",
     "SessionStore",
