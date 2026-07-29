@@ -174,7 +174,7 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             clock, runtime, issued = self.issue_with_clock(repo, root)
             clock.value = 1344.5
             real_publish = self.module.publish_atomic
-            before_guard = self.module._identity_guard_path(report_path)
+            before_guard = self.module._report_identity_guard_path(report_path)
             before_state = self.module.capture_target_state(repo)
 
             def expire_before_commit(*args, **kwargs):
@@ -195,7 +195,8 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             self.assertTrue(result.prior_report_preserved)
             self.assertTrue(result.zero_target_writes)
             self.assertEqual(
-                self.module._identity_guard_path(report_path), before_guard
+                self.module._report_identity_guard_path(report_path),
+                before_guard,
             )
             self.assertEqual(
                 self.module.capture_target_state(repo), before_state
@@ -210,7 +211,7 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             report_path.write_bytes(b"PRIOR REPORT\n")
             clock, runtime, issued = self.issue_with_clock(repo, root)
             clock.value = 1344.5
-            before_guard = self.module._identity_guard_path(report_path)
+            before_guard = self.module._report_identity_guard_path(report_path)
             before_state = self.module.capture_target_state(repo)
             report_module = sys.modules["audit_report"]
             real_replace = report_module.os.replace
@@ -234,11 +235,139 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             self.assertTrue(result.prior_report_preserved)
             self.assertTrue(result.zero_target_writes)
             self.assertEqual(
-                self.module._identity_guard_path(report_path), before_guard
+                self.module._report_identity_guard_path(report_path),
+                before_guard,
             )
             self.assertEqual(
                 self.module.capture_target_state(repo), before_state
             )
+
+    def test_post_replace_expiry_restores_the_exact_prior_report_identity(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report_path = self.report_path(repo)
+            report_path.write_bytes(b"PRIOR REPORT\n")
+            clock, runtime, issued = self.issue_with_clock(repo, root)
+            clock.value = 1343.5
+            before_guard = self.module._report_identity_guard_path(report_path)
+            before_state = self.module.capture_target_state(repo)
+            report_module = sys.modules["audit_report"]
+            real_replace = report_module.os.replace
+
+            def replace_across_boundary(*args, **kwargs):
+                result = real_replace(*args, **kwargs)
+                clock.value = 1345
+                return result
+
+            with mock.patch.object(
+                report_module.os,
+                "replace",
+                side_effect=replace_across_boundary,
+            ) as replaced:
+                result = self.close(runtime, issued)
+
+            self.assertEqual(result.code, "DEADLINE_EXPIRED")
+            self.assertEqual(
+                result.deadline_stage, "reconciliation-finalization"
+            )
+            self.assertGreaterEqual(replaced.call_count, 2)
+            self.assertTrue(result.prior_report_preserved)
+            self.assertTrue(result.zero_target_writes)
+            self.assertEqual(
+                self.module._report_identity_guard_path(report_path),
+                before_guard,
+            )
+            self.assertEqual(
+                self.module.capture_target_state(repo), before_state
+            )
+
+    def test_post_replace_expiry_removes_a_new_report_exactly(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report_path = self.report_path(repo)
+            clock, runtime, issued = self.issue_with_clock(repo, root)
+            clock.value = 1343.5
+            before_state = self.module.capture_target_state(repo)
+            report_module = sys.modules["audit_report"]
+            real_replace = report_module.os.replace
+
+            def replace_across_boundary(*args, **kwargs):
+                result = real_replace(*args, **kwargs)
+                clock.value = 1345
+                return result
+
+            with mock.patch.object(
+                report_module.os,
+                "replace",
+                side_effect=replace_across_boundary,
+            ) as replaced:
+                result = self.close(runtime, issued)
+
+            self.assertEqual(result.code, "DEADLINE_EXPIRED")
+            self.assertTrue(replaced.called)
+            self.assertTrue(result.prior_report_preserved)
+            self.assertTrue(result.zero_target_writes)
+            self.assertFalse(report_path.exists())
+            self.assertEqual(
+                self.module.capture_target_state(repo), before_state
+            )
+
+    def test_only_report_logical_identity_normalizes_hardlink_ctime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "guarded.md"
+            backup = root / "guarded.backup"
+            path.write_bytes(b"guarded\n")
+            full_before = self.module._identity_guard_path(path)
+            report_before = self.module._report_identity_guard_path(path)
+
+            sys.modules["audit_report"].os.link(path, backup)
+            backup.unlink()
+
+            self.assertNotEqual(
+                self.module._identity_guard_path(path), full_before
+            )
+            self.assertEqual(
+                self.module._report_identity_guard_path(path),
+                report_before,
+            )
+
+    def test_identity_rollback_failure_reports_mutation_conservatively(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report_path = self.report_path(repo)
+            report_path.write_bytes(b"PRIOR REPORT\n")
+            clock, runtime, issued = self.issue_with_clock(repo, root)
+            clock.value = 1343.5
+            report_module = sys.modules["audit_report"]
+            real_replace = report_module.os.replace
+            calls = 0
+
+            def fail_rollback(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    result = real_replace(*args, **kwargs)
+                    clock.value = 1345
+                    return result
+                raise OSError("rollback unavailable")
+
+            with mock.patch.object(
+                report_module.os,
+                "replace",
+                side_effect=fail_rollback,
+            ):
+                result = self.close(runtime, issued)
+
+            self.assertEqual(result.code, "PUBLICATION_FAILED")
+            self.assertFalse(result.prior_report_preserved)
+            self.assertFalse(result.zero_target_writes)
 
 
 if __name__ == "__main__":

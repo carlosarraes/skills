@@ -180,6 +180,13 @@ def _identity_guard_path(path: Path) -> dict[str, object]:
     }
 
 
+def _report_identity_guard_path(path: Path) -> dict[str, object]:
+    """Report identity excluding hard-link rollback's unavoidable ctime."""
+    guard = _identity_guard_path(path)
+    guard.pop("ctime_ns")
+    return guard
+
+
 @dataclass(frozen=True)
 class AuditTarget:
     repo: Path
@@ -645,6 +652,9 @@ class AuditRuntime:
         code,
         reason,
         lease,
+        *,
+        prior_report_preserved=True,
+        zero_target_writes=True,
     ):
         try:
             store.tombstone_claimed(
@@ -662,6 +672,8 @@ class AuditRuntime:
             code,
             reason,
             state.get("target", "session"),
+            prior_report_preserved=prior_report_preserved,
+            zero_target_writes=zero_target_writes,
             request_id=state.get("request_id"),
             deadline_stage=(
                 "reconciliation-finalization"
@@ -1498,6 +1510,7 @@ class AuditRuntime:
             report_relative_path=report_relative,
         )
         report_path, prior_report = self._verify_freshness(state)
+        initial_report_identity = _report_identity_guard_path(report_path)
         if capture_target_state(repository_root) != initial_target_state:
             raise _CloseError(
                 "MUTATION_DETECTED",
@@ -1515,6 +1528,9 @@ class AuditRuntime:
                 before_replace=lambda: self._require_publication_deadline(
                     state
                 ),
+                after_replace=lambda: self._require_publication_deadline(
+                    state
+                ),
             )
             after = capture_target_state(repository_root)
             attestation = mutation_attestation(
@@ -1525,11 +1541,29 @@ class AuditRuntime:
                     "final target mutation set is not the active report only"
                 )
         except BaseException as error:
-            current = (
-                report_path.read_bytes() if report_path.exists() else None
+            rollback_failed = (
+                isinstance(error, ReportError)
+                and not error.zero_target_writes
             )
-            if current != prior_report:
-                restore_report(report_path, prior_report)
+            if not rollback_failed:
+                current = (
+                    report_path.read_bytes()
+                    if report_path.exists()
+                    else None
+                )
+                if current != prior_report:
+                    restore_report(report_path, prior_report)
+                if (
+                    _report_identity_guard_path(report_path)
+                    != initial_report_identity
+                    or capture_target_state(repository_root)
+                    != initial_target_state
+                ):
+                    raise ReportError(
+                        "report rollback did not restore exact logical state",
+                        prior_report_preserved=False,
+                        zero_target_writes=False,
+                    ) from error
             if isinstance(error, (KeyboardInterrupt, SystemExit)):
                 raise
             if isinstance(error, _CloseError):
@@ -1765,6 +1799,10 @@ class AuditRuntime:
                     "PUBLICATION_FAILED",
                     error,
                     lease,
+                    prior_report_preserved=(
+                        error.prior_report_preserved
+                    ),
+                    zero_target_writes=error.zero_target_writes,
                 )
             except (AuthorityError, ContractParseError) as error:
                 return self._stop_after_claim(

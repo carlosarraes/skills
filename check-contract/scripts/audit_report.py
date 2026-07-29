@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import secrets
 import stat
 import tempfile
 from pathlib import Path
@@ -10,6 +11,17 @@ from pathlib import Path
 
 class ReportError(RuntimeError):
     """Raised when report publication cannot preserve its mutation contract."""
+
+    def __init__(
+        self,
+        reason,
+        *,
+        prior_report_preserved=True,
+        zero_target_writes=True,
+    ):
+        super().__init__(str(reason))
+        self.prior_report_preserved = prior_report_preserved
+        self.zero_target_writes = zero_target_writes
 
 
 def _json_text(value: object) -> str:
@@ -260,12 +272,35 @@ def publish_atomic(
     content: bytes,
     *,
     before_replace=None,
+    after_replace=None,
 ) -> str:
-    """Publish bytes with one same-directory atomic replacement."""
+    """Publish atomically, restoring exact prior identity on a late failure."""
     report_path = Path(report_path)
     descriptor = None
     temporary = None
+    backup = None
+    replaced = False
+    retain_backup = False
     try:
+        if report_path.exists():
+            for _ in range(16):
+                candidate = report_path.with_name(
+                    f".{report_path.name}.rollback-{secrets.token_hex(16)}"
+                )
+                try:
+                    os.link(
+                        report_path,
+                        candidate,
+                        follow_symlinks=False,
+                    )
+                    backup = candidate
+                    break
+                except FileExistsError:
+                    continue
+            if backup is None:
+                raise ReportError(
+                    "could not reserve an identity-preserving report backup"
+                )
         descriptor, temporary = tempfile.mkstemp(
             prefix=".check-report-",
             suffix=".tmp",
@@ -280,14 +315,49 @@ def publish_atomic(
             before_replace()
         os.replace(temporary, report_path)
         temporary = None
-    except OSError as error:
-        raise ReportError(f"atomic report publication failed: {error}") from error
+        replaced = True
+        if after_replace is not None:
+            after_replace()
+        if backup is not None:
+            os.unlink(backup)
+            backup = None
+    except BaseException as error:
+        if replaced:
+            try:
+                if backup is None:
+                    report_path.unlink()
+                else:
+                    os.replace(backup, report_path)
+                    backup = None
+                replaced = False
+            except Exception as rollback_error:
+                retain_backup = backup is not None
+                raise ReportError(
+                    (
+                        "atomic report rollback failed after publication: "
+                        f"{rollback_error}"
+                    ),
+                    prior_report_preserved=False,
+                    zero_target_writes=False,
+                ) from rollback_error
+        if isinstance(error, ReportError):
+            raise
+        if isinstance(error, OSError):
+            raise ReportError(
+                f"atomic report publication failed: {error}"
+            ) from error
+        raise
     finally:
         if descriptor is not None:
             os.close(descriptor)
         if temporary is not None:
             try:
                 os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+        if backup is not None and not retain_backup:
+            try:
+                os.unlink(backup)
             except FileNotFoundError:
                 pass
     return hashlib.sha256(content).hexdigest()
