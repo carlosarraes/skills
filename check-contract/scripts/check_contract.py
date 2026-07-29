@@ -2,7 +2,11 @@
 """Thin JSON CLI for the installed contract-audit runtime."""
 
 import argparse
+import base64
+import hashlib
 import json
+import os
+import sys
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from pathlib import Path
@@ -16,6 +20,7 @@ from audit_runtime import (
     NeedJudgment,
     StartAudit,
 )
+from audit_broker import BrokerError, broker_call
 
 
 def parser():
@@ -146,20 +151,132 @@ def as_public_dict(result):
     return public
 
 
+def _broker_command(args, argument_parser, socket_path):
+    if args.command == "start":
+        supplied_targets = (
+            args.repo,
+            args.branch,
+            args.ticket,
+            args.then_repo,
+            args.then_branch,
+            args.then_ticket,
+            *args.narrative,
+            *args.then_narrative,
+        )
+        if args.request_id is None or any(
+            value is not None for value in supplied_targets
+        ):
+            argument_parser.error(
+                "broker start accepts only --request-id"
+            )
+        return broker_call(
+            socket_path,
+            {"operation": "start", "request_id": args.request_id},
+        )
+    try:
+        response = args.response.read_bytes()
+    except OSError as error:
+        argument_parser.error(f"cannot read broker response: {error}")
+    return broker_call(
+        socket_path,
+        {
+            "operation": "continue",
+            "session": args.session,
+            "response_base64": base64.b64encode(response).decode("ascii"),
+        },
+    )
+
+
+def _materialize_broker_result(result):
+    if result.get("result") != "NeedJudgment":
+        return result
+    packet = result.pop("packet", None)
+    if type(packet) is not dict:
+        raise RuntimeError("broker omitted the issued packet")
+    packet_bytes = (
+        json.dumps(packet, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+    if hashlib.sha256(packet_bytes).hexdigest() != result["packet_sha256"]:
+        raise RuntimeError("broker packet hash mismatch")
+    packet_request = packet.get("request")
+    if (
+        type(packet_request) is not dict
+        or packet_request.get("id") != result.get("request_id")
+    ):
+        raise RuntimeError("broker packet request binding mismatch")
+    client_root_value = os.environ.get("CHECK_CONTRACT_CLIENT_ROOT")
+    if not client_root_value:
+        raise RuntimeError("broker client root is not configured")
+    client_root = Path(client_root_value)
+    client_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    packet_path = client_root / f"packet-{result['packet_sha256']}.json"
+    if packet_path.exists():
+        if packet_path.read_bytes() != packet_bytes:
+            raise RuntimeError("broker packet destination changed")
+    else:
+        packet_path.write_bytes(packet_bytes)
+    response_path = client_root / f"response-{result['nonce']}.json"
+    result.update(
+        {
+            "packet_path": str(packet_path),
+            "response_path": str(response_path),
+            "next_command": [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "continue",
+                "--session",
+                result["session"],
+                "--response",
+                str(response_path),
+            ],
+        }
+    )
+    return result
+
+
 def main(argv=None):
     argument_parser = parser()
     args = argument_parser.parse_args(argv)
-    result = runtime_from_script_location().advance(
-        command_from(args, argument_parser)
+    broker_socket = os.environ.get("CHECK_CONTRACT_BROKER_SOCKET")
+    installed_root = Path(__file__).resolve().parents[2]
+    broker_required = (
+        installed_root == Path("/tmp/check-contract-runtime")
+        and Path("/tmp/check-contract-broker-required").exists()
     )
+    if broker_required and not broker_socket:
+        argument_parser.error("this runtime requires its host audit broker")
+    if broker_socket:
+        try:
+            public = _materialize_broker_result(
+                _broker_command(args, argument_parser, broker_socket)
+            )
+        except BrokerError as error:
+            public = {
+                "result": "AuditStopped",
+                "code": error.code,
+                "reason": "audit stopped",
+                "target": "broker",
+                "prior_report_preserved": True,
+                "zero_target_writes": True,
+            }
+        successful = public.get("result") in {
+            "NeedJudgment",
+            "AuditComplete",
+        }
+    else:
+        result = runtime_from_script_location().advance(
+            command_from(args, argument_parser)
+        )
+        public = as_public_dict(result)
+        successful = isinstance(result, (NeedJudgment, AuditComplete))
     print(
         json.dumps(
-            as_public_dict(result),
+            public,
             sort_keys=True,
             separators=(",", ":"),
         )
     )
-    return 0 if isinstance(result, (NeedJudgment, AuditComplete)) else 2
+    return 0 if successful else 2
 
 
 if __name__ == "__main__":

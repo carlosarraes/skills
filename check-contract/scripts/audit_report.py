@@ -255,7 +255,12 @@ def mutation_attestation(
     }
 
 
-def publish_atomic(report_path: Path, content: bytes) -> str:
+def publish_atomic(
+    report_path: Path,
+    content: bytes,
+    *,
+    before_replace=None,
+) -> str:
     """Publish bytes with one same-directory atomic replacement."""
     report_path = Path(report_path)
     descriptor = None
@@ -271,6 +276,8 @@ def publish_atomic(report_path: Path, content: bytes) -> str:
             output.write(content)
             output.flush()
             os.fsync(output.fileno())
+        if before_replace is not None:
+            before_replace()
         os.replace(temporary, report_path)
         temporary = None
     except OSError as error:

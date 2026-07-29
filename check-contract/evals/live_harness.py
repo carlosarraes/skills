@@ -10,13 +10,11 @@ session directory from the subject.
 import os
 import stat
 import subprocess
-import sys
 from contextlib import contextmanager
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "check-contract" / "scripts"
+SKILLS_ROOT = Path(__file__).resolve().parents[2]
 OUTER_WATCHDOG_SECONDS = 360
 
 
@@ -25,6 +23,8 @@ def isolated_subject_command(
     targets: dict[str, Path],
     runtime_snapshot: Path,
     argv: list[str],
+    *,
+    broker_socket: Path | None = None,
 ) -> list[str]:
     """Build the subject boundary; trusted broker storage is never mounted."""
     command = [
@@ -53,6 +53,28 @@ def isolated_subject_command(
                 "--ro-bind",
                 str(target),
                 f"/tmp/workspace/fixture/{name}",
+            ]
+        )
+    if broker_socket is not None:
+        broker_socket = Path(broker_socket)
+        command.extend(
+            [
+                "--dir",
+                "/tmp/check-contract-broker",
+                "--ro-bind",
+                str(broker_socket.parent),
+                "/tmp/check-contract-broker",
+                "--setenv",
+                "CHECK_CONTRACT_BROKER_SOCKET",
+                "/tmp/check-contract-broker/" + broker_socket.name,
+                "--setenv",
+                "CHECK_CONTRACT_CLIENT_ROOT",
+                "/tmp/workspace/.contract-client",
+                "--ro-bind",
+                "/dev/null",
+                "/tmp/check-contract-broker-required",
+                "--tmpfs",
+                str(SKILLS_ROOT),
             ]
         )
     command.extend(
@@ -103,37 +125,6 @@ def run_contained_subject(repo: Path, argv: list[str]):
             capture_output=True,
             text=True,
         )
-
-
-def publish_trusted_report(
-    repository_root: Path,
-    report_relative: Path,
-    report: bytes,
-):
-    """Publish on the host after the subject phase and attest the exact delta."""
-    sys.path.insert(0, str(SCRIPTS))
-    try:
-        from audit_report import (
-            capture_target_state,
-            mutation_attestation,
-            publish_atomic,
-        )
-    finally:
-        sys.path.pop(0)
-    repository_root = Path(repository_root)
-    report_relative = Path(report_relative)
-    before = capture_target_state(repository_root)
-    report_path = repository_root / report_relative
-    report_sha256 = publish_atomic(report_path, report)
-    after = capture_target_state(repository_root)
-    attestation = mutation_attestation(
-        before, after, report_relative.as_posix()
-    )
-    return {
-        "report_path": str(report_path),
-        "report_sha256": report_sha256,
-        **attestation,
-    }
 
 
 def terminal_order(*, runtime_code, outer_timed_out):

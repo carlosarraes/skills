@@ -206,6 +206,35 @@ class CheckContractCliTests(unittest.TestCase):
             self.assertEqual(public["request_id"], envelope.request_id)
             self.assertNotIn(str(repo), completed.stdout)
 
+    def test_unavailable_broker_fails_closed_as_canonical_stop(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "start",
+                    "--request-id",
+                    "a" * 64,
+                ],
+                cwd=root,
+                env={
+                    **os.environ,
+                    "CHECK_CONTRACT_BROKER_SOCKET": str(
+                        root / "missing.sock"
+                    ),
+                    "CHECK_CONTRACT_CLIENT_ROOT": str(root / "client"),
+                },
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(completed.stderr, "")
+            public = json.loads(completed.stdout)
+            self.assertEqual(public["result"], "AuditStopped")
+            self.assertEqual(public["code"], "BROKER_UNAVAILABLE")
+
     def test_public_stop_sanitizes_internal_target_diagnostics(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

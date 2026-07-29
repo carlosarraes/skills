@@ -1,4 +1,3 @@
-import hashlib
 import importlib.util
 import json
 import os
@@ -89,25 +88,6 @@ class IterationSevenLiveHarnessTests(unittest.TestCase):
         target_index = command.index("/tmp/host-target")
         self.assertEqual(command[target_index - 1], "--ro-bind")
         self.assertNotIn("trusted-report-staging", " ".join(command))
-
-    def test_trusted_host_publishes_after_subject_read_only_phase(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = self.materialize(Path(temporary) / "fixture")
-            report = b"# Contract check report\n\ntrusted host publication\n"
-            relative = Path(
-                ".notes/feature-proj-123/contract/v1/check-report.md"
-            )
-
-            result = self.harness.publish_trusted_report(
-                repo, relative, report
-            )
-
-            self.assertEqual(result["report_path"], str(repo / relative))
-            self.assertEqual(
-                result["report_sha256"], hashlib.sha256(report).hexdigest()
-            )
-            self.assertTrue(result["only_active_report_changed"])
-            self.assertEqual((repo / relative).read_bytes(), report)
 
     def test_runtime_deadline_precedes_outer_watchdog_in_provenance(self):
         self.assertEqual(

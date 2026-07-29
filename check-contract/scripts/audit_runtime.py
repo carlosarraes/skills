@@ -391,6 +391,17 @@ class AuditRuntime:
         return result
 
     def advance(self, transition):
+        broker_required = (
+            Path(__file__).resolve().parents[2]
+            == Path("/tmp/check-contract-runtime")
+            and Path("/tmp/check-contract-broker-required").exists()
+        )
+        if broker_required:
+            return self._stopped(
+                "BROKER_REQUIRED",
+                "this isolated runtime is broker-only",
+                "session",
+            )
         if isinstance(transition, ContinueAudit):
             return self._continue(transition)
         if not isinstance(transition, StartAudit):
@@ -673,6 +684,13 @@ class AuditRuntime:
         if state.get("phase") == "reconciliation":
             return self.clock() >= deadline
         return self.clock() > deadline
+
+    def _require_publication_deadline(self, state):
+        if self._deadline_expired(state):
+            raise _CloseError(
+                "DEADLINE_EXPIRED",
+                "reconciliation finalization grace expired before publication commit",
+            )
 
     def _stop_consumed(self, store, token, state):
         try:
@@ -1486,7 +1504,13 @@ class AuditRuntime:
                 "audit deadline expired before report publication",
             )
         try:
-            report_sha256 = publish_atomic(report_path, report)
+            report_sha256 = publish_atomic(
+                report_path,
+                report,
+                before_replace=lambda: self._require_publication_deadline(
+                    state
+                ),
+            )
             after = capture_target_state(repository_root)
             attestation = mutation_attestation(
                 initial_target_state, after, report_relative
@@ -1494,11 +1518,6 @@ class AuditRuntime:
             if not attestation["only_active_report_changed"]:
                 raise ReportError(
                     "final target mutation set is not the active report only"
-                )
-            if self._deadline_expired(state):
-                raise _CloseError(
-                    "DEADLINE_EXPIRED",
-                    "reconciliation finalization grace expired during publication",
                 )
         except BaseException as error:
             current = (

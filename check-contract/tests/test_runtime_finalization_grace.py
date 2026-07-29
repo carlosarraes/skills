@@ -168,19 +168,22 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             "documented-drift"
         ) as repo, tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            report_path = self.report_path(repo)
+            report_path.write_bytes(b"PRIOR REPORT\n")
             clock, runtime, issued = self.issue_with_clock(repo, root)
             clock.value = 1344.5
             real_publish = self.module.publish_atomic
+            before_guard = self.module._identity_guard_path(report_path)
+            before_state = self.module.capture_target_state(repo)
 
-            def publish_then_expire(*args):
-                result = real_publish(*args)
+            def expire_before_commit(*args, **kwargs):
                 clock.value = 1345
-                return result
+                return real_publish(*args, **kwargs)
 
             with mock.patch.object(
                 self.module,
                 "publish_atomic",
-                side_effect=publish_then_expire,
+                side_effect=expire_before_commit,
             ):
                 result = self.close(runtime, issued)
 
@@ -188,7 +191,14 @@ class RuntimeFinalizationGraceTests(unittest.TestCase):
             self.assertEqual(
                 result.deadline_stage, "reconciliation-finalization"
             )
-            self.assertFalse(self.report_path(repo).exists())
+            self.assertTrue(result.prior_report_preserved)
+            self.assertTrue(result.zero_target_writes)
+            self.assertEqual(
+                self.module._identity_guard_path(report_path), before_guard
+            )
+            self.assertEqual(
+                self.module.capture_target_state(repo), before_state
+            )
 
 
 if __name__ == "__main__":
