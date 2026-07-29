@@ -203,8 +203,12 @@ class AuditBrokerTests(unittest.TestCase):
 
             stopped = broker._stopped(
                 raised.exception.code,
+                prior_report_preserved=(
+                    raised.exception.prior_report_preserved
+                ),
                 zero_target_writes=raised.exception.zero_target_writes,
             )
+            self.assertFalse(stopped["prior_report_preserved"])
             self.assertFalse(stopped["zero_target_writes"])
 
             with mock.patch.object(
@@ -216,6 +220,7 @@ class AuditBrokerTests(unittest.TestCase):
             ) as unexpected:
                 broker._export(complete, repo.resolve())
 
+            self.assertFalse(unexpected.exception.prior_report_preserved)
             self.assertFalse(unexpected.exception.zero_target_writes)
 
     def test_subject_cannot_replace_manifest_or_erase_consumption_ledger(self):

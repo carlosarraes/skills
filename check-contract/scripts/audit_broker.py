@@ -29,9 +29,17 @@ SOCKET_TIMEOUT_SECONDS = 10
 
 
 class BrokerError(RuntimeError):
-    def __init__(self, code, reason, *, zero_target_writes=True):
+    def __init__(
+        self,
+        code,
+        reason,
+        *,
+        prior_report_preserved=True,
+        zero_target_writes=True,
+    ):
         super().__init__(str(reason))
         self.code = code
+        self.prior_report_preserved = prior_report_preserved
         self.zero_target_writes = zero_target_writes
 
 
@@ -143,13 +151,15 @@ class HostAuditBroker:
         self._lock = threading.Lock()
 
     @staticmethod
-    def _stopped(code, *, zero_target_writes=True):
+    def _stopped(
+        code, *, prior_report_preserved=True, zero_target_writes=True
+    ):
         return {
             "result": "AuditStopped",
             "code": code,
             "reason": "audit stopped",
             "target": "broker",
-            "prior_report_preserved": True,
+            "prior_report_preserved": prior_report_preserved,
             "zero_target_writes": zero_target_writes,
         }
 
@@ -224,12 +234,14 @@ class HostAuditBroker:
                 raise BrokerError(
                     error.code,
                     error,
+                    prior_report_preserved=False,
                     zero_target_writes=False,
                 ) from error
             except (OSError, TypeError, ValueError) as error:
                 raise BrokerError(
                     "BROKER_RESULT_INVALID",
                     "completed report path mapping failed",
+                    prior_report_preserved=False,
                     zero_target_writes=False,
                 ) from error
             public["result"] = "AuditComplete"
@@ -362,6 +374,9 @@ class _Handler(socketserver.BaseRequestHandler):
             except (BrokerError, UnicodeDecodeError, json.JSONDecodeError) as error:
                 response = self.server.broker._stopped(
                     getattr(error, "code", "BROKER_REQUEST_INVALID"),
+                    prior_report_preserved=getattr(
+                        error, "prior_report_preserved", True
+                    ),
                     zero_target_writes=getattr(
                         error, "zero_target_writes", True
                     ),
