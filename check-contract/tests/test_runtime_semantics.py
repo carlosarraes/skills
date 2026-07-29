@@ -602,6 +602,7 @@ class RuntimeSemanticContractTests(unittest.TestCase):
             clause = judgment["clauses"]["K-ABSTRACTIONS"]
             clause["status"] = "EXCEEDED"
             clause["contract_boundary_changed"] = True
+            clause["evidence_ids"] = []
             write_response(
                 started.response_path,
                 code_response(started, judgment=judgment),

@@ -107,6 +107,7 @@ def classify_deviations(deviations, semantic_contract, boundary_changes):
         stable_family = family if stable_id is not None else _generic_deviation_family(item)
         if (
             stable_id in unbounded
+            or boundary_changes.get(stable_id, False)
             or any(item in unbounded for item in evidence_clauses)
             or any(boundary_changes.get(item, False) for item in evidence_clauses)
         ):
