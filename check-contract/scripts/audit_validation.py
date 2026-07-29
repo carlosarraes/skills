@@ -144,21 +144,50 @@ def _parse_clause(clause_id, value, issued, rules):
     )
 
 
-def _parse_items(path_id, values, axis, issued, allowed_kinds):
+def _parse_items(
+    path_id,
+    values,
+    axis,
+    issued,
+    allowed_kinds,
+    helper_facts,
+):
     location = f"code judgment.path_assessments.{path_id}.{axis}_items"
     if not isinstance(values, list):
         raise AuditInputError(f"{location} must be a list")
     parsed = []
     for index, raw in enumerate(values):
         item_location = f"{location}[{index}]"
-        value = require_exact_keys(
-            raw, {"kind", "evidence_ids", "reason"}, item_location
-        )
+        keys = {"kind", "evidence_ids", "reason"}
+        if axis == "reuse":
+            keys.add("helper_fact_ids")
+        value = require_exact_keys(raw, keys, item_location)
         if value["kind"] not in allowed_kinds:
             raise AuditInputError(
                 f"{item_location}.kind is not a closed enum value: "
                 f"{value['kind']!r}"
             )
+        helper_ids = ()
+        if axis == "reuse":
+            helper_ids = _evidence(
+                value["helper_fact_ids"],
+                set(helper_facts),
+                f"{item_location}.helper_fact_ids",
+            )
+            if value["kind"] in {"BYPASSED", "DUPLICATED"}:
+                if not helper_ids:
+                    raise AuditInputError(
+                        f"{item_location} requires an issued helper fact"
+                    )
+                for helper_id in helper_ids:
+                    fact = helper_facts[helper_id]
+                    if (
+                        fact["use_status"] == "USED"
+                        and path_id in fact["used_by_path_ids"]
+                    ):
+                        raise AuditInputError(
+                            f"{item_location} contradicts issued helper-use facts"
+                        )
         parsed.append(
             (
                 value["kind"],
@@ -168,6 +197,7 @@ def _parse_items(path_id, values, axis, issued, allowed_kinds):
                     f"{item_location}.evidence_ids",
                 ),
                 _text(value["reason"], item_location),
+                helper_ids,
             )
         )
     parsed.sort()
@@ -178,12 +208,13 @@ def _parse_items(path_id, values, axis, issued, allowed_kinds):
             kind=item[0],
             evidence_ids=item[1],
             reason=item[2],
+            helper_fact_ids=item[3],
         )
         for index, item in enumerate(parsed, 1)
     )
 
 
-def _parse_path(path_id, value, issued, rules):
+def _parse_path(path_id, value, issued, rules, helper_facts):
     location = f"code judgment.path_assessments.{path_id}"
     value = require_exact_keys(
         value, {"surface", "yagni_items", "reuse_items"}, location
@@ -216,6 +247,7 @@ def _parse_path(path_id, value, issued, rules):
             "yagni",
             issued,
             YAGNI_KINDS,
+            helper_facts,
         ),
         reuse_items=_parse_items(
             path_id,
@@ -223,6 +255,7 @@ def _parse_path(path_id, value, issued, rules):
             "reuse",
             issued,
             REUSE_KINDS,
+            helper_facts,
         ),
     )
 
@@ -329,11 +362,39 @@ def validate_code_judgment(packet, response) -> CodeJudgment:
     clause_ids = _runtime_ids(packet, "clause_ids", "clause IDs")
     path_ids = _runtime_ids(packet, "changed_path_ids", "changed-path IDs")
     issued = set(_runtime_ids(packet, "evidence_ids", "issued evidence IDs"))
+    semantics = require_object(packet.get("semantics"), "packet.semantics")
+    chronology = require_object(packet.get("chronology"), "packet.chronology")
+    for section, value in (("semantics", semantics), ("chronology", chronology)):
+        generation = value.get("generation")
+        if not isinstance(generation, str) or len(generation) != 64:
+            raise AuditInputError(f"packet {section} generation is invalid")
+    helper_values = semantics.get("issued_facts", {}).get("helpers")
+    if not isinstance(helper_values, list):
+        raise AuditInputError("packet semantic helper facts are invalid")
+    helper_facts = {}
+    for value in helper_values:
+        if type(value) is not dict or type(value.get("fact_id")) is not str:
+            raise AuditInputError("packet semantic helper fact is invalid")
+        helper_facts[value["fact_id"]] = value
     response = require_exact_keys(
         response,
-        {"clauses", "path_assessments", "deviations"},
+        {
+            "semantic_generation",
+            "chronology_generation",
+            "clauses",
+            "path_assessments",
+            "deviations",
+        },
         "code judgment",
     )
+    if response["semantic_generation"] != semantics["generation"]:
+        raise AuditInputError(
+            "code judgment semantic_generation does not match the issued generation"
+        )
+    if response["chronology_generation"] != chronology["generation"]:
+        raise AuditInputError(
+            "code judgment chronology_generation does not match the issued generation"
+        )
     clause_values = require_object(
         response["clauses"], "code judgment.clauses"
     )
@@ -353,8 +414,25 @@ def validate_code_judgment(packet, response) -> CodeJudgment:
         _parse_clause(clause_id, clause_values[clause_id], issued, rules)
         for clause_id in clause_ids
     )
+    exact_statuses = semantics["issued_facts"].get("clause_statuses", {})
+    for clause in clauses:
+        fact = exact_statuses.get(clause.clause_id)
+        if (
+            fact is not None
+            and fact["status"] == "EXCEEDED"
+            and clause.status == "UNMET"
+        ):
+            raise AuditInputError(
+                f"code judgment.clauses.{clause.clause_id}.status contradicts an exact issued fact"
+            )
     paths = tuple(
-        _parse_path(path_id, path_values[path_id], issued, rules)
+        _parse_path(
+            path_id,
+            path_values[path_id],
+            issued,
+            rules,
+            helper_facts,
+        )
         for path_id in path_ids
     )
     deviations = _explicit_deviations(

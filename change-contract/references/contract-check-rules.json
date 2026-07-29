@@ -16,6 +16,57 @@
     "risk",
     "acceptance"
   ],
+  "semantic_contract": {
+    "clause_ownership": {
+      "contract_fidelity": ["O", "B", "N", "I", "C", "A"],
+      "independent_axes": {
+        "R": "REUSE",
+        "S": "SURFACE",
+        "K": "COMPLEXITY"
+      }
+    },
+    "exact_predicate": {
+      "mode": "AS_WRITTEN",
+      "non_implications": [
+        "CORRECTNESS_DEFECT_IS_NOT_YAGNI",
+        "BUDGET_EXCESS_IS_NOT_YAGNI",
+        "PATH_DEVIATION_IS_NOT_FIDELITY",
+        "COMPLEXITY_EXCESS_IS_NOT_REUSE"
+      ]
+    },
+    "status_meanings": {
+      "upper_bound_breach": "EXCEEDED",
+      "required_positive_absence": "UNMET",
+      "non_demonstrative_acceptance": "INDETERMINATE",
+      "missing_or_conflicting_evidence": "INDETERMINATE"
+    },
+    "contract_boundary": {
+      "changed_dimensions": [
+        "APPROVED_BEHAVIOR",
+        "PUBLIC_CONTRACT",
+        "RISK_BOUNDARY"
+      ],
+      "public_interface_deviation": "UNBOUNDED"
+    },
+    "reuse": {
+      "used_helper_status": "REUSED",
+      "contrary_statuses": ["BYPASSED", "DUPLICATED"],
+      "contrary_requires_issued_fact": true,
+      "failure_statuses": ["DUPLICATED", "BYPASSED"],
+      "warning_statuses": ["NEAR_DUPLICATE", "INDETERMINATE"]
+    },
+    "ledger_reconciliation": {
+      "verified_match_scope": "DECLARED_AFFECTED_STABLE_CLAUSES",
+      "bounded_only": true,
+      "unbounded_clause_ids": [
+        "K-DEPENDENCIES",
+        "K-PUBLIC-INTERFACES"
+      ]
+    },
+    "stable_id_aliases": {
+      "K-RUNTIME-DEPENDENCIES": "K-DEPENDENCIES"
+    }
+  },
   "precedence": [
     "CONTRACT_OBSOLETE",
     "FIDELITY_FAIL_WITH_SIMPLICITY",

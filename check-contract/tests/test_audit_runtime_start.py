@@ -155,7 +155,7 @@ class AuditRuntimeStartTests(unittest.TestCase):
                     "S1",
                     "S2",
                     "K-MODULES",
-                    "K-RUNTIME-DEPENDENCIES",
+                    "K-DEPENDENCIES",
                     "K-ABSTRACTIONS",
                     "K-CONFIGURATION",
                     "K-PUBLIC-INTERFACES",

@@ -67,7 +67,7 @@ EXPECTED_CLAUSE_IDS = {
     "S1",
     "S2",
     "K-MODULES",
-    "K-RUNTIME-DEPENDENCIES",
+    "K-DEPENDENCIES",
     "K-ABSTRACTIONS",
     "K-CONFIGURATION",
     "K-PUBLIC-INTERFACES",
@@ -597,9 +597,9 @@ def _clause_statuses(
             len(new_modules),
             clauses["K-MODULES"],
         ),
-        "K-RUNTIME-DEPENDENCIES": _budget_status(
+        "K-DEPENDENCIES": _budget_status(
             len(new_external_dependencies),
-            clauses["K-RUNTIME-DEPENDENCIES"],
+            clauses["K-DEPENDENCIES"],
         ),
         "K-ABSTRACTIONS": _budget_status(
             len(new_abstractions),

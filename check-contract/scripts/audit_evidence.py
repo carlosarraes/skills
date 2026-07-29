@@ -44,7 +44,7 @@ SECTION_FAMILIES = {
 }
 COMPLEXITY_IDS = {
     "New modules": "K-MODULES",
-    "New runtime dependencies": "K-RUNTIME-DEPENDENCIES",
+    "New runtime dependencies": "K-DEPENDENCIES",
     "New abstractions": "K-ABSTRACTIONS",
     "New configuration": "K-CONFIGURATION",
     "New public interfaces": "K-PUBLIC-INTERFACES",

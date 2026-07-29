@@ -76,12 +76,15 @@ def valid_code_judgment(packet):
             "reuse_items": [
                 {
                     "kind": "NO_REUSE_AVAILABLE",
+                    "helper_fact_ids": [],
                     "evidence_ids": ["reuse:SEARCH-1"],
                     "reason": "The full-tree search found no compatible helper.",
                 }
             ],
         }
     return {
+        "semantic_generation": packet["semantics"]["generation"],
+        "chronology_generation": packet["chronology"]["generation"],
         "clauses": clauses,
         "path_assessments": paths,
         "deviations": [],
@@ -347,6 +350,8 @@ class AuditRuntimeReconciliationTests(unittest.TestCase):
             self.assertEqual(
                 set(response_properties),
                 {
+                    "semantic_generation",
+                    "chronology_generation",
                     "ledger_entries",
                     "deviation_matches",
                     "contract_obsolete",

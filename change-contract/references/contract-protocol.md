@@ -349,5 +349,8 @@ Generate stable IDs before aggregation:
 - `F1..Fn` for findings sorted by verdict precedence, then clause/deviation ID,
   then file/line.
 
+Runtime readers normalize legacy `K-RUNTIME-DEPENDENCIES` to canonical
+`K-DEPENDENCIES`; newly issued packets always use the canonical ID.
+
 The route cites every applicable stable F/U/D ID when present; when no F/U/D
 IDs exist, state `IDs: none`.

@@ -62,6 +62,11 @@ from audit_session import (
     SessionStore,
 )
 from audit_validation import allowed_clause_evidence_ids, validate_code_judgment
+from audit_semantics import (
+    classify_deviations,
+    issue_runtime_contract,
+    resolve_affected_clause_ids,
+)
 from audit_reconciliation import (
     ReconciliationError,
     collect_guarded_narratives,
@@ -619,6 +624,13 @@ class AuditRuntime:
                 probe_id = f"Q{len(issued_probes) + 1}"
                 issued_probes[probe_id] = entry.probe_descriptor
             ledger_value = entry.packet_value(evidence_id, probe_id)
+            ledger_value.update(
+                resolve_affected_clause_ids(
+                    entry.affected_clauses,
+                    code_packet["clause_ids"],
+                    code_packet["semantics"]["stable_id_aliases"],
+                )
+            )
             ledger_values.append(ledger_value)
             evidence[evidence_id] = {
                 key: value
@@ -663,6 +675,14 @@ class AuditRuntime:
         ledger_ids = tuple(item.ledger_id for item in entries)
         probe_ids = tuple(issued_probes)
         nonce = self._nonce()
+        deviation_semantics = classify_deviations(
+            deviations,
+            code_packet["semantics"],
+            {
+                item["clause_id"]: item["contract_boundary_changed"]
+                for item in code_value["clauses"]
+            },
+        )
         next_state = {
             **state,
             "phase": "reconciliation",
@@ -676,6 +696,11 @@ class AuditRuntime:
             "reconciliation_evidence_ids": list(evidence_ids),
             "narrative_content_guards": content_guards,
             "qa_sha_resolution": qa_resolution,
+            "semantic_generation": code_packet["semantics"]["generation"],
+            "chronology_generation": code_packet["chronology"]["generation"],
+            "deviation_semantics": deviation_semantics,
+            "ledger_unbounded_clause_ids": code_packet["semantics"]
+            ["ledger_reconciliation"]["unbounded_clause_ids"],
         }
         packet = {
             "schema_version": 1,
@@ -704,12 +729,17 @@ class AuditRuntime:
                 "acceptance_qa_evidence_id": "runtime:QA-1",
                 "qa_sha_resolution": qa_resolution,
             },
+            "semantics": code_packet["semantics"],
+            "chronology": code_packet["chronology"],
+            "deviation_semantics": deviation_semantics,
             "response_schema": reconciliation_response_schema(
                 nonce,
                 ledger_ids,
                 deviation_ids,
                 evidence_ids,
                 probe_ids,
+                code_packet["semantics"]["generation"],
+                code_packet["chronology"]["generation"],
             ),
         }
         if "a_closure_digest" in state:
@@ -824,6 +854,8 @@ class AuditRuntime:
         value = require_exact_keys(
             value,
             {
+                "semantic_generation",
+                "chronology_generation",
                 "ledger_entries",
                 "deviation_matches",
                 "contract_obsolete",
@@ -831,6 +863,11 @@ class AuditRuntime:
             },
             "reconciliation judgment",
         )
+        for field in ("semantic_generation", "chronology_generation"):
+            if value[field] != state[field]:
+                raise AuditInputError(
+                    f"reconciliation judgment.{field} does not match the issued generation"
+                )
         issued_evidence = set(state["reconciliation_evidence_ids"])
         issued_ledger = {
             item["ledger_id"]: item for item in state["ledger_entries"]
@@ -870,6 +907,18 @@ class AuditRuntime:
                 ),
                 "reason": reason.strip(),
             }
+            if item["status"] == "VERIFIED":
+                issued = issued_ledger[ledger_id]
+                if issued["affected_clause_resolution"] != "RESOLVED":
+                    raise AuditInputError(
+                        "VERIFIED ledger entry has indeterminate affected clauses"
+                    )
+                if set(issued["affected_clause_ids"]) & set(
+                    state["ledger_unbounded_clause_ids"]
+                ):
+                    raise AuditInputError(
+                        "VERIFIED ledger entry cannot legalize an unbounded deviation"
+                    )
         raw_matches = value["deviation_matches"]
         if type(raw_matches) is not list:
             raise AuditInputError(
@@ -900,6 +949,34 @@ class AuditRuntime:
                 raise AuditInputError(
                     "deviation match duplicates a deviation ID"
                 )
+            ledger = issued_ledger[ledger_id]
+            semantic = next(
+                item
+                for item in state["deviation_semantics"]
+                if item["deviation_id"] == deviation_id
+            )
+            if details[ledger_id]["status"] == "VERIFIED":
+                if ledger["affected_clause_resolution"] != "RESOLVED":
+                    raise AuditInputError(
+                        "VERIFIED ledger match has indeterminate affected clauses"
+                    )
+                if semantic["boundedness"] != "BOUNDED":
+                    raise AuditInputError(
+                        "VERIFIED ledger match cannot legalize an unbounded or unknown deviation"
+                    )
+                stable_id = semantic["stable_clause_id"]
+                family = semantic["stable_clause_family"]
+                affected = ledger["affected_clause_ids"]
+                outside_scope = (
+                    stable_id not in affected
+                    if stable_id is not None
+                    else family
+                    not in {clause_family(clause_id) for clause_id in affected}
+                )
+                if outside_scope:
+                    raise AuditInputError(
+                        "VERIFIED ledger match is outside declared affected clauses"
+                    )
             matched.add(deviation_id)
             matches.append(DeviationMatch(deviation_id, ledger_id))
         obsolete = require_exact_keys(
@@ -1612,6 +1689,17 @@ class AuditRuntime:
         except (EvidenceError, OSError, ValueError) as error:
             return self._stopped("EVIDENCE_FAILURE", error, target_name)
         rules = load_rules(RULES_PATH)
+        try:
+            semantics, chronology = issue_runtime_contract(
+                authority,
+                contract,
+                captured,
+                rules,
+                self.git_runner,
+                absolute_deadline,
+            )
+        except (EvidenceError, OSError, TypeError, ValueError) as error:
+            return self._stopped("EVIDENCE_FAILURE", error, target_name)
         issued_evidence_ids = tuple(captured["evidence"])
         fidelity_clause_ids = tuple(
             clause.clause_id
@@ -1666,6 +1754,8 @@ class AuditRuntime:
             "evidence_ids": list(captured["evidence"]),
             "fidelity_evidence_ids": fidelity_evidence_ids,
             "reuse_coverage_indeterminate": captured["reuse_truncated"],
+            "semantics": semantics,
+            "chronology": chronology,
         }
         if closed_target is not None:
             packet["a_closure_digest"] = closed_target["closure_digest"]

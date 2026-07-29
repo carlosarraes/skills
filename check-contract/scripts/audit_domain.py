@@ -51,11 +51,59 @@ ROUTES = {
         "otherwise": ("qa-ticket",),
     },
 }
+SEMANTIC_CONTRACT_V1 = {
+    "clause_ownership": {
+        "contract_fidelity": ["O", "B", "N", "I", "C", "A"],
+        "independent_axes": {"R": "REUSE", "S": "SURFACE", "K": "COMPLEXITY"},
+    },
+    "exact_predicate": {
+        "mode": "AS_WRITTEN",
+        "non_implications": [
+            "CORRECTNESS_DEFECT_IS_NOT_YAGNI",
+            "BUDGET_EXCESS_IS_NOT_YAGNI",
+            "PATH_DEVIATION_IS_NOT_FIDELITY",
+            "COMPLEXITY_EXCESS_IS_NOT_REUSE",
+        ],
+    },
+    "status_meanings": {
+        "upper_bound_breach": "EXCEEDED",
+        "required_positive_absence": "UNMET",
+        "non_demonstrative_acceptance": "INDETERMINATE",
+        "missing_or_conflicting_evidence": "INDETERMINATE",
+    },
+    "contract_boundary": {
+        "changed_dimensions": [
+            "APPROVED_BEHAVIOR",
+            "PUBLIC_CONTRACT",
+            "RISK_BOUNDARY",
+        ],
+        "public_interface_deviation": "UNBOUNDED",
+    },
+    "reuse": {
+        "used_helper_status": "REUSED",
+        "contrary_statuses": ["BYPASSED", "DUPLICATED"],
+        "contrary_requires_issued_fact": True,
+        "failure_statuses": ["DUPLICATED", "BYPASSED"],
+        "warning_statuses": ["NEAR_DUPLICATE", "INDETERMINATE"],
+    },
+    "ledger_reconciliation": {
+        "verified_match_scope": "DECLARED_AFFECTED_STABLE_CLAUSES",
+        "bounded_only": True,
+        "unbounded_clause_ids": [
+            "K-DEPENDENCIES",
+            "K-PUBLIC-INTERFACES",
+        ],
+    },
+    "stable_id_aliases": {
+        "K-RUNTIME-DEPENDENCIES": "K-DEPENDENCIES"
+    },
+}
 _RULE_KEYS = {
     "schema_version",
     "statuses",
     "fidelity_families",
     "fidelity_evidence_namespaces",
+    "semantic_contract",
     "precedence",
     "routes",
     "report_schema_version",
@@ -72,6 +120,7 @@ class RulePack:
     statuses: Mapping[str, tuple[str, ...]]
     fidelity_families: tuple[str, ...]
     fidelity_evidence_namespaces: tuple[str, ...]
+    semantic_contract: Mapping[str, object]
     precedence: tuple[str, ...]
     routes: Mapping[str, object]
     report_schema_version: int
@@ -92,6 +141,7 @@ class AxisItem:
     kind: str
     evidence_ids: tuple[str, ...]
     reason: str
+    helper_fact_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -268,6 +318,102 @@ def _validate_routes(value):
     return MappingProxyType(frozen)
 
 
+def _deep_freeze_json(value, location):
+    if value is None or type(value) in {bool, int, str}:
+        return value
+    if type(value) is list:
+        return tuple(
+            _deep_freeze_json(item, f"{location}[]") for item in value
+        )
+    if type(value) is dict:
+        if any(type(key) is not str or not key for key in value):
+            raise AuditInputError(f"{location} keys must be non-empty strings")
+        return MappingProxyType(
+            {
+                key: _deep_freeze_json(item, f"{location}.{key}")
+                for key, item in value.items()
+            }
+        )
+    raise AuditInputError(f"{location} must contain only JSON values")
+
+
+def _validate_semantic_contract(value):
+    value = require_exact_keys(
+        value,
+        {
+            "clause_ownership",
+            "exact_predicate",
+            "status_meanings",
+            "contract_boundary",
+            "reuse",
+            "ledger_reconciliation",
+            "stable_id_aliases",
+        },
+        "semantic_contract",
+    )
+    ownership = require_exact_keys(
+        value["clause_ownership"],
+        {"contract_fidelity", "independent_axes"},
+        "semantic_contract.clause_ownership",
+    )
+    require_exact_keys(
+        ownership["independent_axes"],
+        {"R", "S", "K"},
+        "semantic_contract.clause_ownership.independent_axes",
+    )
+    for key, fields in (
+        ("exact_predicate", {"mode", "non_implications"}),
+        (
+            "status_meanings",
+            {
+                "upper_bound_breach",
+                "required_positive_absence",
+                "non_demonstrative_acceptance",
+                "missing_or_conflicting_evidence",
+            },
+        ),
+        (
+            "contract_boundary",
+            {"changed_dimensions", "public_interface_deviation"},
+        ),
+        (
+            "reuse",
+            {
+                "used_helper_status",
+                "contrary_statuses",
+                "contrary_requires_issued_fact",
+                "failure_statuses",
+                "warning_statuses",
+            },
+        ),
+        (
+            "ledger_reconciliation",
+            {"verified_match_scope", "bounded_only", "unbounded_clause_ids"},
+        ),
+    ):
+        require_exact_keys(
+            value[key], fields, f"semantic_contract.{key}"
+        )
+    if tuple(ownership["contract_fidelity"]) != FIDELITY_FAMILIES:
+        raise AuditInputError(
+            "semantic contract fidelity ownership must match fidelity_families"
+        )
+    aliases = value["stable_id_aliases"]
+    if aliases != {"K-RUNTIME-DEPENDENCIES": "K-DEPENDENCIES"}:
+        raise AuditInputError("semantic contract stable ID aliases are invalid")
+    canonical_value = json.dumps(
+        value, sort_keys=True, separators=(",", ":")
+    )
+    canonical_expected = json.dumps(
+        SEMANTIC_CONTRACT_V1, sort_keys=True, separators=(",", ":")
+    )
+    if canonical_value != canonical_expected:
+        raise AuditInputError(
+            "semantic_contract does not match closed v1 value types"
+        )
+    return _deep_freeze_json(value, "semantic_contract")
+
+
 def load_rules(path: Path) -> RulePack:
     """Load only the canonical closed v1 policy shape."""
     try:
@@ -298,6 +444,9 @@ def load_rules(path: Path) -> RulePack:
         statuses=statuses,
         fidelity_families=fidelity_families,
         fidelity_evidence_namespaces=namespaces,
+        semantic_contract=_validate_semantic_contract(
+            document["semantic_contract"]
+        ),
         precedence=precedence,
         routes=_validate_routes(document["routes"]),
         report_schema_version=REPORT_SCHEMA_VERSION,

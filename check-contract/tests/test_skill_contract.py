@@ -128,6 +128,16 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertNotIn(duplicated_policy, self.flat_skill)
 
+    def test_responder_consumes_runtime_semantics_and_chronology(self):
+        for phrase in (
+            "consume the packet's `semantics` and `chronology`",
+            "copy their generation values into `semantic_generation` and "
+            "`chronology_generation`",
+            "reuse item copies the applicable issued `helper_fact_ids`",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+        self.assertNotIn("CORRECTNESS_DEFECT_IS_NOT_YAGNI", self.skill)
+
     def test_reconciliation_response_is_exact_and_probe_bounded(self):
         for phrase in (
             "match the packet's `response_schema` exactly",

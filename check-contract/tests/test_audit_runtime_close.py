@@ -50,6 +50,8 @@ def reconciliation_response(
         for item in packet["ledger_entries"]
     }
     judgment = {
+        "semantic_generation": packet["semantics"]["generation"],
+        "chronology_generation": packet["chronology"]["generation"],
         "ledger_entries": ledger_entries,
         "deviation_matches": list(deviation_matches),
         "contract_obsolete": {

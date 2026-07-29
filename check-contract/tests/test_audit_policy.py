@@ -104,6 +104,20 @@ class AuditPolicyTests(unittest.TestCase):
                 "complexity:K-MODULES",
                 "reuse:P1",
             ],
+            "semantics": {
+                "generation": "a" * 64,
+                "issued_facts": {
+                    "clause_statuses": {},
+                    "helpers": [
+                        {
+                            "fact_id": "H1",
+                            "use_status": "NOT_USED",
+                            "used_by_path_ids": [],
+                        }
+                    ],
+                },
+            },
+            "chronology": {"generation": "b" * 64},
         }
 
     def valid_code_response(
@@ -152,6 +166,8 @@ class AuditPolicyTests(unittest.TestCase):
             "contract_boundary_changed": False,
         }
         return {
+            "semantic_generation": self.packet["semantics"]["generation"],
+            "chronology_generation": self.packet["chronology"]["generation"],
             "clauses": clauses,
             "path_assessments": {
                 "P1": {
@@ -171,6 +187,7 @@ class AuditPolicyTests(unittest.TestCase):
                     "reuse_items": [
                         {
                             "kind": kind,
+                            "helper_fact_ids": ["H1"],
                             "evidence_ids": ["reuse:P1"],
                             "reason": "The reuse search was classified.",
                         }
@@ -295,6 +312,11 @@ class AuditPolicyTests(unittest.TestCase):
             response["path_assessments"]["P1"][axis] = [
                 {
                     "kind": kind,
+                    **(
+                        {"helper_fact_ids": ["H1"]}
+                        if axis == "reuse_items"
+                        else {}
+                    ),
                     "evidence_ids": ["complexity:P1"],
                     "reason": "Unknown closed value.",
                 }
@@ -695,6 +717,22 @@ class AuditPolicyTests(unittest.TestCase):
             "otherwise": ["qa-ticket"],
         }
         mutations["routes.FIDELITY_FAIL.*fixed"] = changed
+
+        changed = json.loads(json.dumps(source))
+        changed["semantic_contract"]["status_meanings"]["unknown"] = "MET"
+        mutations["semantic_contract.status_meanings.*extra.*keys"] = changed
+
+        changed = json.loads(json.dumps(source))
+        changed["semantic_contract"]["status_meanings"][
+            "upper_bound_breach"
+        ] = "UNMET"
+        mutations["semantic_contract.*closed v1"] = changed
+
+        changed = json.loads(json.dumps(source))
+        changed["semantic_contract"]["reuse"][
+            "contrary_requires_issued_fact"
+        ] = 1
+        mutations["semantic_contract.*closed v1.*type"] = changed
 
         for message, document in mutations.items():
             with self.subTest(message=message):

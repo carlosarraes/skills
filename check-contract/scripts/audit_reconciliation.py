@@ -428,6 +428,8 @@ def reconciliation_response_schema(
     deviation_ids: tuple[str, ...],
     evidence_ids: tuple[str, ...],
     probe_ids: tuple[str, ...],
+    semantic_generation: str,
+    chronology_generation: str,
 ) -> dict[str, object]:
     """Describe the one closed reconciliation response without circular IDs."""
     evidence_array = {
@@ -490,12 +492,16 @@ def reconciliation_response_schema(
         "type": "object",
         "additionalProperties": False,
         "required": [
+            "semantic_generation",
+            "chronology_generation",
             "ledger_entries",
             "deviation_matches",
             "contract_obsolete",
             "probe_id",
         ],
         "properties": {
+            "semantic_generation": {"const": semantic_generation},
+            "chronology_generation": {"const": chronology_generation},
             "ledger_entries": {
                 "type": "object",
                 "additionalProperties": False,
