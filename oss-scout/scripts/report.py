@@ -19,7 +19,12 @@ def main():
     ap.add_argument("--out", default=os.path.join(DATA, "shortlist.md"))
     args = ap.parse_args()
 
-    all_rows = read_jsonl(CORPUS)
+    # The corpus is an append-only log, so re-classifying a repo adds a row
+    # rather than replacing one. Last write wins.
+    latest = {}
+    for r in read_jsonl(CORPUS):
+        latest[r["repo"]] = r
+    all_rows = list(latest.values())
     # Health-rejected repos live in the corpus purely so they are never re-fetched.
     corpus = [r for r in all_rows if not r.get("verdict")]
     rejected = len(all_rows) - len(corpus)

@@ -25,7 +25,7 @@ Return ONLY a JSON array, one object per repo, same order, no prose:
 [{{"repo":"owner/name","domains":["..."],"approachability":0,"issue_quality":0,"needs_help":true,"red_flags":["..."],"reason":"..."}}]
 
 Fields:
-- domains: 1-3 from exactly this list: {domains}
+- domains: 1-3 from exactly this list: {domains}. Classify what the PROJECT is, judged from its description and topics — never what its issues happen to touch. An ebook manager with a reproducible-builds issue is NOT "systems"; it stays whatever the product is. Build/CI/packaging work never makes a project "systems" or "devops".
 - approachability: 0-5. Could a competent outsider land a PR without insider context? 5=yes clearly, 0=needs deep domain/insider knowledge.
 - issue_quality: 0-5. Are the issue titles specific and actionable? 5=precise and self-contained, 0=vague or a wishlist.
 - needs_help: true if this looks genuinely under-resourced and open to outside help.
