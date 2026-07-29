@@ -844,8 +844,8 @@ class AuditRuntimeStartTests(unittest.TestCase):
                 contract = Path(authority["contract_path"])
                 contract.write_bytes(
                     contract.read_bytes().replace(
-                        b"without adding new structure",
-                        b"with unapproved replacement text",
+                        b"validated percentage discount",
+                        b"unapproved percentage replacement",
                     )
                 )
                 return authority

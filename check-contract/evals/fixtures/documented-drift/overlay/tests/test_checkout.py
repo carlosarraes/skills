@@ -8,6 +8,7 @@ class CheckoutTests(unittest.TestCase):
         self.assertEqual(checkout_total(10.125), 10.12)
         self.assertEqual(apply_discount(42.50, 0), 42.50)
         self.assertEqual(apply_discount(10, 25), 7.5)
+        self.assertEqual(apply_discount(10.01, 50), 5.00)
         for percentage in (-1, 101):
             with self.assertRaises(ValueError):
                 apply_discount(10, percentage)

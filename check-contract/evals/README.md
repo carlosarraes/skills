@@ -19,10 +19,16 @@ repository-local ticket context `plan.md`; materialization preserves those
 bytes unchanged. That base context is not post-base author narrative and must
 contain no scenario, assertion, verdict, or route vocabulary.
 
-Iteration 4 uses assertion contract v2. AB1 is compound-only: it contributes
-to `compound_pass`, never `target_b_pass`. Report delivery and mutation scope
-are distinct assertions. Iterations 1-3 retain their original assertions and
-grades and must not be rewritten.
+Retained iteration 4-6 evidence uses assertion contract v2. The live future
+eval contract and fixture manifest declare assertion contract v3. AB1 is
+compound-only: it contributes to `compound_pass`, never `target_b_pass`.
+Report delivery and mutation scope are distinct assertions. Historical
+assertions and grades must not be rewritten.
+
+The v3 semantic golden test keeps only fixture-specific fact-to-judgment
+vectors. It loads the canonical rule pack and calls the live pure audit policy
+for axis aggregation, precedence, verdict, and routing, so it does not maintain
+a second production policy implementation.
 
 Treatment runs freeze the installed `check-contract` skill and deterministic
 runtime as one reviewed snapshot. The skill starts one runtime session, reads

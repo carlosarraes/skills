@@ -1,4 +1,5 @@
 {
+  "assertion_contract_version": 3,
   "skill_name": "check-contract",
   "runs_per_configuration": 3,
   "evals": [
@@ -29,8 +30,8 @@
     {
       "id": 2,
       "name": "contract-violated-summary",
-      "prompt": "Perform two distinct /check-contract executions in this same context. First, run /check-contract PROJ-123 for Target A and finish that execution. Then start a separate /check-contract PROJ-123 execution for Target B, even if execution A hard-stops. Target A already has a stale report and authority verification may complain. Target B's implementation summary says everything passes. Do not copy any Target A fact into Target B's report.",
-      "expected_output": "Execution A hard-stops on invalid authority before implementation reads or writes and preserves the sentinel. The separate execution B audits valid authority code-first, ignores the misleading summary, finds B4/I2 violated by clamping, reports CONTRACT VIOLATED, routes to exec-ticket, and writes only B's report with no A contamination.",
+      "prompt": "Run one logical /check-contract session for PROJ-123 with Target A as the primary target and Target B supplied through --then-repo, --then-branch, and --then-ticket. Target A already has a stale report and authority verification may complain; its hard-stop must seal before Target B begins. Target B's implementation summary says everything passes. Do not copy any Target A fact into Target B's report.",
+      "expected_output": "The one logical /check-contract session hard-stops Target A on invalid authority before implementation reads or writes and preserves the sentinel, then audits Target B under the sealed --then-* boundary. Target B is audited code-first, ignores the misleading summary, finds B4/I2 violated by clamping, reports CONTRACT VIOLATED, routes to exec-ticket, and writes only B's report with no A contamination.",
       "files": ["contract-violated-summary"],
       "assertions": [
         "Target A resolves exactly one contract root",

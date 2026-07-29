@@ -1,4 +1,5 @@
 {
+  "assertion_contract_version": 3,
   "schema_version": 1,
   "canonical": {
     "fixture": "contract-repo",
@@ -10,7 +11,7 @@
     "contract-compliant-overengineered": {
       "targets": {
         "target": {
-          "expected_head": "d3d02eaa6d8dc88fc43611c57f1dd89948bdd4c3",
+          "expected_head": "dfa9e0c4fc8a251471cae1aceef92f8d17bd8cf5",
           "ledger": "empty",
           "inventory": [
             {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
@@ -27,7 +28,7 @@
     "contract-violated-summary": {
       "targets": {
         "target-a": {
-          "expected_head": "0c3a0ba9fc813c9a22e1f642126175aea6d0642e",
+          "expected_head": "edc05a89de1842a70bad8e6b407786ed27edd905",
           "ledger": "empty",
           "inventory": [
             {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
@@ -41,7 +42,7 @@
           ]
         },
         "target-b": {
-          "expected_head": "851cd76f31ba4db10bc149710db0f8ecb7f3d1bb",
+          "expected_head": "43161193ce4ccc2b9563037f4574de534b9c9631",
           "ledger": "missing",
           "inventory": [
             {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},
@@ -58,7 +59,7 @@
     "documented-drift": {
       "targets": {
         "target": {
-          "expected_head": "dcb517d0269bbead400bce8f6a9dea513cd6b2b5",
+          "expected_head": "5ae33efde8b419901f1e39ce9113684ded60091a",
           "ledger": "d1",
           "inventory": [
             {"status": "A", "path": ".notes/feature-proj-123/contract/current.json"},

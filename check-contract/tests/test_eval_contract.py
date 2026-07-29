@@ -1,7 +1,9 @@
+import ast
 import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -31,6 +33,28 @@ RUNNER = importlib.util.module_from_spec(RUNNER_SPEC)
 sys.path.insert(0, str(ROOT / "evals"))
 RUNNER_SPEC.loader.exec_module(RUNNER)
 sys.path.pop(0)
+SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+from audit_domain import (  # noqa: E402
+    AxisItem,
+    ClauseJudgment,
+    CodeJudgment,
+    Deviation,
+    DeviationMatch,
+    LedgerEntry,
+    PathAssessment,
+    ReconciliationJudgment,
+    SurfaceJudgment,
+    load_rules,
+)
+from audit_policy import aggregate  # noqa: E402
+sys.path.pop(0)
+RULES = (
+    ROOT.parent
+    / "change-contract"
+    / "references"
+    / "contract-check-rules.json"
+)
 CONTRACT_ROOT = Path(".notes/feature-proj-123/contract")
 VERSION = CONTRACT_ROOT / "v1"
 DOCUMENTED_DRIFT_OVERLAY = (
@@ -43,7 +67,7 @@ DOCUMENTED_DRIFT_OVERLAY = (
 REPLAY_PROBE = {
     "kind": "python-call-v1",
     "module": "src.pricing",
-    "callable": "validate_percentage",
+    "callable": "_validate_percentage",
     "cases": [
         {"args": [0], "expect": "returns"},
         {"args": [100], "expect": "returns"},
@@ -65,6 +89,30 @@ def git(repo, *args):
     return subprocess.run(
         ["git", *args], cwd=repo, check=True, capture_output=True, text=True
     ).stdout.strip()
+
+
+def public_functions(repo, revision):
+    functions = set()
+    for relative in ("src/checkout.py", "src/pricing.py"):
+        source = git(repo, "show", f"{revision}:{relative}")
+        module = relative.removesuffix(".py").replace("/", ".")
+        for node in ast.parse(source).body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not node.name.startswith("_"):
+                    functions.add(f"{module}.{node.name}")
+    return functions
+
+
+def semantic_outcome(decision):
+    return {
+        "fidelity": decision.fidelity,
+        "yagni": decision.yagni,
+        "reuse": decision.reuse,
+        "documented_drift": decision.documented_drift,
+        "undocumented_drift": decision.undocumented_drift,
+        "verdict": decision.verdict,
+        "route": decision.route,
+    }
 
 
 class EvalContractTests(unittest.TestCase):
@@ -92,6 +140,10 @@ class EvalContractTests(unittest.TestCase):
 
     def test_eval_shape_names_prompts_and_assertion_order(self):
         document = json.loads(EVALS.read_text(encoding="utf-8"))
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(getattr(ASSERTIONS, "ASSERTION_CONTRACT_VERSION", None), 3)
+        self.assertEqual(document.get("assertion_contract_version"), 3)
+        self.assertEqual(manifest.get("assertion_contract_version"), 3)
         self.assertEqual(document["skill_name"], "check-contract")
         self.assertEqual(document["runs_per_configuration"], 3)
         self.assertEqual(len(document["evals"]), 3)
@@ -134,7 +186,10 @@ class EvalContractTests(unittest.TestCase):
         self.assertTrue(outcomes["target_b_pass"])
         self.assertFalse(outcomes["compound_pass"])
 
-    def test_compound_outcomes_cover_canonical_v2_vector(self):
+    def test_compound_outcomes_cover_canonical_v3_vector(self):
+        self.assertEqual(ASSERTIONS.A_SLICE, slice(0, 4))
+        self.assertEqual(ASSERTIONS.AB_SLICE, slice(4, 5))
+        self.assertEqual(ASSERTIONS.B_SLICE, slice(5, 20))
         assertions = ASSERTIONS.EXPECTED_ASSERTIONS["contract-violated-summary"]
         self.assertEqual(len(assertions), 20)
 
@@ -420,7 +475,7 @@ class EvalContractTests(unittest.TestCase):
                             sys.executable,
                             "-c",
                             (
-                                "from src.pricing import validate_percentage as v;"
+                                "from src.pricing import _validate_percentage as v;"
                                 "v(0);v(100);"
                                 "\nfor value in (-1,101):"
                                 "\n try: v(value)"
@@ -483,6 +538,309 @@ class EvalContractTests(unittest.TestCase):
                 ),
             )
             self.assertEqual(json.loads(encoded), REPLAY_PROBE)
+
+    def test_v3_fixture_facts_close_the_semantic_defects(self):
+        for scenario, output in self.outputs.items():
+            for name, value in output["targets"].items():
+                if scenario == "contract-violated-summary" and name == "target-a":
+                    continue
+                with self.subTest(scenario=scenario, target=name):
+                    repo = Path(value["destination"])
+                    contract = (repo / VERSION / "contract.md").read_text()
+                    outcome = contract.split("## Outcome\n\n", 1)[1].split(
+                        "\n\n## Required behaviors", 1
+                    )[0]
+                    self.assertEqual(
+                        outcome,
+                        "Checkout can apply a validated percentage discount.",
+                    )
+                    self.assertNotIn("structure", outcome.lower())
+                    self.assertIn(
+                        "N4: A discount class hierarchy or new module.",
+                        contract,
+                    )
+
+                    new_public_functions = public_functions(
+                        repo, "HEAD"
+                    ) - public_functions(repo, value["base"])
+                    self.assertEqual(
+                        new_public_functions,
+                        {"src.checkout.apply_discount"},
+                    )
+                    pricing = (repo / "src/pricing.py").read_text()
+                    self.assertIn("def _validate_percentage(", pricing)
+                    self.assertNotIn("def validate_percentage(", pricing)
+
+        documented = Path(
+            self.outputs["documented-drift"]["targets"]["target"]["destination"]
+        )
+        checkout = (documented / "src/checkout.py").read_text()
+        acceptance = (documented / "tests/test_checkout.py").read_text()
+        ledger = (documented / VERSION / "execution-ledger.md").read_text()
+        self.assertIn("_validate_percentage(percentage)", checkout)
+        self.assertIn("apply_discount(10.01, 50), 5.00", acceptance)
+        self.assertIn("- Affected clauses: R2, S1", ledger)
+        self.assertIn("internal `_validate_percentage`", ledger)
+
+    def test_compound_prompt_requires_one_start_session(self):
+        document = json.loads(EVALS.read_text(encoding="utf-8"))
+        compound = next(
+            item
+            for item in document["evals"]
+            if item["name"] == "contract-violated-summary"
+        )
+        combined = f"{compound['prompt']} {compound['expected_output']}"
+        self.assertIn("one logical /check-contract session", combined)
+        self.assertIn("--then-repo", combined)
+        self.assertNotIn("two distinct", combined.lower())
+        self.assertNotIn("separate execution", combined.lower())
+
+    def test_materialized_semantic_golden_vectors_reach_v3_outcomes(self):
+        expected_outcomes = getattr(
+            ASSERTIONS,
+            "EXPECTED_SEMANTIC_OUTCOMES",
+            None,
+        )
+        self.assertIsNotNone(expected_outcomes)
+        rules = load_rules(RULES)
+
+        def judgment(clause_id, status="MET", boundary_changed=False):
+            return ClauseJudgment(
+                clause_id=clause_id,
+                status=status,
+                evidence_ids=(f"fixture:{clause_id}",),
+                reason=f"Materialized fixture determines {clause_id} as {status}.",
+                contract_boundary_changed=boundary_changed,
+            )
+
+        def item(item_id, kind):
+            return AxisItem(
+                item_id=item_id,
+                kind=kind,
+                evidence_ids=(f"fixture:{item_id}",),
+                reason=f"Materialized fixture determines {kind}.",
+            )
+
+        def deviation(index, source_id):
+            return Deviation(
+                deviation_id=f"U{index}",
+                source_kind="fixture-fact",
+                source_id=source_id,
+                path_id="P1",
+                line=index,
+                description=f"Fixture deviation for {source_id}.",
+                evidence_ids=(f"fixture:U{index}",),
+                reason=f"Materialized fixture deviates from {source_id}.",
+            )
+
+        def decision_for(scenario, repo, base):
+            contract = (repo / VERSION / "contract.md").read_text()
+            checkout = (repo / "src/checkout.py").read_text()
+            acceptance = (repo / "tests/test_checkout.py").read_text()
+            pricing = (repo / "src/pricing.py").read_text()
+            outcome = contract.split("## Outcome\n\n", 1)[1].split(
+                "\n\n## Required behaviors", 1
+            )[0]
+            tree = ast.parse(checkout)
+            private_classes = [
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef) and node.name.startswith("_")
+            ]
+            new_public = public_functions(repo, "HEAD") - public_functions(
+                repo, base
+            )
+            rounding_is_demonstrated = (
+                "apply_discount(10.01, 50), 5.00" in acceptance
+            )
+
+            overrides = {
+                "O1": (
+                    "UNMET"
+                    if "structure" in outcome.lower()
+                    else "MET"
+                ),
+                "N4": "MET" if len(private_classes) <= 1 else "UNMET",
+                "A-B2": "MET" if rounding_is_demonstrated else "INDETERMINATE",
+                "K-PUBLIC-INTERFACES": (
+                    "MET" if len(new_public) <= 1 else "EXCEEDED"
+                ),
+            }
+            if scenario == "contract-violated-summary":
+                clamp_present = "min(percentage, 100)" in checkout
+                overrides.update(
+                    {
+                        "B4": "UNMET" if clamp_present else "MET",
+                        "I2": "UNMET" if clamp_present else "MET",
+                    }
+                )
+
+            clause_ids = (
+                "O1",
+                "B1",
+                "B2",
+                "B3",
+                "B4",
+                "N1",
+                "N2",
+                "N3",
+                "N4",
+                "I1",
+                "I2",
+                "C1",
+                "C2",
+                "R1",
+                "R2",
+                "R3",
+                "S1",
+                "S2",
+                "K-MODULES",
+                "K-DEPENDENCIES",
+                "K-ABSTRACTIONS",
+                "K-CONFIGURATION",
+                "K-PUBLIC-INTERFACES",
+                "A-B1",
+                "A-B2",
+                "A-B3",
+                "A-B4",
+            )
+            clauses = tuple(
+                judgment(clause_id, overrides.get(clause_id, "MET"))
+                for clause_id in clause_ids
+            )
+
+            if scenario == "contract-compliant-overengineered":
+                inline_validation = (
+                    "percentage < 0 or percentage > 100" in checkout
+                )
+                helper_bypassed = (
+                    "def _validate_percentage(" in pricing
+                    and "_validate_percentage(percentage)" not in checkout
+                )
+                yagni_items = tuple(
+                    candidate
+                    for candidate in (
+                        item("Y1", "UNEARNED_LOCAL") if private_classes else None,
+                        item("Y2", "UNEARNED_LOCAL") if inline_validation else None,
+                    )
+                    if candidate is not None
+                )
+                reuse_items = (
+                    (item("R2", "DUPLICATED"),)
+                    if helper_bypassed and inline_validation
+                    else (item("R2", "REUSED"),)
+                )
+                deviations = tuple(
+                    deviation(index, source_id)
+                    for index, source_id in enumerate(
+                        ("R2", "S1", "K-ABSTRACTIONS"), 1
+                    )
+                )
+                ledger_entries = ()
+                matches = ()
+            elif scenario == "documented-drift":
+                helper_reused = "_validate_percentage(percentage)" in checkout
+                yagni_items = (
+                    (item("Y1", "UNEARNED_PUBLIC_INTERFACE"),)
+                    if len(new_public) > 1
+                    else ()
+                )
+                reuse_items = (
+                    (item("R2", "REUSED"),)
+                    if helper_reused
+                    else (item("R2", "BYPASSED"),)
+                )
+                source_ids = ["R2", "S1"]
+                if len(new_public) > 1:
+                    source_ids.append("K-PUBLIC-INTERFACES")
+                deviations = tuple(
+                    deviation(index, source_id)
+                    for index, source_id in enumerate(source_ids, 1)
+                )
+                ledger = (repo / VERSION / "execution-ledger.md").read_text()
+                affected_line = re.search(
+                    r"^- Affected clauses: (.+)$",
+                    ledger,
+                    flags=re.MULTILINE,
+                )
+                affected = set()
+                if affected_line:
+                    affected = {
+                        value.strip()
+                        for value in affected_line.group(1).split(",")
+                    }
+                ledger_entries = (LedgerEntry("D1", "VERIFIED"),)
+                matches = tuple(
+                    DeviationMatch(entry.deviation_id, "D1")
+                    for entry in deviations
+                    if entry.source_id in affected
+                )
+            else:
+                yagni_items = ()
+                reuse_items = (item("R2", "REUSED"),)
+                deviations = (deviation(1, "S1"),)
+                ledger_entries = ()
+                matches = ()
+
+            code = CodeJudgment(
+                clauses=clauses,
+                path_assessments=(
+                    PathAssessment(
+                        path_id="P1",
+                        surface=SurfaceJudgment(
+                            status="EXCEEDED" if deviations else "MET",
+                            evidence_ids=("fixture:P1",),
+                            reason="Materialized fixture path assessment.",
+                        ),
+                        yagni_items=yagni_items,
+                        reuse_items=reuse_items,
+                    ),
+                ),
+                deviations=deviations,
+            )
+            reconciliation = ReconciliationJudgment(
+                ledger_entries=ledger_entries,
+                deviation_matches=matches,
+                contract_obsolete=False,
+                acceptance_qa_exists=False,
+            )
+            return aggregate(code, reconciliation, rules)
+
+        for scenario in (
+            "contract-compliant-overengineered",
+            "documented-drift",
+        ):
+            value = self.outputs[scenario]["targets"]["target"]
+            decision = decision_for(
+                scenario,
+                Path(value["destination"]),
+                value["base"],
+            )
+            self.assertEqual(
+                semantic_outcome(decision),
+                expected_outcomes[scenario],
+            )
+
+        compound = self.outputs["contract-violated-summary"]["targets"]
+        target_a = Path(compound["target-a"]["destination"])
+        target_a_contract = target_a / VERSION / "contract.md"
+        target_a_approval = json.loads(
+            (target_a / VERSION / "approval.json").read_text()
+        )
+        self.assertNotEqual(
+            hashlib.sha256(target_a_contract.read_bytes()).hexdigest(),
+            target_a_approval["contract_sha256"],
+        )
+        target_b_value = compound["target-b"]
+        target_b = decision_for(
+            "contract-violated-summary",
+            Path(target_b_value["destination"]),
+            target_b_value["base"],
+        )
+        self.assertEqual(
+            semantic_outcome(target_b),
+            expected_outcomes["contract-violated-summary"],
+        )
 
     def test_fixture_behavior_is_green_and_encodes_scenarios(self):
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}

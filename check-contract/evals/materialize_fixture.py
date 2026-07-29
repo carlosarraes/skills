@@ -34,6 +34,12 @@ IMPLEMENTATION_ENV = {
     "GIT_AUTHOR_DATE": "2026-07-23T13:05:00+00:00",
     "GIT_COMMITTER_DATE": "2026-07-23T13:05:00+00:00",
 }
+ASSERTION_CONTRACT_VERSION = 3
+V3_OUTCOME = "Checkout can apply a validated percentage discount."
+V2_OUTCOME = (
+    "Checkout can apply a validated percentage discount without adding new "
+    "structure."
+)
 
 
 def run(repo: Path, *args: str, env=None) -> str:
@@ -69,6 +75,31 @@ def copy_overlay(source: Path, destination: Path) -> None:
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(path.read_bytes())
+
+
+def apply_future_v3_contract(cached: dict[Path, bytes]) -> None:
+    contract_path = VERSION / "contract.md"
+    contract = cached[contract_path].decode("utf-8")
+    if contract.count(V2_OUTCOME) != 1:
+        raise RuntimeError("canonical fixture does not contain the v2 Outcome")
+    cached[contract_path] = contract.replace(V2_OUTCOME, V3_OUTCOME).encode()
+
+    pricing_path = Path("src/pricing.py")
+    pricing = cached[pricing_path].decode("utf-8")
+    public_definition = "def validate_percentage(percentage):"
+    if pricing.count(public_definition) != 1:
+        raise RuntimeError("canonical fixture percentage validator is unexpected")
+    cached[pricing_path] = pricing.replace(
+        public_definition,
+        "def _validate_percentage(percentage):",
+    ).encode()
+
+    approval_path = VERSION / "approval.json"
+    approval = json.loads(cached[approval_path])
+    approval["contract_sha256"] = hashlib.sha256(cached[contract_path]).hexdigest()
+    cached[approval_path] = (
+        json.dumps(approval, indent=2, sort_keys=True) + "\n"
+    ).encode()
 
 
 def inventory(repo: Path, base: str) -> list[dict[str, str]]:
@@ -121,6 +152,7 @@ def materialize_target(
         for path in AUTHORITY_PATHS
     }
     cached[Path("src/pricing.py")] = (destination / "src/pricing.py").read_bytes()
+    apply_future_v3_contract(cached)
 
     run(destination, "git", "reset", "--hard", canonical["base"])
     run(destination, "git", "clean", "-fdx")
@@ -213,6 +245,8 @@ def materialize_target(
 
 def materialize(scenario: str, destination: Path) -> dict:
     document = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    if document.get("assertion_contract_version") != ASSERTION_CONTRACT_VERSION:
+        raise RuntimeError("fixture manifest must declare assertion contract v3")
     if destination.exists():
         raise RuntimeError(f"destination already exists: {destination}")
     destination.mkdir(parents=True)

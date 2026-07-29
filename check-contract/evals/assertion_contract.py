@@ -1,3 +1,36 @@
+ASSERTION_CONTRACT_VERSION = 3
+
+EXPECTED_SEMANTIC_OUTCOMES = {
+    "contract-compliant-overengineered": {
+        "fidelity": "PASS",
+        "yagni": "FAIL",
+        "reuse": "FAIL",
+        "documented_drift": "NONE",
+        "undocumented_drift": "PRESENT",
+        "verdict": "NEEDS HUMAN REVIEW",
+        "route": ("clean-up",),
+    },
+    "contract-violated-summary": {
+        "fidelity": "FAIL",
+        "yagni": "PASS",
+        "reuse": "PASS",
+        "documented_drift": "NONE",
+        "undocumented_drift": "PRESENT",
+        "verdict": "CONTRACT VIOLATED",
+        "route": ("exec-ticket",),
+    },
+    "documented-drift": {
+        "fidelity": "PASS",
+        "yagni": "PASS",
+        "reuse": "PASS",
+        "documented_drift": "ACCEPTED",
+        "undocumented_drift": "NONE",
+        "verdict": "PASS WITH DOCUMENTED DRIFT",
+        "route": ("qa-ticket",),
+    },
+}
+
+
 COMMON_VALID_AUDIT_ASSERTIONS = [
     "Resolves exactly one contract root through the shared two-root rules",
     "Verifies approved identity and SHA before trusting the contract",
