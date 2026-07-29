@@ -1,0 +1,2206 @@
+{
+ "cv": {
+  "audience": "Product engineers, data teams, and startup founders",
+  "cv_signal": 4,
+  "reason": "Leading open-source product analytics platform with strong adoption and brand in the developer community.",
+  "recognized": true
+ },
+ "issues": [
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-01",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 67316,
+   "open_prs": [
+    {
+     "number": 69240,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/69240"
+    }
+   ],
+   "reason": "Add Inbox and Self-Driving links to the main Tools navigation list.",
+   "scope": "one-file",
+   "title": "Add Inbox/Self-Driving to list of Tools",
+   "url": "https://github.com/PostHog/posthog/issues/67316",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-02",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug",
+    "team/surveys"
+   ],
+   "number": 68007,
+   "open_prs": [
+    {
+     "number": 68037,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/68037"
+    }
+   ],
+   "reason": "Display current person name instead of distinct ID in survey responses view.",
+   "scope": "one-file",
+   "title": "Bug Report: Survey responses show the Distinct ID instead of name",
+   "url": "https://github.com/PostHog/posthog/issues/68007",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-06",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 68637,
+   "open_prs": [],
+   "reason": "Remove OFFSET pagination restriction for personal API keys.",
+   "scope": "one-file",
+   "title": "Paging with limit and offset in Endpoints using a personal api-key is not allowed",
+   "url": "https://github.com/PostHog/posthog/issues/68637",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-06",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [],
+   "number": 68653,
+   "open_prs": [],
+   "reason": "Add HTTP Basic Auth type to MCP Store custom server connector flow.",
+   "scope": "few-files",
+   "title": "Support HTTP Basic Auth (username/password) for custom MCP server connectors",
+   "url": "https://github.com/PostHog/posthog/issues/68653",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-10",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 70064,
+   "open_prs": [
+    {
+     "number": 72484,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/72484"
+    }
+   ],
+   "reason": "Fix OpenAPI codegen to avoid zod.unknown for untyped params so MCP tools accept object arguments.",
+   "scope": "few-files",
+   "title": "MCP: generated tools emit `zod.unknown()` for object/array params \u2192 untyped input schema \u2192 object args get stringified and rejected by the API",
+   "url": "https://github.com/PostHog/posthog/issues/70064",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-11",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 70235,
+   "open_prs": [
+    {
+     "number": 72926,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/72926"
+    }
+   ],
+   "reason": "Adjust empty-sourcemap detection threshold in CLI to skip Turbopack server stubs and reduce noise.",
+   "scope": "one-file",
+   "title": "CLI: empty-sourcemap wrapper threshold (2 KiB) misses Next.js 16 Turbopack server page stubs \u2014 ~150 spurious WARNs per build",
+   "url": "https://github.com/PostHog/posthog/issues/70235",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-14",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug",
+    "team/experiments",
+    "feature/experiments"
+   ],
+   "number": 70852,
+   "open_prs": [
+    {
+     "number": 71032,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/71032"
+    }
+   ],
+   "reason": "Add version/updated_at check to experiment PATCH to reject stale metric submissions and prevent data loss.",
+   "scope": "few-files",
+   "title": "Bug report: experiments - stale full-array save silently drops metrics",
+   "url": "https://github.com/PostHog/posthog/issues/70852",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-15",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "team/experiments"
+   ],
+   "number": 70958,
+   "open_prs": [],
+   "reason": "Add LLMPrompt mapping in model_to_resource() to enable enforcement of object-level access controls.",
+   "scope": "one-file",
+   "title": "Object-level access controls for llm_prompt can be created but are never enforced",
+   "url": "https://github.com/PostHog/posthog/issues/70958",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-15",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 71311,
+   "open_prs": [
+    {
+     "number": 71355,
+     "state": "MERGED",
+     "url": "https://github.com/PostHog/posthog/pull/71355"
+    }
+   ],
+   "reason": "Fix MCP data_schema feature not exposing schema tools in tools mode.",
+   "scope": "few-files",
+   "title": "[Bug] MCP: data_schema feature flag doesn't work in mode=tools",
+   "url": "https://github.com/PostHog/posthog/issues/71311",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-17",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 71826,
+   "open_prs": [],
+   "reason": "Fix Stripe Discount sync field mapping from 'created' to 'start'.",
+   "scope": "one-file",
+   "title": "Stripe Discount warehouse sync fails with KeyError: 'created'",
+   "url": "https://github.com/PostHog/posthog/issues/71826",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-18",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 72105,
+   "open_prs": [
+    {
+     "number": 72109,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/72109"
+    }
+   ],
+   "reason": "Fix weekly digest email displaying zero metrics despite project having traffic.",
+   "scope": "few-files",
+   "title": "Web analytics weekly digest email sent with all-zero metrics despite project having traffic",
+   "url": "https://github.com/PostHog/posthog/issues/72105",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-18",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 72151,
+   "open_prs": [
+    {
+     "number": 72612,
+     "state": "MERGED",
+     "url": "https://github.com/PostHog/posthog/pull/72612"
+    }
+   ],
+   "reason": "Add Plivo data warehouse source to import messages and calls.",
+   "scope": "few-files",
+   "title": "Add Plivo as a data warehouse source",
+   "url": "https://github.com/PostHog/posthog/issues/72151",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-18",
+   "difficulty": "medium",
+   "kind": "refactor",
+   "labels": [],
+   "number": 72152,
+   "open_prs": [],
+   "reason": "Refactor SMS channel to support multiple providers and add provider selection.",
+   "scope": "cross-cutting",
+   "title": "Model SMS as a channel with a selectable provider in Workflows",
+   "url": "https://github.com/PostHog/posthog/issues/72152",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-19",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 72187,
+   "open_prs": [],
+   "reason": "Fix 500 error when filtering spans by span_attribute value comparison.",
+   "scope": "few-files",
+   "title": "Traces (alpha): span_attribute value filters (exact/icontains) return 500 on the spans query endpoint",
+   "url": "https://github.com/PostHog/posthog/issues/72187",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-19",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 72192,
+   "open_prs": [
+    {
+     "number": 72977,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/72977"
+    }
+   ],
+   "reason": "Make Intercom contacts destination idempotent to prevent 409 conflicts on concurrent creates.",
+   "scope": "one-file",
+   "title": "Intercom \"Update contacts\" destination: 409 conflict race when concurrent invocations create the same new contact",
+   "url": "https://github.com/PostHog/posthog/issues/72192",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-20",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 72361,
+   "open_prs": [
+    {
+     "number": 72367,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/72367"
+    }
+   ],
+   "reason": "Update posthog-node:latest Docker tag to current build.",
+   "scope": "one-file",
+   "title": "posthog-node:latest still points to a March build",
+   "url": "https://github.com/PostHog/posthog/issues/72361",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-21",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 72503,
+   "open_prs": [],
+   "reason": "Align Bayesian significance decision with credible interval crossing 0.",
+   "scope": "one-file",
+   "title": "Bug Report: Bayesian experiments flag results significant while the credible interval still contains 0",
+   "url": "https://github.com/PostHog/posthog/issues/72503",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-21",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 72556,
+   "open_prs": [],
+   "reason": "Limit Anthropic usage_report group_by dimensions to 5 to fix 400 error.",
+   "scope": "one-file",
+   "title": "Anthropic data warehouse source: usage_report schema fails \u2014   connector sends 8 group_by[] dimensions but API caps at 5",
+   "url": "https://github.com/PostHog/posthog/issues/72556",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-22",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 73043,
+   "open_prs": [
+    {
+     "number": 73063,
+     "state": "OPEN",
+     "url": "https://github.com/PostHog/posthog/pull/73063"
+    }
+   ],
+   "reason": "Strip sourcemap comments from CSS files in deleteAfterUpload, extending JS-only fix.",
+   "scope": "one-file",
+   "title": "source map with `deleteAfterUpload` doesn't strip sourcemap comments from css files",
+   "url": "https://github.com/PostHog/posthog/issues/73043",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-23",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/apm",
+    "team/logs",
+    "feature/logs"
+   ],
+   "number": 73215,
+   "open_prs": [],
+   "reason": "Implement Shopify Oxygen log drain ingestion for PostHog Logs.",
+   "scope": "few-files",
+   "title": "(apm/logs) support Shopify Hydrogen (Oxygen) log drains as a source for PostHog Logs",
+   "url": "https://github.com/PostHog/posthog/issues/73215",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-23",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 73301,
+   "open_prs": [],
+   "reason": "Detect and warn about orphaned custom property references in accounts saved configurations.",
+   "scope": "few-files",
+   "title": "Signal orphaned custom property references in the accounts UI",
+   "url": "https://github.com/PostHog/posthog/issues/73301",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-23",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/product-analytics",
+    "feature/data-visualization"
+   ],
+   "number": 73396,
+   "open_prs": [],
+   "reason": "Add independent data label color/style settings for SQL insight bar charts.",
+   "scope": "few-files",
+   "title": "sql insights: independent styling for \"show values on series\" data labels",
+   "url": "https://github.com/PostHog/posthog/issues/73396",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [],
+   "number": 73447,
+   "open_prs": [],
+   "reason": "Add Zammad import connector for Support conversations mapping onto existing importer.",
+   "scope": "cross-cutting",
+   "title": "Support imports: add Zammad as a source",
+   "url": "https://github.com/PostHog/posthog/issues/73447",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73453,
+   "open_prs": [],
+   "reason": "Move Dashboard Copy button from sidebar to dashboard header for discoverability.",
+   "scope": "one-file",
+   "title": "Make Dashboard Copy button much more obvious.",
+   "url": "https://github.com/PostHog/posthog/issues/73453",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "hard",
+   "kind": "test",
+   "labels": [],
+   "number": 73519,
+   "open_prs": [],
+   "reason": "Fix/triage 35 top failing backend tests from the active test health queue.",
+   "scope": "cross-cutting",
+   "title": "Test health: burn down the top failing backend tests",
+   "url": "https://github.com/PostHog/posthog/issues/73519",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 73671,
+   "open_prs": [],
+   "reason": "Propagate node selection state to SmartEdge component to highlight connected edges.",
+   "scope": "few-files",
+   "title": "Selecting a step in the workflow editor doesn't highlight its connected edges",
+   "url": "https://github.com/PostHog/posthog/issues/73671",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 73675,
+   "open_prs": [],
+   "reason": "Correct branch step insert wiring and enable edge reconnection in hogFlowEditorLogic.",
+   "scope": "few-files",
+   "title": "Inserting a branching step wires all of its outputs to the same next step, and edges can't be re-routed",
+   "url": "https://github.com/PostHog/posthog/issues/73675",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 73676,
+   "open_prs": [],
+   "reason": "Remove misleading drag cues or enable nodesDraggable in HogFlowEditor.tsx ReactFlow.",
+   "scope": "one-file",
+   "title": "Workflow editor signals that steps are draggable when they aren't",
+   "url": "https://github.com/PostHog/posthog/issues/73676",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 73688,
+   "open_prs": [],
+   "reason": "Apply task visibility rules from visibility.py to system.tasks HogQL table schema.",
+   "scope": "few-files",
+   "title": "`system.tasks` does not enforce task visibility rules",
+   "url": "https://github.com/PostHog/posthog/issues/73688",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 73689,
+   "open_prs": [],
+   "reason": "Add safety judge call to scout_harness/tools/report.py edit_report path before persisting.",
+   "scope": "few-files",
+   "title": "Scout `edit_report` mutates any team report with no safety judge, and re-runs autostart",
+   "url": "https://github.com/PostHog/posthog/issues/73689",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [],
+   "number": 73691,
+   "open_prs": [],
+   "reason": "Fix shell injection in scout_harness/prompt.py where repo slugs escape gh api shell literal.",
+   "scope": "few-files",
+   "title": "Scout `gh api` reviewer-evidence template interpolates unvalidated repository slugs into a shell literal",
+   "url": "https://github.com/PostHog/posthog/issues/73691",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 73706,
+   "open_prs": [],
+   "reason": "Backfill report embeddings for existing non-deleted reports with renderable text to ensure training labels cover same po",
+   "scope": "few-files",
+   "title": "feat(signals): backfill report embeddings for existing reports",
+   "url": "https://github.com/PostHog/posthog/issues/73706",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "easy",
+   "kind": "chore",
+   "labels": [],
+   "number": 73707,
+   "open_prs": [],
+   "reason": "Add rate limiting to signals_reports_partial_update endpoint to prevent abuse.",
+   "scope": "one-file",
+   "title": "chore(signals): throttle report content edits",
+   "url": "https://github.com/PostHog/posthog/issues/73707",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "feature/mcp-analytics"
+   ],
+   "number": 73814,
+   "open_prs": [],
+   "reason": "Add server identifier to MCP analytics events and enable filtering/aggregation per server.",
+   "scope": "few-files",
+   "title": "MCP analytics: handle multiple MCP servers in one project",
+   "url": "https://github.com/PostHog/posthog/issues/73814",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 74027,
+   "open_prs": [],
+   "reason": "Surface last customer Slack message timestamp as a canonical custom property and populate it via conversations.",
+   "scope": "few-files",
+   "title": "Track when a customer last messaged in the bound Slack channel",
+   "url": "https://github.com/PostHog/posthog/issues/74027",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 74123,
+   "open_prs": [],
+   "reason": "Add post_delete receiver on SignalReport to tombstone embeddings when hard-deleting reports via team-wide reingestion.",
+   "scope": "few-files",
+   "title": "fix(signals): team-wide report deletion leaves report embeddings live",
+   "url": "https://github.com/PostHog/posthog/issues/74123",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 74194,
+   "open_prs": [],
+   "reason": "Warn at publish/send when a marketing email lacks an unsubscribe link.",
+   "scope": "one-file",
+   "title": "Feature request: warn when a marketing email has no unsubscribe link",
+   "url": "https://github.com/PostHog/posthog/issues/74194",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 74241,
+   "open_prs": [],
+   "reason": "Add workflow node that creates an Account from triggering event group key.",
+   "scope": "few-files",
+   "title": "Workflow action to create Accounts",
+   "url": "https://github.com/PostHog/posthog/issues/74241",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/feature-flags"
+   ],
+   "number": 74257,
+   "open_prs": [],
+   "reason": "Create journey-scoped alert for feature flag variant drift across auth boundary.",
+   "scope": "cross-cutting",
+   "title": "Feature flag stability monitoring across the auth boundary (journey-scoped variant-drift alert)",
+   "url": "https://github.com/PostHog/posthog/issues/74257",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 74291,
+   "open_prs": [],
+   "reason": "Add high-only / low-only direction option to anomaly detection alerts.",
+   "scope": "few-files",
+   "title": "Feature request: one-directional anomaly detection alerts (high-only / low-only)",
+   "url": "https://github.com/PostHog/posthog/issues/74291",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 74339,
+   "open_prs": [],
+   "reason": "Allow project secret API key creation for projects that never had a legacy token.",
+   "scope": "few-files",
+   "title": "Conversations identity verification is impossible on projects that never had a legacy secret_api_token",
+   "url": "https://github.com/PostHog/posthog/issues/74339",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 74366,
+   "open_prs": [],
+   "reason": "Match cost provider by inference-profile prefix before fallback to generic Bedrock.",
+   "scope": "one-file",
+   "title": "US Bedrock inference-profile events use Global token rates",
+   "url": "https://github.com/PostHog/posthog/issues/74366",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 74379,
+   "open_prs": [],
+   "reason": "Trigger Slack notifications for scout-authored reports that skip the research pipeline.",
+   "scope": "few-files",
+   "title": "Scout-authored inbox reports never trigger Slack notifications",
+   "url": "https://github.com/PostHog/posthog/issues/74379",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 74510,
+   "open_prs": [],
+   "reason": "Add User-Agent to Vary header on remote config endpoint to fix mobile cache.",
+   "scope": "one-file",
+   "title": "[Bug] Remote config m\u00f3vil puede devolver sessionRecording=false por una cach\u00e9 que no var\u00eda por User-Agent",
+   "url": "https://github.com/PostHog/posthog/issues/74510",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 74784,
+   "open_prs": [],
+   "reason": "Set REST request_timeout on Paddle API calls to prevent indefinite hang.",
+   "scope": "one-file",
+   "title": "Paddle warehouse source can hang indefinitely because REST request_timeout is unset",
+   "url": "https://github.com/PostHog/posthog/issues/74784",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "medium",
+   "kind": "refactor",
+   "labels": [
+    "feature/data-warehouse"
+   ],
+   "number": 74828,
+   "open_prs": [],
+   "reason": "Filter check metadata by per-warehouse-object access in three lock-step loaders.",
+   "scope": "few-files",
+   "title": "data-quality: tighten access control on check metadata (follow-ups from #74693)",
+   "url": "https://github.com/PostHog/posthog/issues/74828",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-07-03",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug",
+    "feature/signals"
+   ],
+   "number": 68252,
+   "open_prs": [],
+   "reason": "Add PR quota check before PR creation in signals auto-start pipeline.",
+   "scope": "few-files",
+   "title": "bug(Inbox) PR limit isn't enforced where PRs are created \u2014 signals auto-start has no quota check",
+   "url": "https://github.com/PostHog/posthog/issues/68252",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-07-13",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 70474,
+   "open_prs": [],
+   "reason": "Fix setup wizard to handle already-authenticated GitHub connection gracefully without requiring re-auth.",
+   "scope": "one-file",
+   "title": "setup wizard github connection doesn't work if already authenticated",
+   "url": "https://github.com/PostHog/posthog/issues/70474",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-07-15",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 71065,
+   "open_prs": [],
+   "reason": "Remove duplicate $ai_reasoning_tokens addition in cost pipeline to prevent double-counting Gemini tokens.",
+   "scope": "one-file",
+   "title": "LLM analytics: cost double-counts Gemini reasoning tokens (output tokens already inclusive)",
+   "url": "https://github.com/PostHog/posthog/issues/71065",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-07-25",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 73705,
+   "open_prs": [],
+   "reason": "Add Kafka key to document_embeddings produce calls to ensure order per document_id.",
+   "scope": "few-files",
+   "title": "fix(signals): document_embeddings re-emissions can land out of order",
+   "url": "https://github.com/PostHog/posthog/issues/73705",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-07-25",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 73710,
+   "open_prs": [],
+   "reason": "Allow embedding retraction (tombstone) messages to bypass AI opt-in gate in the worker.",
+   "scope": "one-file",
+   "title": "fix(signals): embedding retraction stops working after an org revokes AI opt-in",
+   "url": "https://github.com/PostHog/posthog/issues/73710",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 2,
+   "created": "2026-07-20",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 72401,
+   "open_prs": [],
+   "reason": "Prevent scroll wheel from changing port number input on Postgres source page.",
+   "scope": "one-file",
+   "title": "Scrolling changes port number",
+   "url": "https://github.com/PostHog/posthog/issues/72401",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 3,
+   "created": "2026-07-17",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/web-analytics"
+   ],
+   "number": 71889,
+   "open_prs": [],
+   "reason": "Implement AI visibility report with AI channel, bot analytics, and citations.",
+   "scope": "cross-cutting",
+   "title": "Web analytics: AI visibility \u2014 AI channel, bot analytics, and citations (Clarity AI visibility equivalent)",
+   "url": "https://github.com/PostHog/posthog/issues/71889",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-06-30",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/experiments"
+   ],
+   "number": 67206,
+   "open_prs": [],
+   "reason": "Add manual and auto-tagging system for experiments.",
+   "scope": "few-files",
+   "title": "Experiment tags (manual + auto-tagging)  \u27f5 foundational",
+   "url": "https://github.com/PostHog/posthog/issues/67206",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-03",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 68322,
+   "open_prs": [],
+   "reason": "Develop a spatial 2D heatmap chart type for HogQL/SQL insights.",
+   "scope": "cross-cutting",
+   "title": "2D spatial heatmap chart type for SQL/HogQL insights",
+   "url": "https://github.com/PostHog/posthog/issues/68322",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-06",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/mcp-analytics",
+    "team/mcp-analytics"
+   ],
+   "number": 68551,
+   "open_prs": [],
+   "reason": "Add user-by-tool-call table widget to MCP Analytics default dashboard.",
+   "scope": "few-files",
+   "title": "Feature request(MCP Analytics): Add user-by-tool-call view to default dashboard",
+   "url": "https://github.com/PostHog/posthog/issues/68551",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-07",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 68914,
+   "open_prs": [],
+   "reason": "Make AI feature enable/disable configurable per project in addition to org.",
+   "scope": "few-files",
+   "title": "Ability to enable/disable AI features at project level, not just organisation",
+   "url": "https://github.com/PostHog/posthog/issues/68914",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-09",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/mcp-analytics"
+   ],
+   "number": 69586,
+   "open_prs": [],
+   "reason": "Build Tool Paths insight showing common MCP tool call sequences.",
+   "scope": "cross-cutting",
+   "title": "Feature request(MCP Analytics): Tool Call Paths",
+   "url": "https://github.com/PostHog/posthog/issues/69586",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-09",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/experiments"
+   ],
+   "number": 69853,
+   "open_prs": [],
+   "reason": "Add OR logic to custom exposure event filter conditions in experiments UI and backend.",
+   "scope": "few-files",
+   "title": "Feature Request: Add `or` condition when creating custom exposure events",
+   "url": "https://github.com/PostHog/posthog/issues/69853",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-10",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 70065,
+   "open_prs": [],
+   "reason": "Rename MCP logs-services-create to clarify it is a read-only query, not a resource creation.",
+   "scope": "one-file",
+   "title": "MCP: `logs-services-create` (and `logs-sparkline-create`) are read-only queries misnamed `-create`",
+   "url": "https://github.com/PostHog/posthog/issues/70065",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-10",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/conversations",
+    "feature/conversations"
+   ],
+   "number": 70074,
+   "open_prs": [],
+   "reason": "Add working hours schedule and away message computation to the Conversations support widget.",
+   "scope": "few-files",
+   "title": "Conversations: set team working hours and show an away message in the support widget",
+   "url": "https://github.com/PostHog/posthog/issues/70074",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-11",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 70194,
+   "open_prs": [],
+   "reason": "Add warning emission for sink-stage drops (event_too_big) in Rust capture after merge_sink_results.",
+   "scope": "one-file",
+   "title": "capture: emit ingestion warnings for sink-stage drops (event_too_big) + docs anchors for capture warning types",
+   "url": "https://github.com/PostHog/posthog/issues/70194",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-11",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 70204,
+   "open_prs": [],
+   "reason": "Pin Quick Start button to the top bar across all views so users don't lose progress mid-setup.",
+   "scope": "one-file",
+   "title": "Quick start button disappears from the top bar mid-flow - you have to go back to where it respawns to continue",
+   "url": "https://github.com/PostHog/posthog/issues/70204",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-13",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 70430,
+   "open_prs": [],
+   "reason": "Add server-side endpoint to truncate TaskRun conversation log at a checkpoint boundary for restore.",
+   "scope": "few-files",
+   "title": "# [Posthog-Code/Tasks] Server-side log truncation for checkpoint restore",
+   "url": "https://github.com/PostHog/posthog/issues/70430",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-14",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 70850,
+   "open_prs": [],
+   "reason": "Add filter option to hide hidden events on the Event Definitions page.",
+   "scope": "one-file",
+   "title": "Filter out \"Hidden\" events on Event Definitions page",
+   "url": "https://github.com/PostHog/posthog/issues/70850",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-15",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 71356,
+   "open_prs": [],
+   "reason": "Add terminal/CLI session replay support extending rrweb system.",
+   "scope": "cross-cutting",
+   "title": "Add support for session replays of terminals (CLI commands + TUIs/PTYs)",
+   "url": "https://github.com/PostHog/posthog/issues/71356",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-22",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 72886,
+   "open_prs": [],
+   "reason": "Create Skill to resolve account owners to Slack user IDs and @-mention them.",
+   "scope": "few-files",
+   "title": "Skill: tag account owners in Slack from an org_id / team name",
+   "url": "https://github.com/PostHog/posthog/issues/72886",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-23",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/conversations",
+    "feature/conversations"
+   ],
+   "number": 73238,
+   "open_prs": [],
+   "reason": "Add file attachment support to email ticket replies, involving UI, payload, and email delivery.",
+   "scope": "cross-cutting",
+   "title": "conversations: attach files to support ticket email replies",
+   "url": "https://github.com/PostHog/posthog/issues/73238",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/conversations",
+    "feature/conversations"
+   ],
+   "number": 73410,
+   "open_prs": [],
+   "reason": "Add Twilio SMS/WhatsApp channels to Conversations inbox with two-way sync.",
+   "scope": "cross-cutting",
+   "title": "conversations: SMS and WhatsApp support channels",
+   "url": "https://github.com/PostHog/posthog/issues/73410",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73456,
+   "open_prs": [],
+   "reason": "Show user email in changelogs for feature flags, surveys, cohorts when name blank.",
+   "scope": "few-files",
+   "title": "Anonymous changelogs (e.g. Feature Flags)",
+   "url": "https://github.com/PostHog/posthog/issues/73456",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/ingestion"
+   ],
+   "number": 73503,
+   "open_prs": [],
+   "reason": "Add ingestion warning when session IDs don't match required format specs.",
+   "scope": "few-files",
+   "title": "Create Ingestion Warning when invalid session id is provided",
+   "url": "https://github.com/PostHog/posthog/issues/73503",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/toolbar",
+    "team/growth"
+   ],
+   "number": 73605,
+   "open_prs": [],
+   "reason": "Add project switcher to toolbar 403 page to change project and re-authorize.",
+   "scope": "few-files",
+   "title": "Feature Request: Allow project switching when authenticating Toolbar",
+   "url": "https://github.com/PostHog/posthog/issues/73605",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-25",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73702,
+   "open_prs": [],
+   "reason": "Add UI toggle/filter for archived prompts and an unarchive action with API support.",
+   "scope": "few-files",
+   "title": "Feature: View and unarchive archived LLM prompts",
+   "url": "https://github.com/PostHog/posthog/issues/73702",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73805,
+   "open_prs": [],
+   "reason": "Add 'elements' or '$elements_chain' column to Databricks batch export to match Snowflake export behavior.",
+   "scope": "few-files",
+   "title": "Databricks batch export for events omits `elements` / `$elements_chain` (present in Snowflake export) \u2014 breaks autocapture parity",
+   "url": "https://github.com/PostHog/posthog/issues/73805",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/surveys",
+    "feature/libraries",
+    "team/surveys"
+   ],
+   "number": 74064,
+   "open_prs": [],
+   "reason": "Add optional intro/start screen to hosted surveys with configurable headline, description, and button text.",
+   "scope": "few-files",
+   "title": "Feature request: Survey intro/start screen (shown before the first question)",
+   "url": "https://github.com/PostHog/posthog/issues/74064",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/surveys",
+    "team/surveys"
+   ],
+   "number": 74084,
+   "open_prs": [],
+   "reason": "Implement conditional question routing for hosted surveys, matching existing in-app survey logic.",
+   "scope": "cross-cutting",
+   "title": "Feature Request: Add question routing for hosted surveys",
+   "url": "https://github.com/PostHog/posthog/issues/74084",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 74198,
+   "open_prs": [],
+   "reason": "Add shared template components, bulk editing, and missing-unsubscribe warnings to email.",
+   "scope": "cross-cutting",
+   "title": "Feature request: email creation and management needs shared components, bulk edits and a safer editor",
+   "url": "https://github.com/PostHog/posthog/issues/74198",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [],
+   "number": 74304,
+   "open_prs": [],
+   "reason": "Resolve person property breakdowns at person level rather than event-step value.",
+   "scope": "cross-cutting",
+   "title": "Feature request: Person property breakdowns in funnels should resolve at the person level, not the event level",
+   "url": "https://github.com/PostHog/posthog/issues/74304",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/posthog-ai"
+   ],
+   "number": 74585,
+   "open_prs": [],
+   "reason": "Allow AI features under HIPAA BAA with per-project opt-in and subprocessor changes.",
+   "scope": "cross-cutting",
+   "title": "feat(posthog-ai): HIPAA BAA coverage for PostHog AI and other AI features",
+   "url": "https://github.com/PostHog/posthog/issues/74585",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-06",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/cohorts",
+    "team/feature-flags"
+   ],
+   "number": 68782,
+   "open_prs": [],
+   "reason": "Remove positive criterion requirement when creating purely negative cohorts.",
+   "scope": "few-files",
+   "title": "Feature Request: Allow creating cohorts based entirely on negative criteria",
+   "url": "https://github.com/PostHog/posthog/issues/68782",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-13",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 70379,
+   "open_prs": [],
+   "reason": "Fix schema freshness cache to promptly remove deleted DW views and accelerate new view availability.",
+   "scope": "few-files",
+   "title": "Deleted data warehouse views still appear as options in dashboards & schema; new views slow to appear",
+   "url": "https://github.com/PostHog/posthog/issues/70379",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-13",
+   "difficulty": "medium",
+   "kind": "refactor",
+   "labels": [
+    "bug"
+   ],
+   "number": 70589,
+   "open_prs": [],
+   "reason": "Switch default production app server from archived NGINX Unit to Granian in Docker config.",
+   "scope": "few-files",
+   "title": "NGINX Unit is archived/unmaintained",
+   "url": "https://github.com/PostHog/posthog/issues/70589",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-18",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 72155,
+   "open_prs": [],
+   "reason": "Add support for drilling into nested JSON properties in property filters.",
+   "scope": "cross-cutting",
+   "title": "Allow accessing nested JSON properties in UI filters",
+   "url": "https://github.com/PostHog/posthog/issues/72155",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-20",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 72285,
+   "open_prs": [],
+   "reason": "Add link from clickmap element to session recordings filtered by that element.",
+   "scope": "few-files",
+   "title": "Go from heatmap/clickmap to relevant session recordings",
+   "url": "https://github.com/PostHog/posthog/issues/72285",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-23",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/conversations",
+    "feature/conversations"
+   ],
+   "number": 73237,
+   "open_prs": [],
+   "reason": "Add Cc/Bcc recipient fields to ticket reply compose and outbound email.",
+   "scope": "few-files",
+   "title": "conversations: add Cc and Bcc recipients to support ticket replies",
+   "url": "https://github.com/PostHog/posthog/issues/73237",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-23",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73265,
+   "open_prs": [],
+   "reason": "Create reusable webhook action templates and endpoints for Workflows.",
+   "scope": "cross-cutting",
+   "title": "Reusable Webhook Actions for Workflows",
+   "url": "https://github.com/PostHog/posthog/issues/73265",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-24",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/mcp",
+    "team/self-driving"
+   ],
+   "number": 73653,
+   "open_prs": [],
+   "reason": "Implement resource filtering query params for resources/list in MCP dispatcher.",
+   "scope": "few-files",
+   "title": "mcp: let clients filter or disable the resources the server advertises",
+   "url": "https://github.com/PostHog/posthog/issues/73653",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-28",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/trends",
+    "feature/insights"
+   ],
+   "number": 74347,
+   "open_prs": [],
+   "reason": "Add Progress gauge insight using existing goal-line value as target.",
+   "scope": "few-files",
+   "title": "Gauge / progress-to-target insight display type (actuals vs plan)",
+   "url": "https://github.com/PostHog/posthog/issues/74347",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2026-07-09",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/product-analytics"
+   ],
+   "number": 69669,
+   "open_prs": [],
+   "reason": "Add multi-breakdown stacked bar chart option to Trends insights.",
+   "scope": "cross-cutting",
+   "title": "Stacked bar chart for Total Values in Trends Insight",
+   "url": "https://github.com/PostHog/posthog/issues/69669",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2026-07-09",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/feature-flags"
+   ],
+   "number": 69808,
+   "open_prs": [],
+   "reason": "Implement background sync/caching for non-encrypted remote config payloads in SDKs.",
+   "scope": "cross-cutting",
+   "title": "Feature request: Remote config - Add background sync/caching for non-encrypted payloads (parity with local eval flags)",
+   "url": "https://github.com/PostHog/posthog/issues/69808",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-06-30",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/experiments"
+   ],
+   "number": 67207,
+   "open_prs": [],
+   "reason": "Add cross-experiment and multi-session replay AI summarization.",
+   "scope": "cross-cutting",
+   "title": "Posthog AI experiment summarization",
+   "url": "https://github.com/PostHog/posthog/issues/67207",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-06-30",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/experiments"
+   ],
+   "number": 67208,
+   "open_prs": [],
+   "reason": "Build person-level cross-experiment exposure view and overlap analysis.",
+   "scope": "cross-cutting",
+   "title": "Cross-experiment user / exposure view",
+   "url": "https://github.com/PostHog/posthog/issues/67208",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-10",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/conversations",
+    "feature/conversations"
+   ],
+   "number": 70075,
+   "open_prs": [],
+   "reason": "Implement AI chat in Conversations widget that answers from docs and hands off to human agents.",
+   "scope": "cross-cutting",
+   "title": "Conversations: AI chat in the support widget",
+   "url": "https://github.com/PostHog/posthog/issues/70075",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-13",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 70411,
+   "open_prs": [],
+   "reason": "Split toolbar heatmap and clickmap into separate buttons for clearer identification.",
+   "scope": "one-file",
+   "title": "it would be awesome to separate heatmaps from clickmaps on the posthog toolbar",
+   "url": "https://github.com/PostHog/posthog/issues/70411",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-14",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "self-driving",
+    "team/self-driving"
+   ],
+   "number": 70912,
+   "open_prs": [],
+   "reason": "Integrate Framer MCP into self-driving agents to support no-code platforms without a GitHub repo.",
+   "scope": "cross-cutting",
+   "title": "Feature request: Inbox/Self-driving - Framer MCP support",
+   "url": "https://github.com/PostHog/posthog/issues/70912",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73647,
+   "open_prs": [],
+   "reason": "Unwrap and surface destination input-building errors that silently drop events.",
+   "scope": "cross-cutting",
+   "title": "Unable to View Input Mapping Errors for HubSpot Destination",
+   "url": "https://github.com/PostHog/posthog/issues/73647",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 73811,
+   "open_prs": [],
+   "reason": "Develop a production-ready self-hosting option with robust deployment, documentation, and licensing model.",
+   "scope": "cross-cutting",
+   "title": "Production-ready self-hosting option (paid or free license, not usage-based)",
+   "url": "https://github.com/PostHog/posthog/issues/73811",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [],
+   "number": 73924,
+   "open_prs": [],
+   "reason": "Enhance MCP tool definitions or add a discovery tool for custom property definitions.",
+   "scope": "one-file",
+   "title": "Improve Customer analytics custom properties MCP tools discoverability",
+   "url": "https://github.com/PostHog/posthog/issues/73924",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 74072,
+   "open_prs": [],
+   "reason": "Design and implement a reusable 'computed event' primitive representing multi-step funnel sequences.",
+   "scope": "cross-cutting",
+   "title": "Computed events: define reusable virtual events from funnel step sequences",
+   "url": "https://github.com/PostHog/posthog/issues/74072",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 74311,
+   "open_prs": [],
+   "reason": "Add CSV bulk user import to the organization admin interface.",
+   "scope": "few-files",
+   "title": "Allow admins to bulk-insert organization users",
+   "url": "https://github.com/PostHog/posthog/issues/74311",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 74936,
+   "open_prs": [],
+   "reason": "Persist Wizard runs to database so users can review status and reports.",
+   "scope": "few-files",
+   "title": "Persist Wizard runs",
+   "url": "https://github.com/PostHog/posthog/issues/74936",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 1,
+   "created": "2026-07-08",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "team/self-driving"
+   ],
+   "number": 69507,
+   "open_prs": [],
+   "reason": "Add GitHub Enterprise server support to the existing GitHub integration flow.",
+   "scope": "cross-cutting",
+   "title": "Feature Request: Add support for Github Enterprise integration",
+   "url": "https://github.com/PostHog/posthog/issues/69507",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 1,
+   "created": "2026-07-14",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 70636,
+   "open_prs": [],
+   "reason": "Fix ClickHouse migrations to handle missing system.crash_log and AVX2 CPU requirement on fresh installs.",
+   "scope": "few-files",
+   "title": "ClickHouse Migration Error (DB::Exception: Table system.crash_log doesn't exist)",
+   "url": "https://github.com/PostHog/posthog/issues/70636",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-07-03",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 68295,
+   "open_prs": [],
+   "reason": "Add activity logging for custom property value changes.",
+   "scope": "few-files",
+   "title": "Activity logs for custom property value changes",
+   "url": "https://github.com/PostHog/posthog/issues/68295",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-07-14",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 70627,
+   "open_prs": [],
+   "reason": "Build live viewers list and edit history for dashboards with AI agent collaboration support.",
+   "scope": "cross-cutting",
+   "title": "Live viewers & edit history for an analytics dashboard",
+   "url": "https://github.com/PostHog/posthog/issues/70627",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-07-14",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 70819,
+   "open_prs": [],
+   "reason": "Implement Lock In Mode toggle to hide non-critical content and distractions across the UI.",
+   "scope": "cross-cutting",
+   "title": "ADHD Mode",
+   "url": "https://github.com/PostHog/posthog/issues/70819",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "feature/apm"
+   ],
+   "number": 73981,
+   "open_prs": [],
+   "reason": "Implement on-demand heap profiling to help identify memory leaks in apps.",
+   "scope": "cross-cutting",
+   "title": "Feature request: On-demand profiler in PostHog",
+   "url": "https://github.com/PostHog/posthog/issues/73981",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-07-28",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [],
+   "number": 74323,
+   "open_prs": [],
+   "reason": "Build a flexible persisted onboarding platform to replace hardcoded journeys.",
+   "scope": "cross-cutting",
+   "title": "Make user onboarding into a platform",
+   "url": "https://github.com/PostHog/posthog/issues/74323",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 1,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "chore",
+   "labels": [],
+   "number": 73908,
+   "open_prs": [],
+   "reason": "Centralize and coordinate work for Customer Analytics CSP initiative.",
+   "scope": "cross-cutting",
+   "title": "Customer Analytics CSP megaissue",
+   "url": "https://github.com/PostHog/posthog/issues/73908",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 73916,
+   "open_prs": [],
+   "reason": "Implement feature to broadcast announcements to customer-bound Slack channels.",
+   "scope": "cross-cutting",
+   "title": "Slack announcements in customer channels",
+   "url": "https://github.com/PostHog/posthog/issues/73916",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 73923,
+   "open_prs": [],
+   "reason": "Implement MCP tools for querying and attributing customer analytics relationships and values.",
+   "scope": "unclear",
+   "title": "MCP tools for Customer analytics Relationships",
+   "url": "https://github.com/PostHog/posthog/issues/73923",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 74935,
+   "open_prs": [],
+   "reason": "Make Wizard handoff produce a notebook; lacks detail on format or trigger.",
+   "scope": "unclear",
+   "title": "Wizard sync handoff",
+   "url": "https://github.com/PostHog/posthog/issues/74935",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-01",
+   "difficulty": "hard",
+   "kind": "chore",
+   "labels": [],
+   "number": 67408,
+   "open_prs": [],
+   "reason": "Quarterly mega-issue for Q3 2026 Workflows goals. Not a single actionable task.",
+   "scope": "unclear",
+   "title": "Team Workflows Q3 2026 Megaissue",
+   "url": "https://github.com/PostHog/posthog/issues/67408",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-07",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 68887,
+   "open_prs": [],
+   "reason": "Add replay vision findings to customer analytics accounts list. No details in body.",
+   "scope": "unclear",
+   "title": "Replay vision findings for customer analytics accounts list",
+   "url": "https://github.com/PostHog/posthog/issues/68887",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "unclear",
+   "kind": "feature",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 73501,
+   "open_prs": [],
+   "reason": "Empty issue body, no context on what the feature needs or involves.",
+   "scope": "unclear",
+   "title": "Formula account custom properties",
+   "url": "https://github.com/PostHog/posthog/issues/73501",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-24",
+   "difficulty": "unclear",
+   "kind": "chore",
+   "labels": [
+    "feature/customer-analytics"
+   ],
+   "number": 73512,
+   "open_prs": [],
+   "reason": "Issue has empty checkboxes with no description of problem or required work.",
+   "scope": "unclear",
+   "title": "Workflows for customer analytics accounts",
+   "url": "https://github.com/PostHog/posthog/issues/73512",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 73915,
+   "open_prs": [],
+   "reason": "Develop MCP tool integrations for customer analytics platform.",
+   "scope": "unclear",
+   "title": "MCP tools for customer analytics",
+   "url": "https://github.com/PostHog/posthog/issues/73915",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-27",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 73922,
+   "open_prs": [],
+   "reason": "Develop MCP tools to manage and broadcast customer analytics announcements.",
+   "scope": "unclear",
+   "title": "MCP tools for Customer analytics Announcements",
+   "url": "https://github.com/PostHog/posthog/issues/73922",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "performance"
+   ],
+   "number": 74785,
+   "open_prs": [],
+   "reason": "Vague request for UI presets; no examples or requirements given.",
+   "scope": "unclear",
+   "title": "Allow users to use presets to configure their UI",
+   "url": "https://github.com/PostHog/posthog/issues/74785",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2026-07-29",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [],
+   "number": 74975,
+   "open_prs": [],
+   "reason": "Title-only issue, no description \u2014 cannot assess required work.",
+   "scope": "unclear",
+   "title": "MCP Tools for customer analytics accounts summaries",
+   "url": "https://github.com/PostHog/posthog/issues/74975",
+   "verified": false
+  }
+ ],
+ "language": "Python",
+ "n_candidates": 120,
+ "n_fetched": 2000,
+ "n_verified": 20,
+ "open_issues": 4903,
+ "owner_type": "Organization",
+ "repo": "posthog/posthog",
+ "scanned_at": "2026-07-29",
+ "stars": 37382
+}

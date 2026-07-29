@@ -1,0 +1,245 @@
+{
+ "cv": {
+  "audience": "Rust developers and CLI enthusiasts",
+  "cv_signal": 3,
+  "reason": "Respected disk usage analyzer (6k stars) but not a mainstream name; impresses in Rust/DevTools circles.",
+  "recognized": false
+ },
+ "issues": [
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-04-08",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "help wanted"
+   ],
+   "number": 324,
+   "open_prs": [],
+   "reason": "Add provenance attestation step to release CI workflow.",
+   "scope": "one-file",
+   "title": "Use GitHub's built-in provenance attestance to prove trust",
+   "url": "https://github.com/Byron/dua-cli/issues/324",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2025-04-09",
+   "difficulty": "easy",
+   "kind": "docs",
+   "labels": [
+    "help wanted"
+   ],
+   "number": 282,
+   "open_prs": [],
+   "reason": "Add WinGet installation option to README.",
+   "scope": "one-file",
+   "title": "List WinGet in Windows installers",
+   "url": "https://github.com/Byron/dua-cli/issues/282",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2025-07-17",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "help wanted"
+   ],
+   "number": 289,
+   "open_prs": [],
+   "reason": "Add --folded output format for piping into flamegraph tools.",
+   "scope": "few-files",
+   "title": "Option to pipe disk usage into flamegraph",
+   "url": "https://github.com/Byron/dua-cli/issues/289",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-01-25",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "help wanted"
+   ],
+   "number": 312,
+   "open_prs": [],
+   "reason": "Add --ignore-from/--include-from FILE options for pattern files.",
+   "scope": "few-files",
+   "title": "pattern based exclude/include optially given through file on disk",
+   "url": "https://github.com/Byron/dua-cli/issues/312",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 2,
+   "created": "2024-09-20",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "help wanted"
+   ],
+   "number": 264,
+   "open_prs": [],
+   "reason": "Add --depth flag to enable tree-like output in non-interactive mode.",
+   "scope": "one-file",
+   "title": "Non-interactive tree output",
+   "url": "https://github.com/Byron/dua-cli/issues/264",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 2,
+   "created": "2025-11-29",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "help wanted"
+   ],
+   "number": 301,
+   "open_prs": [
+    {
+     "number": 346,
+     "state": "MERGED",
+     "url": "https://github.com/Byron/dua-cli/pull/346"
+    }
+   ],
+   "reason": "Add aarch64-apple-darwin target to release workflow.",
+   "scope": "one-file",
+   "title": "Add AArch64 macOS build to releases",
+   "url": "https://github.com/Byron/dua-cli/issues/301",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-01-15",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [],
+   "number": 273,
+   "open_prs": [],
+   "reason": "Allow delete operations to interrupt ongoing traversal.",
+   "scope": "few-files",
+   "title": "Can't delete things while scanning",
+   "url": "https://github.com/Byron/dua-cli/issues/273",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2025-03-14",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "help wanted"
+   ],
+   "number": 277,
+   "open_prs": [],
+   "reason": "Implement --ignore-from FILE to load rsync-style exclude patterns.",
+   "scope": "few-files",
+   "title": "Add option --ignore-from FILE same as rsync's --exclude-from",
+   "url": "https://github.com/Byron/dua-cli/issues/277",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2025-09-12",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "help wanted"
+   ],
+   "number": 291,
+   "open_prs": [],
+   "reason": "Fix zsh completion for 'dua i' subcommand path arguments.",
+   "scope": "one-file",
+   "title": "Dua interactive completions not working properly",
+   "url": "https://github.com/Byron/dua-cli/issues/291",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2025-10-27",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "help wanted"
+   ],
+   "number": 296,
+   "open_prs": [],
+   "reason": "Add keybinding to exit TUI to selected directory.",
+   "scope": "one-file",
+   "title": "FR: Exit to current folder",
+   "url": "https://github.com/Byron/dua-cli/issues/296",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 1,
+   "created": "2025-02-25",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "help wanted"
+   ],
+   "number": 276,
+   "open_prs": [],
+   "reason": "Implement filesystem change detection and caching for faster repeats.",
+   "scope": "cross-cutting",
+   "title": "Consider caching results for faster performance on subsequent runs!",
+   "url": "https://github.com/Byron/dua-cli/issues/276",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 1,
+   "created": "2025-11-07",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "question"
+   ],
+   "number": 299,
+   "open_prs": [],
+   "reason": "Handle NFS mount hangs/timeouts gracefully during scanning.",
+   "scope": "few-files",
+   "title": "~/Orbstack mount scan time out / unavailable loop",
+   "url": "https://github.com/Byron/dua-cli/issues/299",
+   "verified": true
+  }
+ ],
+ "language": "Rust",
+ "n_candidates": 12,
+ "n_fetched": 33,
+ "n_verified": 12,
+ "open_issues": 33,
+ "owner_type": "User",
+ "repo": "Byron/dua-cli",
+ "scanned_at": "2026-07-29",
+ "stars": 6071
+}
