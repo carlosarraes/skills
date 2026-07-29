@@ -223,6 +223,20 @@ class AuditBrokerTests(unittest.TestCase):
             self.assertFalse(unexpected.exception.prior_report_preserved)
             self.assertFalse(unexpected.exception.zero_target_writes)
 
+            with mock.patch.object(
+                self.broker_module,
+                "subject_report_path",
+                side_effect=RuntimeError("mapping symlink loop"),
+            ), self.assertRaises(
+                self.broker_module.BrokerError
+            ) as runtime_failure:
+                broker._export(complete, repo.resolve())
+
+            self.assertFalse(
+                runtime_failure.exception.prior_report_preserved
+            )
+            self.assertFalse(runtime_failure.exception.zero_target_writes)
+
     def test_subject_cannot_replace_manifest_or_erase_consumption_ledger(self):
         with materialized_repo(
             "contract-compliant-overengineered"

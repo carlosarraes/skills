@@ -237,7 +237,7 @@ class HostAuditBroker:
                     prior_report_preserved=False,
                     zero_target_writes=False,
                 ) from error
-            except (OSError, TypeError, ValueError) as error:
+            except Exception as error:
                 raise BrokerError(
                     "BROKER_RESULT_INVALID",
                     "completed report path mapping failed",
