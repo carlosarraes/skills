@@ -15,50 +15,52 @@ and do not post, commit, push, or approve.
 
    python <check-contract-skill-dir>/scripts/check_contract.py start
 
-   Supply no arguments; CLI consumes host-issued
+   No arguments; CLI consumes host-issued
    `CHECK_CONTRACT_REQUEST_ID` capability. Do not inspect `start --help`. For a
    compound A-then-B request, the host-issued request manifest owns both targets;
    keep one logical runtime session, use the latest returned `session` for each
    `continue`, and never run a second `start` command.
 
-2. `NeedJudgment` kind `code`: read only runtime-issued code packet `packet_path`.
+2. `NeedJudgment` kind `code`: read issued code packet `packet_path`.
    At `response_path`, write exactly one UTF-8
    JSON object with only `schema_version`, `session`, `nonce`, `packet_sha256`,
    `kind`, and `judgment`. `kind` is `code`.
 
-   Now consume the packet's `semantics` and `chronology`; copy their generation
+   Then consume the packet's `semantics` and `chronology`; copy their generation
    values into `semantic_generation` and `chronology_generation`. `code response`
    `judgment`: those fields, `clauses`, `path_assessments`, `deviations`.
-   `clauses`: exactly the runtime-issued clause IDs; each: `status`,
-   `evidence_ids`, `reason`, and `contract_boundary_changed`. `path_assessments`:
-   exactly the runtime-issued changed-path IDs; each: `surface`, `yagni_items`,
-   and `reuse_items`. `surface`: `status`, `evidence_ids`, `reason`; items: `kind`,
-   `evidence_ids`, `reason`; each reuse item copies the
-   applicable issued `helper_fact_ids`. `deviations`: `path_id`, `line`,
-   `description`, `evidence_ids`, `reason`; runtime-issued IDs only;
+   `clauses`: JSON object keyed by exactly the runtime-issued clause IDs; values:
+   `status,evidence_ids,reason,contract_boundary_changed`. `path_assessments`:
+   JSON object keyed by exactly the runtime-issued changed-path IDs; values:
+   `surface,yagni_items,reuse_items`. Surface: `status,evidence_ids,reason`; items:
+   `kind,evidence_ids,reason`; each reuse item copies the applicable issued
+   `helper_fact_ids`. `deviations`: JSON array; items:
+   `path_id,line,description,evidence_ids,reason`; issued IDs only;
    no extra keys.
    For each fidelity clause, choose evidence only from
-   `fidelity_evidence_ids[clause_id]`. Evaluate fidelity against the exact contract
+   `fidelity_evidence_ids[clause_id]`; omit all others. Evaluate fidelity against the exact contract
    noun phrases. Independent-axis failures do not broaden those noun phrases or
    imply fidelity failure. Use one short sentence per reason.
    `INTRODUCED_BEFORE_AFFECTED_IMPLEMENTATION` marks a used helper earned for the
-   affected change, not YAGNI. `R`, `S`, or `K` failure alone does not create YAGNI.
-   Give every changed-path responsibility a reuse verdict; use `NO_REUSE_AVAILABLE`
+   affected change, not YAGNI. Never strengthen issued `INDETERMINATE` chronology.
+   `R`, `S`, or `K` failure alone does not create YAGNI.
+   Give every changed-path responsibility a reuse verdict; every path's `reuse_items`
+   is nonempty; use `NO_REUSE_AVAILABLE`
    when issued full-HEAD search proves none.
 
    Status: `MET | UNMET | EXCEEDED | INDETERMINATE`. YAGNI kinds:
    `UNEARNED_LOCAL | UNEARNED_MODULE | UNEARNED_RUNTIME_DEPENDENCY | UNEARNED_CONFIGURATION | UNEARNED_PUBLIC_INTERFACE | QUESTIONABLE_LOCAL | QUESTIONABLE_OTHER`;
    reuse kinds:
    `REUSED | NO_REUSE_AVAILABLE | DUPLICATED | BYPASSED | NEAR_DUPLICATE | INDETERMINATE`.
-   Lists unique; reasons and descriptions non-empty;
-   `contract_boundary_changed` boolean; deviation `line` a positive integer.
+   Lists unique; reasons/descriptions non-empty;
+   `contract_boundary_changed` boolean; deviation `line` positive integer.
 
-3. Run the first `continue`:
+3. Run first `continue`:
 
    python <check-contract-skill-dir>/scripts/check_contract.py continue \
      --session <session> --response <response_path>
 
-4. For `NeedJudgment` kind `reconciliation`, read its runtime-issued
+4. For `NeedJudgment` kind `reconciliation`, read its issued
    reconciliation packet. Write reconciliation response at
    `response_path`: match the packet's `response_schema` exactly. `kind` is
    `reconciliation`; use only runtime-issued evidence IDs, select at most one
@@ -71,11 +73,11 @@ and do not post, commit, push, or approve.
 
 Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as
 returned. A compound transition may return the next target's `NeedJudgment`;
-repeat steps 2–5 with the returned `session`. `AuditComplete` and `AuditStopped`
+repeat steps 2–5 using returned `session`. `AuditComplete` and `AuditStopped`
 are terminal: return the exact canonical JSON without Markdown fences or prose,
 use no more tools, do not read the generated report, and exit immediately.
 
-The runtime owns all other work: do not inspect the target repository directly;
-do not write the report directly; do not calculate aggregates; do not choose
-findings; do not choose the verdict or route; do not retry; and do not invoke a
+Runtime owns other work: do not inspect the target repository directly;
+do not write the report directly; do not calculate aggregates;
+do not choose findings; do not choose the verdict or route; do not retry; and do not invoke a
 recommended skill.

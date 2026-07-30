@@ -130,6 +130,7 @@ class CheckContractSkillTests(unittest.TestCase):
             "Evaluate fidelity against the exact contract noun phrases",
             "Independent-axis failures do not broaden those noun phrases or "
             "imply fidelity failure",
+            "`fidelity_evidence_ids[clause_id]`; omit all others",
             "one short sentence per reason",
         ):
             self.assertIn(phrase, self.flat_skill)
@@ -153,9 +154,20 @@ class CheckContractSkillTests(unittest.TestCase):
         for phrase in (
             "`INTRODUCED_BEFORE_AFFECTED_IMPLEMENTATION` marks a used helper "
             "earned for the affected change, not YAGNI",
+            "Never strengthen issued `INDETERMINATE` chronology",
             "`R`, `S`, or `K` failure alone does not create YAGNI",
             "Give every changed-path responsibility a reuse verdict",
+            "every path's `reuse_items` is nonempty",
             "use `NO_REUSE_AVAILABLE` when issued full-HEAD search proves none",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+
+    def test_code_response_collections_have_unambiguous_json_shapes(self):
+        for phrase in (
+            "`clauses`: JSON object keyed by exactly the runtime-issued clause IDs",
+            "`path_assessments`: JSON object keyed by exactly the runtime-issued "
+            "changed-path IDs",
+            "`deviations`: JSON array",
         ):
             self.assertIn(phrase, self.flat_skill)
 
