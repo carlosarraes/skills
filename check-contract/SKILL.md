@@ -21,7 +21,7 @@ and do not post, commit, push, or approve.
    keep one logical runtime session, use the latest returned `session` for each
    `continue`, and never run a second `start` command.
 
-2. `NeedJudgment` kind `code`: read issued code packet `packet_path`.
+2. `NeedJudgment` kind `code`: read code packet `packet_path`.
    At `response_path`, write exactly one UTF-8
    JSON object with only `schema_version`, `session`, `nonce`, `packet_sha256`,
    `kind`, and `judgment`. `kind` is `code`.
@@ -33,9 +33,9 @@ and do not post, commit, push, or approve.
    `status,evidence_ids,reason,contract_boundary_changed`. `path_assessments`:
    JSON object keyed by exactly the runtime-issued changed-path IDs; values:
    `surface,yagni_items,reuse_items`. Surface: `status,evidence_ids,reason`; items:
-   `kind,evidence_ids,reason`; each reuse item copies the applicable issued
-   `helper_fact_ids`. `deviations`: JSON array; items:
-   `path_id,line,description,evidence_ids,reason`; issued IDs only;
+   `kind,evidence_ids,reason`. Every reuse item has `helper_fact_ids`:
+   applicable issued IDs or `[]`. `deviations`: JSON array; items:
+   `path_id,line,description,evidence_ids,reason`; issued IDs;
    no extra keys.
    For each fidelity clause, choose evidence only from
    `fidelity_evidence_ids[clause_id]`; omit all others. Evaluate fidelity against the exact contract

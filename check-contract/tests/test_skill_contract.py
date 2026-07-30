@@ -145,7 +145,7 @@ class CheckContractSkillTests(unittest.TestCase):
             "consume the packet's `semantics` and `chronology`",
             "copy their generation values into `semantic_generation` and "
             "`chronology_generation`",
-            "reuse item copies the applicable issued `helper_fact_ids`",
+            "Every reuse item has `helper_fact_ids`: applicable issued IDs or `[]`",
         ):
             self.assertIn(phrase, self.flat_skill)
         self.assertNotIn("CORRECTNESS_DEFECT_IS_NOT_YAGNI", self.skill)
@@ -158,6 +158,7 @@ class CheckContractSkillTests(unittest.TestCase):
             "`R`, `S`, or `K` failure alone does not create YAGNI",
             "Give every changed-path responsibility a reuse verdict",
             "every path's `reuse_items` is nonempty",
+            "Every reuse item has `helper_fact_ids`: applicable issued IDs or `[]`",
             "use `NO_REUSE_AVAILABLE` when issued full-HEAD search proves none",
         ):
             self.assertIn(phrase, self.flat_skill)
