@@ -21,11 +21,12 @@ class CheckContractCliTests(unittest.TestCase):
     def setUpClass(cls):
         cls.runtime_module, _ = load_modules()
 
-    def run_cli(self, cwd, *args, session_root):
+    def run_cli(self, cwd, *args, session_root, environment=None):
         session_root.mkdir(parents=True, exist_ok=True)
         environment = {
             **os.environ,
             "TMPDIR": str(session_root),
+            **(environment or {}),
         }
         return subprocess.run(
             [sys.executable, str(CLI), *map(str, args)],
@@ -214,8 +215,6 @@ class CheckContractCliTests(unittest.TestCase):
                     sys.executable,
                     str(CLI),
                     "start",
-                    "--request-id",
-                    "a" * 64,
                 ],
                 cwd=root,
                 env={
@@ -224,6 +223,7 @@ class CheckContractCliTests(unittest.TestCase):
                         root / "missing.sock"
                     ),
                     "CHECK_CONTRACT_CLIENT_ROOT": str(root / "client"),
+                    "CHECK_CONTRACT_REQUEST_ID": "a" * 64,
                 },
                 capture_output=True,
                 text=True,
@@ -234,6 +234,81 @@ class CheckContractCliTests(unittest.TestCase):
             public = json.loads(completed.stdout)
             self.assertEqual(public["result"], "AuditStopped")
             self.assertEqual(public["code"], "BROKER_UNAVAILABLE")
+
+    def test_broker_start_help_exposes_only_the_zero_argument_capability(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            completed = self.run_cli(
+                root,
+                "start",
+                "--help",
+                session_root=root / "sessions",
+                environment={
+                    "CHECK_CONTRACT_BROKER_SOCKET": str(root / "broker.sock"),
+                    "CHECK_CONTRACT_REQUEST_ID": "a" * 64,
+                },
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("usage: check-contract start [-h]", completed.stdout)
+            for canary_inducing_option in (
+                "--repo",
+                "--branch",
+                "--ticket",
+                "--request-id",
+                "--narrative",
+                "--then-repo",
+                "--then-branch",
+                "--then-ticket",
+                "--then-narrative",
+                "--deadline-seconds",
+            ):
+                self.assertNotIn(canary_inducing_option, completed.stdout)
+
+    def test_broker_start_rejects_the_canary_combined_command_at_parse_time(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            completed = self.run_cli(
+                root,
+                "start",
+                "--repo",
+                "/tmp/workspace/fixture/target",
+                "--branch",
+                "feature/proj-123",
+                "--ticket",
+                "PROJ-123",
+                "--request-id",
+                "a" * 64,
+                session_root=root / "sessions",
+                environment={
+                    "CHECK_CONTRACT_BROKER_SOCKET": str(root / "broker.sock"),
+                    "CHECK_CONTRACT_REQUEST_ID": "a" * 64,
+                },
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("unrecognized arguments", completed.stderr)
+            self.assertEqual(completed.stdout, "")
+
+    def test_broker_start_fails_closed_without_request_capability(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            completed = self.run_cli(
+                root,
+                "start",
+                session_root=root / "sessions",
+                environment={
+                    "CHECK_CONTRACT_BROKER_SOCKET": str(root / "broker.sock"),
+                    "CHECK_CONTRACT_REQUEST_ID": "",
+                },
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn(
+                "CHECK_CONTRACT_REQUEST_ID is required",
+                completed.stderr,
+            )
+            self.assertEqual(completed.stdout, "")
 
     def test_public_stop_sanitizes_internal_target_diagnostics(self):
         with tempfile.TemporaryDirectory() as temporary:

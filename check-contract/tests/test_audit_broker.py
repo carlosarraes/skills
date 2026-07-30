@@ -284,12 +284,6 @@ class AuditBrokerTests(unittest.TestCase):
                         sys.executable,
                         "/tmp/check-contract-runtime/check-contract/scripts/check_contract.py",
                         "start",
-                        "--repo",
-                        "/tmp/workspace/fixture/target",
-                        "--branch",
-                        "feature/proj-123",
-                        "--ticket",
-                        "PROJ-123",
                     ],
                     broker_socket=socket_path,
                 )
@@ -356,16 +350,25 @@ class AuditBrokerTests(unittest.TestCase):
             self.assertNotIn(str(repo), serialized)
             self.assertNotIn(str(other), serialized)
 
-    def run_subject_cli(self, run_root, repo, socket_path, *args):
+    def run_subject_cli(
+        self, run_root, repo, socket_path, *args, request_id=None
+    ):
+        argv = [
+            sys.executable,
+            "/tmp/check-contract-runtime/check-contract/scripts/check_contract.py",
+            *map(str, args),
+        ]
+        if request_id is not None:
+            argv = [
+                "env",
+                f"CHECK_CONTRACT_REQUEST_ID={request_id}",
+                *argv,
+            ]
         command = self.harness.isolated_subject_command(
             run_root,
             {"target": repo},
             ROOT,
-            [
-                sys.executable,
-                "/tmp/check-contract-runtime/check-contract/scripts/check_contract.py",
-                *map(str, args),
-            ],
+            argv,
             broker_socket=socket_path,
         )
         return subprocess.run(command, capture_output=True, text=True)
@@ -387,6 +390,39 @@ class AuditBrokerTests(unittest.TestCase):
         path = self.host_client_path(run_root, public["response_path"])
         path.write_text(json.dumps(response), encoding="utf-8")
 
+    def test_broker_start_uses_exact_environment_capability(self):
+        with materialized_repo(
+            "documented-drift"
+        ) as repo, tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, envelope, socket_path, server = self.start_broker(root, repo)
+            run_root = root / "run"
+            (run_root / "fixture/target").mkdir(parents=True)
+
+            with server.running():
+                mismatch = self.run_subject_cli(
+                    run_root,
+                    repo,
+                    socket_path,
+                    "start",
+                    request_id="f" * 64,
+                )
+                started = self.run_subject_cli(
+                    run_root,
+                    repo,
+                    socket_path,
+                    "start",
+                    request_id=envelope.request_id,
+                )
+
+            self.assertEqual(mismatch.returncode, 2, mismatch.stderr)
+            self.assertEqual(
+                json.loads(mismatch.stdout)["code"],
+                "BROKER_REQUEST_INVALID",
+            )
+            self.assertEqual(started.returncode, 0, started.stderr)
+            self.assertEqual(json.loads(started.stdout)["request_id"], envelope.request_id)
+
     def test_read_only_bwrap_subject_reaches_host_owned_audit_complete(self):
         with materialized_repo(
             "documented-drift"
@@ -407,8 +443,7 @@ class AuditBrokerTests(unittest.TestCase):
                     repo,
                     socket_path,
                     "start",
-                    "--request-id",
-                    envelope.request_id,
+                    request_id=envelope.request_id,
                 )
                 self.assertEqual(
                     started_process.returncode, 0, started_process.stderr

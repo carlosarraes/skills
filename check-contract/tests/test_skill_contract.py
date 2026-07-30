@@ -56,12 +56,20 @@ class CheckContractSkillTests(unittest.TestCase):
             self.skill,
             r"(?m)^python(?:3)? scripts/check_contract\.py",
         )
-        self.assertRegex(
-            self.flat_skill,
-            r"python <check-contract-skill-dir>/scripts/check_contract\.py "
-            r"start .*--repo <repo> .*--branch <full-branch> "
-            r".*--ticket <ticket>",
+        self.assertIn(
+            "python <check-contract-skill-dir>/scripts/check_contract.py start\n",
+            self.skill,
         )
+        for broker_forbidden_option in (
+            "--repo",
+            "--branch",
+            "--ticket",
+            "--request-id",
+            "--narrative",
+            "--then-repo",
+            "--deadline-seconds",
+        ):
+            self.assertNotIn(broker_forbidden_option, self.skill)
 
     def test_uses_one_closed_three_call_continuation_flow(self):
         self.assertEqual(
@@ -173,8 +181,7 @@ class CheckContractSkillTests(unittest.TestCase):
     def test_compound_request_uses_latest_token_in_one_logical_session(self):
         for phrase in (
             "For a compound A-then-B request",
-            "pass both targets to the one `start` command",
-            "`--then-repo`, `--then-branch`, and `--then-ticket`",
+            "the host-issued request manifest owns both targets",
             "keep one logical runtime session",
             "use the latest returned `session` for each `continue`",
             "never run a second `start` command",

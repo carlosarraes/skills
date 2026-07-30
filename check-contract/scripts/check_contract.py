@@ -23,23 +23,26 @@ from audit_runtime import (
 from audit_broker import BrokerError, broker_call
 
 
-def parser():
+def parser(*, broker_mode=False):
     root = argparse.ArgumentParser(prog="check-contract")
     commands = root.add_subparsers(dest="command", required=True)
 
     start = commands.add_parser("start")
-    start.add_argument("--repo", type=Path)
-    start.add_argument("--branch")
-    start.add_argument("--ticket")
-    start.add_argument("--request-id")
-    start.add_argument("--narrative", type=Path, action="append", default=[])
-    start.add_argument("--then-repo", type=Path)
-    start.add_argument("--then-branch")
-    start.add_argument("--then-ticket")
-    start.add_argument(
-        "--then-narrative", type=Path, action="append", default=[]
-    )
-    start.add_argument("--deadline-seconds", type=int, default=300)
+    if not broker_mode:
+        start.add_argument("--repo", type=Path)
+        start.add_argument("--branch")
+        start.add_argument("--ticket")
+        start.add_argument("--request-id")
+        start.add_argument(
+            "--narrative", type=Path, action="append", default=[]
+        )
+        start.add_argument("--then-repo", type=Path)
+        start.add_argument("--then-branch")
+        start.add_argument("--then-ticket")
+        start.add_argument(
+            "--then-narrative", type=Path, action="append", default=[]
+        )
+        start.add_argument("--deadline-seconds", type=int, default=300)
 
     continuation = commands.add_parser("continue")
     continuation.add_argument("--session", required=True)
@@ -153,25 +156,14 @@ def as_public_dict(result):
 
 def _broker_command(args, argument_parser, socket_path):
     if args.command == "start":
-        supplied_targets = (
-            args.repo,
-            args.branch,
-            args.ticket,
-            args.then_repo,
-            args.then_branch,
-            args.then_ticket,
-            *args.narrative,
-            *args.then_narrative,
-        )
-        if args.request_id is None or any(
-            value is not None for value in supplied_targets
-        ):
+        request_id = os.environ.get("CHECK_CONTRACT_REQUEST_ID")
+        if not request_id:
             argument_parser.error(
-                "broker start accepts only --request-id"
+                "CHECK_CONTRACT_REQUEST_ID is required for broker start"
             )
         return broker_call(
             socket_path,
-            {"operation": "start", "request_id": args.request_id},
+            {"operation": "start", "request_id": request_id},
         )
     try:
         response = args.response.read_bytes()
@@ -235,14 +227,16 @@ def _materialize_broker_result(result):
 
 
 def main(argv=None):
-    argument_parser = parser()
-    args = argument_parser.parse_args(argv)
     broker_socket = os.environ.get("CHECK_CONTRACT_BROKER_SOCKET")
     installed_root = Path(__file__).resolve().parents[2]
     broker_required = (
         installed_root == Path("/tmp/check-contract-runtime")
         and Path("/tmp/check-contract-broker-required").exists()
     )
+    argument_parser = parser(
+        broker_mode=bool(broker_socket) or broker_required
+    )
+    args = argument_parser.parse_args(argv)
     if broker_required and not broker_socket:
         argument_parser.error("this runtime requires its host audit broker")
     if broker_socket:

@@ -16,16 +16,13 @@ and do not post, commit, push, or approve.
    Invoke the absolute script path once:
 
    ```bash
-   python <check-contract-skill-dir>/scripts/check_contract.py start \
-     --repo <repo> --branch <full-branch> --ticket <ticket> \
-     [--narrative <path>] \
-     [--then-repo <repo> --then-branch <full-branch> --then-ticket <ticket>] \
-     [--then-narrative <path>] [--deadline-seconds <seconds>]
+   python <check-contract-skill-dir>/scripts/check_contract.py start
    ```
 
-   For a compound A-then-B request, pass both targets to the one `start`
-   command with `--then-repo`, `--then-branch`, and `--then-ticket`; keep one
-   logical runtime session, use the latest returned `session` for each
+   Supply no arguments: the CLI consumes the exact host-issued
+   `CHECK_CONTRACT_REQUEST_ID` capability. Do not inspect `start --help`. For a
+   compound A-then-B request, the host-issued request manifest owns both targets;
+   keep one logical runtime session, use the latest returned `session` for each
    `continue`, and never run a second `start` command.
 
 2. If the result is `NeedJudgment` with kind `code`, read only its runtime-issued
