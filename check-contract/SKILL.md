@@ -74,10 +74,11 @@ and do not post, commit, push, or approve.
 
 Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as
 returned. A compound transition may return the next target's `NeedJudgment`;
-repeat steps 2–5 with the returned `session`.
+repeat steps 2–5 with the returned `session`. `AuditComplete` and `AuditStopped`
+are terminal: return the exact canonical JSON, use no more tools, do not read the
+generated report, and exit immediately.
 
 The runtime owns all other work: do not inspect the target repository directly;
 do not write the report directly; do not calculate aggregates; do not choose
 findings; do not choose the verdict or route; do not retry; and do not invoke a
-recommended skill. The absolute script path is the only executable audit
-interface.
+recommended skill.

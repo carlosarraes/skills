@@ -178,6 +178,27 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, self.skill)
 
+    def test_terminal_result_stops_all_audit_and_tool_work(self):
+        for phrase in (
+            "`AuditComplete` and `AuditStopped` are terminal",
+            "do not read the generated report",
+            "use no more tools",
+            "return the exact canonical JSON",
+            "exit immediately",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+        self.assertNotIn("summary artifact", self.flat_skill)
+        positions = [
+            self.flat_skill.find(phrase)
+            for phrase in (
+                "A compound transition may return the next target's `NeedJudgment`",
+                "`AuditComplete` and `AuditStopped` are terminal",
+                "exit immediately",
+            )
+        ]
+        self.assertNotIn(-1, positions)
+        self.assertEqual(positions, sorted(positions))
+
     def test_compound_request_uses_latest_token_in_one_logical_session(self):
         for phrase in (
             "For a compound A-then-B request",
