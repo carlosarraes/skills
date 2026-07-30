@@ -149,6 +149,10 @@ class RuntimeSemanticContractTests(unittest.TestCase):
             semantic["clause_ownership"]["independent_axes"],
             {"R": "REUSE", "S": "SURFACE", "K": "COMPLEXITY"},
         )
+        self.assertIn(
+            "COMPLEXITY_EXCESS_ALONE_IS_NOT_FIDELITY",
+            semantic["exact_predicate"]["non_implications"],
+        )
         self.assertEqual(
             semantic["status_meanings"]["upper_bound_breach"],
             "EXCEEDED",

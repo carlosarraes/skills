@@ -127,6 +127,9 @@ class CheckContractSkillTests(unittest.TestCase):
         for phrase in (
             "For each fidelity clause, choose evidence only from "
             "`fidelity_evidence_ids[clause_id]`",
+            "Evaluate fidelity against the exact contract noun phrases",
+            "Independent-axis failures do not broaden those noun phrases or "
+            "imply fidelity failure",
             "one short sentence per reason",
         ):
             self.assertIn(phrase, self.flat_skill)

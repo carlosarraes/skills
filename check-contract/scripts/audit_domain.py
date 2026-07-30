@@ -63,6 +63,7 @@ SEMANTIC_CONTRACT_V1 = {
             "BUDGET_EXCESS_IS_NOT_YAGNI",
             "PATH_DEVIATION_IS_NOT_FIDELITY",
             "COMPLEXITY_EXCESS_IS_NOT_REUSE",
+            "COMPLEXITY_EXCESS_ALONE_IS_NOT_FIDELITY",
         ],
     },
     "status_meanings": {
