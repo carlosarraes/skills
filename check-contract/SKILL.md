@@ -4,48 +4,47 @@ description: Use only for explicit contract audits.
 disable-model-invocation: true
 ---
 
-# Check Contract
+# Immutable report-only audit
 
-This is an immutable, report-only audit. The runtime may create or replace only
+The runtime may create or replace only
 the active `check-report.md`; do not fix code, do not edit the contract or ledger,
 and do not post, commit, push, or approve.
 
-## Closed workflow
+1. `<check-contract-skill-dir>`: absolute directory containing this loaded `SKILL.md`.
+   Invoke its absolute script path once:
 
-1. `<check-contract-skill-dir>` is the absolute directory containing this loaded `SKILL.md`.
-   Invoke the absolute script path once:
-
-   ```bash
    python <check-contract-skill-dir>/scripts/check_contract.py start
-   ```
 
-   Supply no arguments: the CLI consumes the host-issued
+   Supply no arguments; CLI consumes host-issued
    `CHECK_CONTRACT_REQUEST_ID` capability. Do not inspect `start --help`. For a
    compound A-then-B request, the host-issued request manifest owns both targets;
    keep one logical runtime session, use the latest returned `session` for each
    `continue`, and never run a second `start` command.
 
-2. If `NeedJudgment` has kind `code`, read only its runtime-issued
-   code packet at `packet_path`. At `response_path`, write exactly one UTF-8
+2. `NeedJudgment` kind `code`: read only runtime-issued code packet `packet_path`.
+   At `response_path`, write exactly one UTF-8
    JSON object with only `schema_version`, `session`, `nonce`, `packet_sha256`,
    `kind`, and `judgment`. `kind` is `code`.
 
    Now consume the packet's `semantics` and `chronology`; copy their generation
-   values into `semantic_generation` and `chronology_generation`. The code response
-   `judgment` has those fields, `clauses`, `path_assessments`,
-   and `deviations`. `clauses` contains exactly the runtime-issued clause IDs; each
-   has `status`, `evidence_ids`, `reason`, and
-   `contract_boundary_changed`. `path_assessments` contains exactly the
-   runtime-issued changed-path IDs; each has `surface`, `yagni_items`, and
-   `reuse_items`. `surface` has `status`, `evidence_ids`, and `reason`; items
-   have `kind`, `evidence_ids`, and `reason`, and each reuse item copies the
-   applicable issued `helper_fact_ids`. Deviations have `path_id`, `line`,
-   `description`, `evidence_ids`, and `reason`. Use only runtime-issued IDs;
+   values into `semantic_generation` and `chronology_generation`. `code response`
+   `judgment`: those fields, `clauses`, `path_assessments`, `deviations`.
+   `clauses`: exactly the runtime-issued clause IDs; each: `status`,
+   `evidence_ids`, `reason`, and `contract_boundary_changed`. `path_assessments`:
+   exactly the runtime-issued changed-path IDs; each: `surface`, `yagni_items`,
+   and `reuse_items`. `surface`: `status`, `evidence_ids`, `reason`; items: `kind`,
+   `evidence_ids`, `reason`; each reuse item copies the
+   applicable issued `helper_fact_ids`. `deviations`: `path_id`, `line`,
+   `description`, `evidence_ids`, `reason`; runtime-issued IDs only;
    no extra keys.
    For each fidelity clause, choose evidence only from
    `fidelity_evidence_ids[clause_id]`. Evaluate fidelity against the exact contract
    noun phrases. Independent-axis failures do not broaden those noun phrases or
    imply fidelity failure. Use one short sentence per reason.
+   `INTRODUCED_BEFORE_AFFECTED_IMPLEMENTATION` marks a used helper earned for the
+   affected change, not YAGNI. `R`, `S`, or `K` failure alone does not create YAGNI.
+   Give every changed-path responsibility a reuse verdict; use `NO_REUSE_AVAILABLE`
+   when issued full-HEAD search proves none.
 
    Status: `MET | UNMET | EXCEEDED | INDETERMINATE`. YAGNI kinds:
    `UNEARNED_LOCAL | UNEARNED_MODULE | UNEARNED_RUNTIME_DEPENDENCY | UNEARNED_CONFIGURATION | UNEARNED_PUBLIC_INTERFACE | QUESTIONABLE_LOCAL | QUESTIONABLE_OTHER`;
@@ -56,10 +55,8 @@ and do not post, commit, push, or approve.
 
 3. Run the first `continue`:
 
-   ```bash
    python <check-contract-skill-dir>/scripts/check_contract.py continue \
      --session <session> --response <response_path>
-   ```
 
 4. For `NeedJudgment` kind `reconciliation`, read its runtime-issued
    reconciliation packet. Write reconciliation response at
@@ -69,10 +66,8 @@ and do not post, commit, push, or approve.
 
 5. Run final `continue`:
 
-   ```bash
    python <check-contract-skill-dir>/scripts/check_contract.py continue \
      --session <session> --response <response_path>
-   ```
 
 Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as
 returned. A compound transition may return the next target's `NeedJudgment`;

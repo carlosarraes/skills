@@ -149,6 +149,16 @@ class CheckContractSkillTests(unittest.TestCase):
             self.assertIn(phrase, self.flat_skill)
         self.assertNotIn("CORRECTNESS_DEFECT_IS_NOT_YAGNI", self.skill)
 
+    def test_yagni_and_reuse_follow_issued_chronology_and_search(self):
+        for phrase in (
+            "`INTRODUCED_BEFORE_AFFECTED_IMPLEMENTATION` marks a used helper "
+            "earned for the affected change, not YAGNI",
+            "`R`, `S`, or `K` failure alone does not create YAGNI",
+            "Give every changed-path responsibility a reuse verdict",
+            "use `NO_REUSE_AVAILABLE` when issued full-HEAD search proves none",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+
     def test_reconciliation_response_is_exact_and_probe_bounded(self):
         for phrase in (
             "match the packet's `response_schema` exactly",
