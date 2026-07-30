@@ -17,6 +17,18 @@ CORE_PACE = 0.75
 
 NOISE_TITLES = ("dependency dashboard", "dependency updates", "roadmap", "tracking issue")
 
+# Labels meaning "you cannot start this yet", whatever the issue text says. A
+# clearly-written issue blocked on an upstream fix still reads as easy and
+# actionable to a model, so this has to be mechanical.
+BLOCKING_LABELS = (
+    "blocked", "blocker", "on-hold", "on hold",
+    "waiting-on-upstream", "waiting-for-upstream", "waiting on upstream", "upstream-bug",
+    "needs-design", "design-needed", "needs design", "needs-decision",
+    "needs-discussion", "discussion-needed",
+    "needs-info", "needs-more-info", "awaiting-response", "waiting-for-info",
+    "waiting-for-response", "wontfix", "won't fix", "invalid", "duplicate", "stale",
+)
+
 # Phrases that mean a human has already staked a claim in the comments.
 CLAIM_PHRASES = (
     "i'll take", "i will take", "i'd like to work", "i would like to work",

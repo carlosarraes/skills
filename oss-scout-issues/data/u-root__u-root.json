@@ -1,0 +1,684 @@
+{
+ "cv": {
+  "audience": "Systems, embedded Linux, and LinuxBoot engineers",
+  "cv_signal": 3,
+  "reason": "Respected Go userland for LinuxBoot/initramfs; well-known in embedded systems and kernel tooling communities.",
+  "recognized": false
+ },
+ "issues": [
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2024-12-20",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3253,
+   "open_prs": [],
+   "reason": "Fix shebang file generation for Plan 9 to include proper magic line.",
+   "scope": "few-files",
+   "title": "shebang mode is broken on Plan 9",
+   "url": "https://github.com/u-root/u-root/issues/3253",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2025-01-08",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3268,
+   "open_prs": [],
+   "reason": "Fix boot command to output consistently between default and manual selection, and remove duplicate logging.",
+   "scope": "few-files",
+   "title": "`boot` command outputs different information if running default",
+   "url": "https://github.com/u-root/u-root/issues/3268",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-01-07",
+   "difficulty": "easy",
+   "kind": "refactor",
+   "labels": [],
+   "number": 3480,
+   "open_prs": [],
+   "reason": "Simplify MkdirTemp to use default system tempdir instead of hardcoded /tmp.",
+   "scope": "one-file",
+   "title": "Let MkdirTemp() use the default tempdir rather than specifying in code.",
+   "url": "https://github.com/u-root/u-root/issues/3480",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-04-29",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3584,
+   "open_prs": [],
+   "reason": "Create reboot as a multi-call alias for shutdown -r to avoid accidental shutdowns.",
+   "scope": "one-file",
+   "title": "Add reboot cmd (alias for shutdown -r)",
+   "url": "https://github.com/u-root/u-root/issues/3584",
+   "verified": true
+  },
+  {
+   "claimed": true,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2025-04-22",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [],
+   "number": 3359,
+   "open_prs": [
+    {
+     "number": 3512,
+     "state": "MERGED",
+     "url": "https://github.com/u-root/u-root/pull/3512"
+    }
+   ],
+   "reason": "Add -o flag to truncate command to interpret SIZE as IO blocks.",
+   "scope": "one-file",
+   "title": "Add \"-o\" flag to \"truncate\" command",
+   "url": "https://github.com/u-root/u-root/issues/3359",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 2,
+   "created": "2024-08-14",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3072,
+   "open_prs": [
+    {
+     "number": 3242,
+     "state": "MERGED",
+     "url": "https://github.com/u-root/u-root/pull/3242"
+    }
+   ],
+   "reason": "Fix TryMount to detect filesystem for bind mounts without -t flag.",
+   "scope": "one-file",
+   "title": "mount -o bind /proc /mnt/proc does not work",
+   "url": "https://github.com/u-root/u-root/issues/3072",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2024-09-27",
+   "difficulty": "easy",
+   "kind": "chore",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3120,
+   "open_prs": [],
+   "reason": "Enable additional golangci-lint linters and fix issues in CI.",
+   "scope": "few-files",
+   "title": "ci: enforce cleaner coding standards",
+   "url": "https://github.com/u-root/u-root/issues/3120",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2024-12-04",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3236,
+   "open_prs": [],
+   "reason": "Debug kexec_file_load exec format error on riscv64 when loading vmlinuz.",
+   "scope": "few-files",
+   "title": "kexec_file_load error",
+   "url": "https://github.com/u-root/u-root/issues/3236",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-01-08",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3269,
+   "open_prs": [],
+   "reason": "Log the source filename when writing to /tmp files in debug output.",
+   "scope": "one-file",
+   "title": "Log filename loaded into `/tmp` rather than random filenames in `/tmp`",
+   "url": "https://github.com/u-root/u-root/issues/3269",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-06-24",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3411,
+   "open_prs": [],
+   "reason": "Fix cmds/.gitignore to ignore .swp and other non-binary files by adding top-level patterns.",
+   "scope": "one-file",
+   "title": "cmds/.gitignore shows all non \"binary\" files",
+   "url": "https://github.com/u-root/u-root/issues/3411",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-08-18",
+   "difficulty": "easy",
+   "kind": "refactor",
+   "labels": [],
+   "number": 3438,
+   "open_prs": [],
+   "reason": "Remove SHA-1 support from shasum command due to cryptographic weakness.",
+   "scope": "one-file",
+   "title": "Remove sha1 support from shasum",
+   "url": "https://github.com/u-root/u-root/issues/3438",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-04-18",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3579,
+   "open_prs": [],
+   "reason": "Replace StartShell subprocess with unix.Exec to avoid holding boot resources like loop devices.",
+   "scope": "few-files",
+   "title": "menu: StartShell.Exec leaves boot cmd running",
+   "url": "https://github.com/u-root/u-root/issues/3579",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-05-14",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3593,
+   "open_prs": [],
+   "reason": "Fix cp argument validation to use correct working directory; include WorkingDir in stat calls.",
+   "scope": "few-files",
+   "title": "*cp* ignores working directory when checking argument validity",
+   "url": "https://github.com/u-root/u-root/issues/3593",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-06-13",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3628,
+   "open_prs": [],
+   "reason": "Add -regex command-line flag to find; leverages existing regex matching code.",
+   "scope": "one-file",
+   "title": "Support `-regex` flag to `find`",
+   "url": "https://github.com/u-root/u-root/issues/3628",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2024-11-13",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3180,
+   "open_prs": [],
+   "reason": "Fix strace to handle large programs by switching ptrace from pids to threads.",
+   "scope": "few-files",
+   "title": "Bug in u-root strace: Issues Tracing Large Programs",
+   "url": "https://github.com/u-root/u-root/issues/3180",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-01-07",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [],
+   "number": 3481,
+   "open_prs": [],
+   "reason": "Fix tar path handling to keep paths relative; avoid calling ResolvePath which produces absolute paths.",
+   "scope": "one-file",
+   "title": "Tar expects paths to be relative to the working dir",
+   "url": "https://github.com/u-root/u-root/issues/3481",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-12",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3665,
+   "open_prs": [],
+   "reason": "Fix predicate application in find argument parsing; ensure correct output matching GNU find behavior.",
+   "scope": "one-file",
+   "title": "find argument parsing is incorrectly implemented",
+   "url": "https://github.com/u-root/u-root/issues/3665",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2024-10-30",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3157,
+   "open_prs": [
+    {
+     "number": 3158,
+     "state": "MERGED",
+     "url": "https://github.com/u-root/u-root/pull/3158"
+    }
+   ],
+   "reason": "Add seccomp-bpf support to strace to filter syscalls and improve performance.",
+   "scope": "few-files",
+   "title": "Implement seccomp-bpf ",
+   "url": "https://github.com/u-root/u-root/issues/3157",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2025-01-08",
+   "difficulty": "medium",
+   "kind": "refactor",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3267,
+   "open_prs": [],
+   "reason": "Standardize verbose/debug flag across boot and localboot commands.",
+   "scope": "few-files",
+   "title": "Inconsistent command-line verbose logging flags",
+   "url": "https://github.com/u-root/u-root/issues/3267",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2025-05-18",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3384,
+   "open_prs": [],
+   "reason": "Improve kexec error messages to clarify what function failed and why, especially on ARM.",
+   "scope": "few-files",
+   "title": "kexec error feedback misleading / unclear",
+   "url": "https://github.com/u-root/u-root/issues/3384",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2026-06-22",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3645,
+   "open_prs": [],
+   "reason": "Fix defaultsh crash with -uinitcmd on console=ttyS0; regression from multi-console output commit bedf418.",
+   "scope": "few-files",
+   "title": "defaultsh crashes when using -uinitcmd and running on console=ttyS0",
+   "url": "https://github.com/u-root/u-root/issues/3645",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2024-08-29",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3088,
+   "open_prs": [],
+   "reason": "Fix build failure when using GO111MODULE=off to import u-root commands.",
+   "scope": "few-files",
+   "title": "Unable to import any commands",
+   "url": "https://github.com/u-root/u-root/issues/3088",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2024-10-15",
+   "difficulty": "medium",
+   "kind": "chore",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3133,
+   "open_prs": [],
+   "reason": "Remove vendor directory and manage all dependencies via Go modules.",
+   "scope": "cross-cutting",
+   "title": "remove vendor",
+   "url": "https://github.com/u-root/u-root/issues/3133",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2025-08-26",
+   "difficulty": "medium",
+   "kind": "refactor",
+   "labels": [],
+   "number": 3444,
+   "open_prs": [],
+   "reason": "Deduplicate kernel configs by removing redundant copies between configs/ and CI.",
+   "scope": "few-files",
+   "title": "deduplicate our configs",
+   "url": "https://github.com/u-root/u-root/issues/3444",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2025-12-10",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3474,
+   "open_prs": [],
+   "reason": "Implement argument passing in gosh script execution; populate $0...$n from command args.",
+   "scope": "one-file",
+   "title": "`gosh` truncates script arguments passed over the command-line",
+   "url": "https://github.com/u-root/u-root/issues/3474",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2024-08-06",
+   "difficulty": "hard",
+   "kind": "chore",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3063,
+   "open_prs": [],
+   "reason": "Track tinygo compatibility blockers for cmds/boot/boot.",
+   "scope": "cross-cutting",
+   "title": "tinygo:  cmds/boot/boot",
+   "url": "https://github.com/u-root/u-root/issues/3063",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-07-06",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3660,
+   "open_prs": [],
+   "reason": "Implement kernel handover (KHO) support in kexec; involves FDT serialization and new interface.",
+   "scope": "cross-cutting",
+   "title": "kexec with KHO (kernel handover) support",
+   "url": "https://github.com/u-root/u-root/issues/3660",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2025-06-04",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3397,
+   "open_prs": [],
+   "reason": "Implement mdev for automatic /dev management on device hotplug events.",
+   "scope": "cross-cutting",
+   "title": "New command: mdev",
+   "url": "https://github.com/u-root/u-root/issues/3397",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2025-10-12",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [],
+   "number": 3460,
+   "open_prs": [],
+   "reason": "Implement fdisk command for disk partition table management.",
+   "scope": "cross-cutting",
+   "title": "New command: fdisk",
+   "url": "https://github.com/u-root/u-root/issues/3460",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2025-10-12",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [],
+   "number": 3461,
+   "open_prs": [],
+   "reason": "Implement lsblk command to display block device information.",
+   "scope": "cross-cutting",
+   "title": "New command: lsblk",
+   "url": "https://github.com/u-root/u-root/issues/3461",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2025-10-12",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [],
+   "number": 3462,
+   "open_prs": [],
+   "reason": "Implement less pager command with scroll navigation and search capabilities.",
+   "scope": "cross-cutting",
+   "title": "New command: less",
+   "url": "https://github.com/u-root/u-root/issues/3462",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2026-01-23",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3489,
+   "open_prs": [],
+   "reason": "Integrate or implement qemu-guest-agent with virtio-serial and QMP protocol support.",
+   "scope": "cross-cutting",
+   "title": "Add a qemu-guest-agent",
+   "url": "https://github.com/u-root/u-root/issues/3489",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 2,
+   "created": "2026-06-17",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "Feature Request"
+   ],
+   "number": 3640,
+   "open_prs": [],
+   "reason": "Re-run govulncheck integration and fix any reported vulnerabilities.",
+   "scope": "few-files",
+   "title": "govulncheck",
+   "url": "https://github.com/u-root/u-root/issues/3640",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 3,
+   "created": "2024-12-27",
+   "difficulty": "hard",
+   "kind": "chore",
+   "labels": [],
+   "number": 3258,
+   "open_prs": [],
+   "reason": "Evaluate and document module pinning for reproducible builds.",
+   "scope": "cross-cutting",
+   "title": "Reproducibility of pinned go modules since switch from vendoring for a commit in the future? ",
+   "url": "https://github.com/u-root/u-root/issues/3258",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2024-10-31",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "Bug"
+   ],
+   "number": 3160,
+   "open_prs": [],
+   "reason": "Investigate invalid UTF-8 error when executing soft link commands in container.",
+   "scope": "unclear",
+   "title": "Other soft link commands cannot be executed.",
+   "url": "https://github.com/u-root/u-root/issues/3160",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 0,
+   "created": "2025-01-22",
+   "difficulty": "easy",
+   "kind": "docs",
+   "labels": [],
+   "number": 3282,
+   "open_prs": [],
+   "reason": "Clarify whether --boot=bb and --boot=gbb are the same option in README.",
+   "scope": "one-file",
+   "title": "[Question] Has a diference between gbb and bb?",
+   "url": "https://github.com/u-root/u-root/issues/3282",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 2,
+   "created": "2024-11-12",
+   "difficulty": "hard",
+   "kind": "chore",
+   "labels": [
+    "Feature Request",
+    "Discussion"
+   ],
+   "number": 3178,
+   "open_prs": [],
+   "reason": "Assess feasibility and value of hardware testing infrastructure for u-root.",
+   "scope": "cross-cutting",
+   "title": "Hardware QA System - is it useful for u-root?",
+   "url": "https://github.com/u-root/u-root/issues/3178",
+   "verified": false
+  }
+ ],
+ "language": "Go",
+ "n_candidates": 37,
+ "n_fetched": 169,
+ "n_verified": 20,
+ "open_issues": 169,
+ "owner_type": "Organization",
+ "repo": "u-root/u-root",
+ "scanned_at": "2026-07-29",
+ "stars": 3056
+}

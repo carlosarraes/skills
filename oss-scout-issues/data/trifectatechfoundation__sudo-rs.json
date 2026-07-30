@@ -1,0 +1,746 @@
+{
+ "cv": {
+  "audience": "Security-conscious engineers, Rust systems programmers",
+  "cv_signal": 4,
+  "reason": "Rewriting ubiquitous security-critical tool in Rust; signals deep systems and memory-safety expertise.",
+  "recognized": true
+ },
+ "issues": [
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2025-06-11",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "good first issue",
+    "C-checker"
+   ],
+   "number": 1153,
+   "open_prs": [
+    {
+     "number": 1147,
+     "state": "MERGED",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1147"
+    },
+    {
+     "number": 1558,
+     "state": "OPEN",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1558"
+    }
+   ],
+   "reason": "Emit warning when relative path ignored in secure_path in context.rs.",
+   "scope": "one-file",
+   "title": "Add warning when a relative path is part the path used for resolving commands",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1153",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-02-23",
+   "difficulty": "easy",
+   "kind": "refactor",
+   "labels": [
+    "msrv",
+    "test-framework"
+   ],
+   "number": 1471,
+   "open_prs": [],
+   "reason": "Replace custom pipe2 and UnixStream::pair with std::io::pipe after MSRV bump.",
+   "scope": "few-files",
+   "title": "Use std::io::pipe once MSRV is 1.87",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1471",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 0,
+   "created": "2026-04-23",
+   "difficulty": "easy",
+   "kind": "docs",
+   "labels": [
+    "documentation",
+    "good first issue"
+   ],
+   "number": 1564,
+   "open_prs": [],
+   "reason": "Create example PAM config files for Arch, Fedora, Debian to assist installation.",
+   "scope": "one-file",
+   "title": "Create example PAM config files?",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1564",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2024-11-04",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "good first issue",
+    "macos"
+   ],
+   "number": 902,
+   "open_prs": [
+    {
+     "number": 1540,
+     "state": "OPEN",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1540"
+    }
+   ],
+   "reason": "Implement starting_time and tty_device_id for MacOS Process.",
+   "scope": "few-files",
+   "title": "Implement sudo-specific `Process` functions for MacOS",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/902",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 1,
+   "created": "2026-07-09",
+   "difficulty": "easy",
+   "kind": "refactor",
+   "labels": [
+    "C-operatingsystem",
+    "chore"
+   ],
+   "number": 1653,
+   "open_prs": [],
+   "reason": "Add lifetime parameter or store OwnedFd to ensure FileLock does not outlive the locked file.",
+   "scope": "one-file",
+   "title": "Ensure FileLock doesn't outlive the locked file",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1653",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 5,
+   "comments": 2,
+   "created": "2026-07-07",
+   "difficulty": "easy",
+   "kind": "bug",
+   "labels": [
+    "bug",
+    "good first issue"
+   ],
+   "number": 1648,
+   "open_prs": [
+    {
+     "number": 1654,
+     "state": "OPEN",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1654"
+    },
+    {
+     "number": 1655,
+     "state": "OPEN",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1655"
+    }
+   ],
+   "reason": "Suppress trailing newline on stderr when prompt is empty, matching classic sudo behavior.",
+   "scope": "one-file",
+   "title": "`sudo -S -p ''` writes a newline to stderr",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1648",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2024-11-25",
+   "difficulty": "medium",
+   "kind": "chore",
+   "labels": [
+    "CI",
+    "freebsd"
+   ],
+   "number": 912,
+   "open_prs": [],
+   "reason": "Add FreeBSD CI jobs for compliance and e2e tests.",
+   "scope": "cross-cutting",
+   "title": "Also run compliance tests on FreeBSD in the CI",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/912",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-07-11",
+   "difficulty": "easy",
+   "kind": "refactor",
+   "labels": [
+    "minor",
+    "chore"
+   ],
+   "number": 1191,
+   "open_prs": [
+    {
+     "number": 1193,
+     "state": "MERGED",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1193"
+    }
+   ],
+   "reason": "Introduce ResolvedPath newtype for type-safe resolved path handling.",
+   "scope": "one-file",
+   "title": "Create a newtype for resolved paths",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1191",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-07-29",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "suggestion",
+    "C-sudoedit"
+   ],
+   "number": 1233,
+   "open_prs": [],
+   "reason": "Implement live file sync for sudoedit to update parent on each save.",
+   "scope": "cross-cutting",
+   "title": "Let `sudoedit` detect every write to the temporary file.",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1233",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-08-29",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "chore"
+   ],
+   "number": 1253,
+   "open_prs": [],
+   "reason": "Add deprecated class in defaults DSL to warn instead of error.",
+   "scope": "few-files",
+   "title": "Add possibility in `defaults/settings_dsl` for \"deprecated\" features.",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1253",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2025-09-11",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "C-pam",
+    "consultation"
+   ],
+   "number": 1267,
+   "open_prs": [],
+   "reason": "Implement passprompt setting from sudoers config with per-command support.",
+   "scope": "few-files",
+   "title": "Implement `passprompt`",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1267",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-02-16",
+   "difficulty": "easy",
+   "kind": "refactor",
+   "labels": [
+    "msrv"
+   ],
+   "number": 1456,
+   "open_prs": [
+    {
+     "number": 1413,
+     "state": "MERGED",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1413"
+    }
+   ],
+   "reason": "Remove DisplayOsStr implementation once MSRV reaches 1.87.",
+   "scope": "one-file",
+   "title": "Remove DisplayOsStr once MSRV is 1.87",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1456",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-04-17",
+   "difficulty": "easy",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 1552,
+   "open_prs": [],
+   "reason": "Add make install target to copy binary and set setuid flag.",
+   "scope": "one-file",
+   "title": "Add `make install`?",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1552",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 0,
+   "created": "2026-05-22",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 1595,
+   "open_prs": [
+    {
+     "number": 1592,
+     "state": "OPEN",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1592"
+    }
+   ],
+   "reason": "Align PAM fallback logic and error messages with sudo.ws when no tty is available.",
+   "scope": "few-files",
+   "title": "Error messages and askpass logic differs from sudo.ws when no tty is available",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1595",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-05-16",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 1584,
+   "open_prs": [],
+   "reason": "Add user-level config file to disable password feedback without root privileges.",
+   "scope": "few-files",
+   "title": "User config to disable the password \"feedback\"",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1584",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 1,
+   "created": "2026-07-07",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "bug",
+    "C-pam"
+   ],
+   "number": 1650,
+   "open_prs": [
+    {
+     "number": 1651,
+     "state": "OPEN",
+     "url": "https://github.com/trifectatechfoundation/sudo-rs/pull/1651"
+    }
+   ],
+   "reason": "Fix TTY read contention when sudo processes are piped by coordinating /dev/tty access.",
+   "scope": "cross-cutting",
+   "title": "A pipeline of two sudo invocations causes TTY contention",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1650",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2025-09-24",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "CI",
+    "test-framework"
+   ],
+   "number": 1280,
+   "open_prs": [],
+   "reason": "Fix flaky password_retry test by adjusting timing threshold.",
+   "scope": "few-files",
+   "title": "Spurious failure of can_control_retry_delay_using_pam test",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1280",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2025-12-09",
+   "difficulty": "medium",
+   "kind": "enhancement",
+   "labels": [
+    "enhancement",
+    "C-exec"
+   ],
+   "number": 1379,
+   "open_prs": [],
+   "reason": "Handle closed user tty by closing pty leader and sending SIGHUP to foreground group.",
+   "scope": "few-files",
+   "title": "Better handling of closed user tty",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1379",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2025-12-15",
+   "difficulty": "easy",
+   "kind": "chore",
+   "labels": [
+    "CI"
+   ],
+   "number": 1389,
+   "open_prs": [],
+   "reason": "Move generated man files to subdirectory or add CI check to prevent edits.",
+   "scope": "few-files",
+   "title": "Discourage modification of generated .man files",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1389",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 2,
+   "created": "2026-04-17",
+   "difficulty": "hard",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "C-exec"
+   ],
+   "number": 1553,
+   "open_prs": [],
+   "reason": "Add I/O logging support via pty to record all output of privileged commands.",
+   "scope": "cross-cutting",
+   "title": "Support I/O logging",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1553",
+   "verified": true
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 3,
+   "created": "2026-05-10",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement",
+    "C-exec"
+   ],
+   "number": 1582,
+   "open_prs": [],
+   "reason": "Implement TIMEOUT spec in sudoers and enforce time limit during command execution.",
+   "scope": "few-files",
+   "title": "`Timeout_Spec` support for sudoers user specification",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1582",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 4,
+   "comments": 3,
+   "created": "2026-07-13",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 1656,
+   "open_prs": [],
+   "reason": "Fix PAM conversation to handle empty password when nullok is set, matching original sudo behavior.",
+   "scope": "one-file",
+   "title": "`sudo-rs` cannot authenticate whose password is deleted",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1656",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2025-02-12",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "CI",
+    "test-framework"
+   ],
+   "number": 996,
+   "open_prs": [],
+   "reason": "Fix flaky shell_is_not_executable test that fails to capture stderr.",
+   "scope": "few-files",
+   "title": "Spurious failure of shell_is_not_executable test",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/996",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2025-02-24",
+   "difficulty": "easy",
+   "kind": "docs",
+   "labels": [
+    "documentation",
+    "good first issue"
+   ],
+   "number": 1005,
+   "open_prs": [],
+   "reason": "Write EXAMPLES section for man sudoers documentation.",
+   "scope": "one-file",
+   "title": "Add `EXAMPLES` section to `man sudoers`",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1005",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2025-12-02",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "CI",
+    "test-framework"
+   ],
+   "number": 1371,
+   "open_prs": [],
+   "reason": "Fix flaky syslog test that fails intermittently on missing COMMAND entry.",
+   "scope": "few-files",
+   "title": "Spurious failure of sudo::syslog::sudo_logs_every_executed_command",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1371",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 0,
+   "created": "2025-12-15",
+   "difficulty": "easy",
+   "kind": "test",
+   "labels": [
+    "test-framework"
+   ],
+   "number": 1390,
+   "open_prs": [],
+   "reason": "Add integration test for O_FLAG preservation, blocked on #1263 being fixed.",
+   "scope": "one-file",
+   "title": "Create integration test for preserving O_FLAG",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1390",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 1,
+   "created": "2024-10-23",
+   "difficulty": "medium",
+   "kind": "chore",
+   "labels": [
+    "test-framework",
+    "release"
+   ],
+   "number": 893,
+   "open_prs": [],
+   "reason": "Switch compliance tests to release build with debug assertions.",
+   "scope": "few-files",
+   "title": "Use release build for compliance tests?",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/893",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 3,
+   "comments": 3,
+   "created": "2026-04-11",
+   "difficulty": "medium",
+   "kind": "chore",
+   "labels": [
+    "CI",
+    "freebsd"
+   ],
+   "number": 1543,
+   "open_prs": [],
+   "reason": "Migrate FreeBSD CI from Cirrus to a GitHub action using FreeBSD VM.",
+   "scope": "few-files",
+   "title": "Cirrus CI is shutting down",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1543",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2025-11-11",
+   "difficulty": "easy",
+   "kind": "chore",
+   "labels": [
+    "consultation"
+   ],
+   "number": 1328,
+   "open_prs": [],
+   "reason": "Decide on version numbering scheme for sudo-rs releases.",
+   "scope": "one-file",
+   "title": "Version numbering",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1328",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 0,
+   "created": "2026-06-16",
+   "difficulty": "medium",
+   "kind": "enhancement",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 1618,
+   "open_prs": [],
+   "reason": "Decide whether to reject whole config line on trailing garbage, then implement the change.",
+   "scope": "one-file",
+   "title": "Should \"garbage at end of line\" be a hard error?",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1618",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 2,
+   "comments": 2,
+   "created": "2026-06-03",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "bug"
+   ],
+   "number": 1609,
+   "open_prs": [],
+   "reason": "Handle SIGINT during fingerprint scan, restart fingerprint after crash, and use master process.",
+   "scope": "cross-cutting",
+   "title": "Fingerprinting problems",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1609",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2025-07-23",
+   "difficulty": "easy",
+   "kind": "chore",
+   "labels": [
+    "good first issue",
+    "test-framework",
+    "chore"
+   ],
+   "number": 1217,
+   "open_prs": [],
+   "reason": "Refactor file reading into Env container in test framework.",
+   "scope": "one-file",
+   "title": "Put reading of files from a container in `Env`",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1217",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2025-07-23",
+   "difficulty": "medium",
+   "kind": "bug",
+   "labels": [
+    "non-compliant"
+   ],
+   "number": 1222,
+   "open_prs": [],
+   "reason": "Handle signal termination to clean up sudoedit temporary files.",
+   "scope": "few-files",
+   "title": "sudoedit does not clean up files when terminated by a signal",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1222",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2026-02-24",
+   "difficulty": "hard",
+   "kind": "bug",
+   "labels": [
+    "CI",
+    "test-framework"
+   ],
+   "number": 1475,
+   "open_prs": [],
+   "reason": "Diagnose and fix spurious hang of mark_fds_as_cloexec test in CI.",
+   "scope": "one-file",
+   "title": "Spurious hang of mark_fds_as_cloexec test",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1475",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 1,
+   "comments": 0,
+   "created": "2026-05-18",
+   "difficulty": "easy",
+   "kind": "enhancement",
+   "labels": [
+    "enhancement",
+    "consultation"
+   ],
+   "number": 1587,
+   "open_prs": [],
+   "reason": "Discuss whether parse errors should also be written to syslog beyond stderr.",
+   "scope": "one-file",
+   "title": "Should parse errors be committed to the syslog?",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1587",
+   "verified": false
+  },
+  {
+   "claimed": false,
+   "clarity": 0,
+   "comments": 1,
+   "created": "2025-11-18",
+   "difficulty": "medium",
+   "kind": "feature",
+   "labels": [
+    "enhancement"
+   ],
+   "number": 1342,
+   "open_prs": [],
+   "reason": "Implement passwd_timeout for clear text password inputs; body empty.",
+   "scope": "unclear",
+   "title": "Respect passwd_timeout for clear text inputs",
+   "url": "https://github.com/trifectatechfoundation/sudo-rs/issues/1342",
+   "verified": false
+  }
+ ],
+ "language": "Rust",
+ "n_candidates": 36,
+ "n_fetched": 79,
+ "n_verified": 20,
+ "open_issues": 79,
+ "owner_type": "Organization",
+ "repo": "trifectatechfoundation/sudo-rs",
+ "scanned_at": "2026-07-30",
+ "stars": 4432
+}

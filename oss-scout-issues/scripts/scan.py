@@ -12,10 +12,11 @@ import json
 import re
 import subprocess
 import time
+from collections import Counter
 from datetime import date, datetime, timedelta
 
-from lib import (CLAIM_PHRASES, CORE_PACE, NOISE_TITLES, RateLimited, cache_path,
-                 gh, log, parse_repo, write_json)
+from lib import (BLOCKING_LABELS, CLAIM_PHRASES, CORE_PACE, NOISE_TITLES, RateLimited,
+                 cache_path, gh, log, parse_repo, write_json)
 
 MODEL = "deepseek-v4-flash"
 PROVIDER = "opencode-go"
@@ -87,24 +88,29 @@ def fetch_issues(owner, name, max_pages):
     return out
 
 
-def keep(it, max_comments, max_age_days):
+def drop_reason(it, max_comments, max_age_days):
+    """Why this item is not a candidate, or None if it is. Reasons get tallied."""
     # The issues endpoint returns pull requests too; they are not issues.
     if it.get("pull_request"):
-        return False
+        return "is-a-pr"
     if it.get("assignee") or it.get("assignees"):
-        return False
+        return "assigned"
     if it.get("locked"):
-        return False
+        return "locked"
     if (it.get("user") or {}).get("login", "").endswith("[bot]"):
-        return False
+        return "bot-authored"
     if any(n in it["title"].lower() for n in NOISE_TITLES):
-        return False
+        return "meta-issue"
+    labels = [(l.get("name") or "").lower() for l in it.get("labels", [])]
+    for lab in labels:
+        if any(b in lab for b in BLOCKING_LABELS):
+            return f"blocked:{lab}"
     if it.get("comments", 0) > max_comments:
-        return False
+        return "too-crowded"
     created = datetime.fromisoformat(it["created_at"].replace("Z", "+00:00")).date()
     if created < date.today() - timedelta(days=max_age_days):
-        return False
-    return True
+        return "too-old"
+    return None
 
 
 def verify_taken(owner, name, numbers):
@@ -189,8 +195,15 @@ def main():
         cv = {}
 
     raw = fetch_issues(owner, name, args.max_pages)
-    cands = [it for it in raw if keep(it, args.max_comments, args.max_age_days)]
-    log(f"fetched {len(raw)} open items -> {len(cands)} unassigned candidates")
+    cands, dropped = [], Counter()
+    for it in raw:
+        why = drop_reason(it, args.max_comments, args.max_age_days)
+        if why is None:
+            cands.append(it)
+        else:
+            dropped[why.split(":")[0]] += 1
+    log(f"fetched {len(raw)} open items -> {len(cands)} candidates")
+    log(f"  dropped: {dict(dropped.most_common())}")
     if not cands:
         log("nothing to rank (all assigned, too crowded, or too old)")
         return
