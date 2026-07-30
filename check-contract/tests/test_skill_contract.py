@@ -202,6 +202,12 @@ class CheckContractSkillTests(unittest.TestCase):
         self.assertNotIn(-1, positions)
         self.assertEqual(positions, sorted(positions))
 
+    def test_terminal_json_has_no_markdown_wrapper_or_prose(self):
+        self.assertIn(
+            "return the exact canonical JSON without Markdown fences or prose",
+            self.flat_skill,
+        )
+
     def test_compound_request_uses_latest_token_in_one_logical_session(self):
         for phrase in (
             "For a compound A-then-B request",

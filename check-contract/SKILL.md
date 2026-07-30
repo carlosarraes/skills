@@ -30,13 +30,13 @@ and do not post, commit, push, or approve.
    JSON object with only `schema_version`, `session`, `nonce`, `packet_sha256`,
    `kind`, and `judgment`. `kind` is `code`.
 
-   Read and consume the packet's `semantics` and `chronology`; copy their generation
+   Now consume the packet's `semantics` and `chronology`; copy their generation
    values into `semantic_generation` and `chronology_generation`. The code response
-   `judgment` has those fields plus `clauses`, `path_assessments`,
+   `judgment` has those fields, `clauses`, `path_assessments`,
    and `deviations`. `clauses` contains exactly the runtime-issued clause IDs; each
-   value has `status`, `evidence_ids`, `reason`, and
+   has `status`, `evidence_ids`, `reason`, and
    `contract_boundary_changed`. `path_assessments` contains exactly the
-   runtime-issued changed-path IDs; each value has `surface`, `yagni_items`, and
+   runtime-issued changed-path IDs; each has `surface`, `yagni_items`, and
    `reuse_items`. `surface` has `status`, `evidence_ids`, and `reason`; items
    have `kind`, `evidence_ids`, and `reason`, and each reuse item copies the
    applicable issued `helper_fact_ids`. Deviations have `path_id`, `line`,
@@ -67,7 +67,7 @@ and do not post, commit, push, or approve.
    `reconciliation`; use only runtime-issued evidence IDs, select at most one
    runtime-issued probe ID, select no probe with `null`, and add no extra keys.
 
-5. Run the final `continue`:
+5. Run final `continue`:
 
    ```bash
    python <check-contract-skill-dir>/scripts/check_contract.py continue \
@@ -77,8 +77,8 @@ and do not post, commit, push, or approve.
 Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as
 returned. A compound transition may return the next target's `NeedJudgment`;
 repeat steps 2–5 with the returned `session`. `AuditComplete` and `AuditStopped`
-are terminal: return the exact canonical JSON, use no more tools, do not read the
-generated report, and exit immediately.
+are terminal: return the exact canonical JSON without Markdown fences or prose,
+use no more tools, do not read the generated report, and exit immediately.
 
 The runtime owns all other work: do not inspect the target repository directly;
 do not write the report directly; do not calculate aggregates; do not choose
