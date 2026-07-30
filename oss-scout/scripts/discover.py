@@ -10,9 +10,9 @@ import time
 from datetime import date, timedelta
 
 from lib import (CORE_PACE, CORPUS, NOISE_TITLES, PENDING, SEARCH_PACE, SLICES,
-                 RateLimited, append_jsonl, corpus_repos, core_remaining, gh, log,
-                 month_windows, read_json, read_jsonl, slice_id, split_window,
-                 write_json)
+                 RateLimited, append_jsonl, corpus_repos, core_remaining, exclusive,
+                 gh, log, month_windows, read_json, read_jsonl, slice_id,
+                 split_window, write_json)
 
 LANGS = ["rust", "go", "python", "typescript"]
 LABELS = ["help wanted", "good first issue"]
@@ -192,4 +192,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with exclusive():
+        main()

@@ -1,5 +1,6 @@
 """Shared helpers for oss-scout. Auth comes from the `gh` CLI, so no tokens here."""
 
+import contextlib
 import json
 import os
 import subprocess
@@ -31,6 +32,51 @@ DOMAINS = [
 
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by someone else
+    return True
+
+
+@contextlib.contextmanager
+def exclusive(name="corpus"):
+    """Refuse to run while another stage holds the data files.
+
+    discover.py appends to pending.jsonl and classify.py rewrites it, so two
+    concurrent runs — of the same stage or different ones — duplicate work
+    against the same queue. One lock covers both.
+    """
+    os.makedirs(DATA, exist_ok=True)
+    path = os.path.join(DATA, f".{name}.lock")
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        try:
+            pid = int((open(path).read().strip() or "0"))
+        except (ValueError, OSError):
+            pid = 0
+        if pid and _alive(pid):
+            raise SystemExit(
+                f"another oss-scout run holds the lock (pid {pid}).\n"
+                f"wait for it, or remove {path} if you are sure it is dead.")
+        log(f"clearing stale lock (pid {pid or 'unknown'} is gone)")
+        os.unlink(path)
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        yield
+    finally:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
 
 
 class RateLimited(Exception):

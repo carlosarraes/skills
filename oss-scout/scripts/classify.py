@@ -12,7 +12,8 @@ import re
 import subprocess
 import time
 
-from lib import CORPUS, DOMAINS, PENDING, append_jsonl, log, read_jsonl, write_jsonl
+from lib import (CORPUS, DOMAINS, PENDING, append_jsonl, exclusive, log, read_jsonl,
+                 write_jsonl)
 
 MODEL = "deepseek-v4-flash"
 PROVIDER = "opencode-go"
@@ -157,4 +158,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with exclusive():
+        main()
