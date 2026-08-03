@@ -4,46 +4,46 @@ description: Use only for explicit contract audits.
 disable-model-invocation: true
 ---
 
-# Immutable report-only audit
+Report-only. Runtime may create/replace only active `check-report.md`; do not fix
+code or edit contract/ledger; do not post/commit/push/approve.
 
-The runtime may create or replace only
-the active `check-report.md`; do not fix code, do not edit the contract or ledger,
-and do not post, commit, push, or approve.
-
-1. `<check-contract-skill-dir>`: absolute directory containing this loaded `SKILL.md`.
-   Invoke its absolute script path once:
+1. `<check-contract-skill-dir>`: absolute directory containing this loaded `SKILL.md`;
+   invoke its absolute script path once:
 
    python <check-contract-skill-dir>/scripts/check_contract.py start
 
-   No arguments; CLI consumes host-issued
-   `CHECK_CONTRACT_REQUEST_ID` capability. Do not inspect `start --help`. For a
-   compound A-then-B request, the host-issued request manifest owns both targets;
+   No-argument CLI consumes host-issued `CHECK_CONTRACT_REQUEST_ID` capability.
+   Do not inspect `start --help`. For a compound A-then-B request, the host-issued
+   request manifest owns both targets;
    keep one logical runtime session, use the latest returned `session` for each
    `continue`, and never run a second `start` command.
 
 2. `NeedJudgment` kind `code`: read code packet `packet_path`.
-   At `response_path`, write exactly one UTF-8
-   JSON object with only `schema_version`, `session`, `nonce`, `packet_sha256`,
-   `kind`, and `judgment`. `kind` is `code`.
-
-   Then consume the packet's `semantics` and `chronology`; copy their generation
+   At `response_path`, write exactly one UTF-8 JSON object with only
+   `schema_version`, `session`, `nonce`, `packet_sha256`, `kind`, and `judgment`.
+   `kind` is `code`; consume the packet's `semantics` and `chronology`; copy their generation
    values into `semantic_generation` and `chronology_generation`. `code response`
-   `judgment`: those fields, `clauses`, `path_assessments`, `deviations`.
+   `judgment`: `clauses`, `path_assessments`, `deviations`.
    `clauses`: JSON object keyed by exactly the runtime-issued clause IDs; values:
    `status,evidence_ids,reason,contract_boundary_changed`. `path_assessments`:
    JSON object keyed by exactly the runtime-issued changed-path IDs; values:
    `surface,yagni_items,reuse_items`. Surface: `status,evidence_ids,reason`; items:
-   `kind,evidence_ids,reason`. Every reuse item has `helper_fact_ids`:
-   applicable issued IDs or `[]`. `deviations`: JSON array; items:
+   `kind,evidence_ids,reason`. Every reuse item has `helper_fact_ids`: applicable
+   issued IDs or `[]`. `deviations`: JSON array; items:
    `path_id,line,description,evidence_ids,reason`; issued IDs;
    no extra keys.
    For each fidelity clause, choose evidence only from
    `fidelity_evidence_ids[clause_id]`; omit all others. Evaluate fidelity against the exact contract
    noun phrases. Independent-axis failures do not broaden those noun phrases or
    imply fidelity failure. Use one short sentence per reason.
+   Explicit assertions/`subTest` cases directly proving mapped behavior remain
+   demonstrative when grouped.
    `INTRODUCED_BEFORE_AFFECTED_IMPLEMENTATION` marks a used helper earned for the
    affected change, not YAGNI. Never strengthen issued `INDETERMINATE` chronology.
    `R`, `S`, or `K` failure alone does not create YAGNI.
+   Implementation-introduced or used does not itself prove earned; a code-proven dispensable wrapper can
+   be `UNEARNED_LOCAL` without a `K`-cap failure. Code-proven exact current-helper
+   compatibility is `DUPLICATED` despite `INDETERMINATE` chronology.
    Give every changed-path responsibility a reuse verdict; every path's `reuse_items`
    is nonempty; use `NO_REUSE_AVAILABLE`
    when issued full-HEAD search proves none.
@@ -60,9 +60,9 @@ and do not post, commit, push, or approve.
    python <check-contract-skill-dir>/scripts/check_contract.py continue \
      --session <session> --response <response_path>
 
-4. For `NeedJudgment` kind `reconciliation`, read its issued
-   reconciliation packet. Write reconciliation response at
-   `response_path`: match the packet's `response_schema` exactly. `kind` is
+4. Read the `NeedJudgment` kind `reconciliation` reconciliation packet. Write
+   reconciliation response at `response_path`: match the packet's
+   `response_schema` exactly. `kind` is
    `reconciliation`; use only runtime-issued evidence IDs, select at most one
    runtime-issued probe ID, select no probe with `null`, and add no extra keys.
 
@@ -71,13 +71,12 @@ and do not post, commit, push, or approve.
    python <check-contract-skill-dir>/scripts/check_contract.py continue \
      --session <session> --response <response_path>
 
-Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as
-returned. A compound transition may return the next target's `NeedJudgment`;
+Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` exactly as returned.
+A compound transition may return the next target's `NeedJudgment`;
 repeat steps 2–5 using returned `session`. `AuditComplete` and `AuditStopped`
-are terminal: return the exact canonical JSON without Markdown fences or prose,
-use no more tools, do not read the generated report, and exit immediately.
+are terminal. Return plain text: return the exact canonical JSON without Markdown
+fences or prose; copy the terminal tool result byte-for-byte; first/last characters
+`{`/`}`; nothing before/after; then stop: no more tools/report reads; exit immediately.
 
-Runtime owns other work: do not inspect the target repository directly;
-do not write the report directly; do not calculate aggregates;
-do not choose findings; do not choose the verdict or route; do not retry; and do not invoke a
-recommended skill.
+Runtime owns repository inspection/report writing/aggregate
+calculation/findings/verdict/route. Do none; do not retry/invoke a recommended skill.

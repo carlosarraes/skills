@@ -36,9 +36,9 @@ class CheckContractSkillTests(unittest.TestCase):
             "AuditComplete",
             "AuditStopped",
             "runtime-issued evidence IDs",
-            "do not inspect the target repository directly",
-            "do not choose the verdict or route",
-            "do not retry",
+            "Runtime owns repository inspection",
+            "Do none",
+            "do not retry/invoke a recommended skill",
         ):
             self.assertIn(phrase, self.skill)
         self.assertNotIn("git diff ", self.skill)
@@ -140,6 +140,13 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertNotIn(duplicated_policy, self.flat_skill)
 
+    def test_grouped_explicit_cases_still_demonstrate_mapped_behavior(self):
+        self.assertIn(
+            "Explicit assertions/`subTest` cases directly proving mapped behavior "
+            "remain demonstrative when grouped",
+            self.flat_skill,
+        )
+
     def test_responder_consumes_runtime_semantics_and_chronology(self):
         for phrase in (
             "consume the packet's `semantics` and `chronology`",
@@ -163,6 +170,25 @@ class CheckContractSkillTests(unittest.TestCase):
         ):
             self.assertIn(phrase, self.flat_skill)
 
+    def test_dispensable_wrapper_can_be_unearned_without_a_k_cap_failure(self):
+        for phrase in (
+            "Implementation-introduced or used does not itself prove earned",
+            "a code-proven dispensable wrapper can be `UNEARNED_LOCAL`",
+            "without a `K`-cap failure",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+
+    def test_current_compatible_helper_is_duplicate_without_known_chronology(self):
+        self.assertIn(
+            "Code-proven exact current-helper compatibility is `DUPLICATED` "
+            "despite `INDETERMINATE` chronology",
+            self.flat_skill,
+        )
+        self.assertIn(
+            "Never strengthen issued `INDETERMINATE` chronology",
+            self.flat_skill,
+        )
+
     def test_code_response_collections_have_unambiguous_json_shapes(self):
         for phrase in (
             "`clauses`: JSON object keyed by exactly the runtime-issued clause IDs",
@@ -185,12 +211,9 @@ class CheckContractSkillTests(unittest.TestCase):
 
     def test_runtime_owns_repository_actions_and_terminal_output(self):
         for phrase in (
-            "do not inspect the target repository directly",
-            "do not write the report directly",
-            "do not calculate aggregates",
-            "do not choose the verdict or route",
-            "do not retry",
-            "do not invoke a recommended skill",
+            "Runtime owns repository inspection/report writing/aggregate "
+            "calculation/findings/verdict/route",
+            "Do none; do not retry/invoke a recommended skill",
             "Surface every `NeedJudgment`, `AuditComplete`, or `AuditStopped` "
             "exactly as returned",
         ):
@@ -207,8 +230,7 @@ class CheckContractSkillTests(unittest.TestCase):
     def test_terminal_result_stops_all_audit_and_tool_work(self):
         for phrase in (
             "`AuditComplete` and `AuditStopped` are terminal",
-            "do not read the generated report",
-            "use no more tools",
+            "no more tools/report reads",
             "return the exact canonical JSON",
             "exit immediately",
         ):
@@ -231,6 +253,16 @@ class CheckContractSkillTests(unittest.TestCase):
             self.flat_skill,
         )
 
+    def test_terminal_json_has_positive_plain_text_lexical_contract(self):
+        for phrase in (
+            "Return plain text",
+            "copy the terminal tool result byte-for-byte",
+            "first/last characters `{`/`}`",
+            "nothing before/after",
+            "then stop",
+        ):
+            self.assertIn(phrase, self.flat_skill)
+
     def test_compound_request_uses_latest_token_in_one_logical_session(self):
         for phrase in (
             "For a compound A-then-B request",
@@ -247,12 +279,10 @@ class CheckContractSkillTests(unittest.TestCase):
 
     def test_safety_boundary_is_report_only_and_immutable(self):
         for phrase in (
-            "report-only",
-            "The runtime may create or replace only the active "
-            "`check-report.md`",
-            "do not fix code",
-            "do not edit the contract or ledger",
-            "do not post, commit, push, or approve",
+            "Report-only",
+            "Runtime may create/replace only active `check-report.md`",
+            "do not fix code or edit contract/ledger",
+            "do not post/commit/push/approve",
         ):
             self.assertIn(phrase, self.flat_skill)
 
