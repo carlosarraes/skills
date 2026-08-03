@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -149,9 +150,8 @@ class CheckContractSkillTests(unittest.TestCase):
 
     def test_responder_consumes_runtime_semantics_and_chronology(self):
         for phrase in (
-            "consume the packet's `semantics` and `chronology`",
-            "copy their generation values into `semantic_generation` and "
-            "`chronology_generation`",
+            "consume packet `semantics.generation` into `semantic_generation`",
+            "packet `chronology.generation` into `chronology_generation`",
             "Every reuse item has `helper_fact_ids`: applicable issued IDs or `[]`",
         ):
             self.assertIn(phrase, self.flat_skill)
@@ -197,6 +197,33 @@ class CheckContractSkillTests(unittest.TestCase):
             "`deviations`: JSON array",
         ):
             self.assertIn(phrase, self.flat_skill)
+
+    def test_code_judgment_declares_all_five_keys_in_exact_order_and_sources(self):
+        declaration = re.search(
+            r"`judgment`: exactly five keys, in order: ([^.]+)\.",
+            self.flat_skill,
+        )
+        self.assertIsNotNone(declaration)
+        self.assertEqual(
+            re.findall(r"`([^`]+)`", declaration.group(1)),
+            [
+                "semantic_generation",
+                "chronology_generation",
+                "clauses",
+                "path_assessments",
+                "deviations",
+            ],
+        )
+        self.assertIn(
+            "consume packet `semantics.generation` into `semantic_generation` "
+            "and packet `chronology.generation` into `chronology_generation`",
+            self.flat_skill,
+        )
+        self.assertNotIn(
+            "`code response` `judgment`: `clauses`, `path_assessments`, "
+            "`deviations`.",
+            self.flat_skill,
+        )
 
     def test_reconciliation_response_is_exact_and_probe_bounded(self):
         for phrase in (
@@ -262,6 +289,21 @@ class CheckContractSkillTests(unittest.TestCase):
             "then stop",
         ):
             self.assertIn(phrase, self.flat_skill)
+
+    def test_error_marked_audit_stopped_is_terminal_and_unrecoverable(self):
+        terminal_start = self.flat_skill.find(
+            "`AuditComplete` and `AuditStopped` are terminal"
+        )
+        terminal_end = self.flat_skill.find("Runtime owns", terminal_start)
+        self.assertGreaterEqual(terminal_start, 0)
+        self.assertGreater(terminal_end, terminal_start)
+        terminal_section = self.flat_skill[terminal_start:terminal_end]
+        for phrase in (
+            "Nonzero/error-marked tool-result `AuditStopped`",
+            "terminal, not recoverable",
+            "`ReportFindings` and all subsequent tools forbidden",
+        ):
+            self.assertIn(phrase, terminal_section)
 
     def test_compound_request_uses_latest_token_in_one_logical_session(self):
         for phrase in (
