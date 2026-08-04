@@ -25,6 +25,7 @@ Claude Code skills for development workflows.
 | `carraes-reviewer` | Code reviewer in Carlos's voice and priorities; plugs into `review-swarm` (draft — pending mined review history) |
 | `ship-gitflow` | Ships a finished ticket through the acme twin-branch flow — `-prd`/`-hml` counterparts via `bt pick`, PRs with the team invocation, both pipelines watched to green |
 | `qa-evidence` | Records a QA run in the team QA sheet — ticket tab, rows from row 10, `Sucesso [DD/MM]` markers, PM/TL columns untouched, one atomic write via gws |
+| `triage-incident` | Turns a pasted prod/homolog symptom into a bug-vs-expected verdict with cited mb/dog/code evidence; read-only, cards proposed but never created without approval |
 | `explain-diff` | Generates a teaching artifact (Background → Intuition → literate walkthrough → quiz) so you deeply understand a subsystem or diff; renders via `visual-explainer` |
 | `video-extract` | Pulls clean transcripts from one or more YouTube videos (captions-first via yt-dlp), ready to read or mine |
 
