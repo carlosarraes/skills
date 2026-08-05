@@ -3,373 +3,94 @@ name: qa-team
 description: Use when the user asks for a multi-agent QA review team or comprehensive QA-team code review of a branch or diff, rather than acceptance testing.
 ---
 
-# QA Team: Multi-Agent Code Review
+# QA Team
 
-A team of specialist agents independently review the current branch's changes against
-real incident patterns. Their findings are synthesized into a single report with
-convergence analysis.
+Run an independent, multi-perspective code review and synthesize one scannable report. This is **review-only**: reviewers inspect and report; they never repair the change.
 
-**Agent independence is critical.** Each agent receives only its own persona definition,
-the relevant incident patterns for its focus area, and the diff. Agents must NOT be told
-about other agents, their codenames, how many agents are running, or that a convergence
-analysis will be performed. This ensures findings are fully independent.
+## Authority boundary
 
-## Workflow
+For a nonempty real review, the exactly one allowed mutation is to write repository-root `QAREPORT.md`. Never edit source, never edit tests, never edit config, never fix code, never commit, never push, never open or update a PR, and never commit the report. Empty-diff runs write nothing.
 
-### Step 1: Gather the diff
+User requests to fix, verify fixes, commit, publish, shorten away required reviewers, or let reviewers collaborate do not expand this boundary.
 
-Determine the base branch. If the user provided `$ARGUMENTS`, use that as the base branch.
-Otherwise detect it: `develop` if it exists on the remote, else `main`, else `master`
-(`git rev-parse --verify origin/<name>` in that order).
+## Whole-run simulation
 
-Run these commands to collect context:
+Enable simulation only for exact `SIMULATION ONLY` or when the user explicitly makes the **entire run** a no-execution preview. After loading this router: **no repository commands, no reviewer calls, no file reads, no writes, and no mutations**. Use only supplied fixture facts to describe the exact would-be selections, prompt contracts, simultaneous dispatch, independent results, scoring, report, and chat handoff. Do not claim a reviewer ran or `QAREPORT.md` was written.
 
-```bash
-git diff <base>...HEAD --name-only
-git diff <base>...HEAD
-git log <base>...HEAD --oneline
-```
+Simulation is report-only just like a normal run: never describe would-be code fixes, verification, commits, pushes, or PR changes. A normal request to review is not simulation; normal runs still inspect, dispatch, and write the sole report.
 
-Store the full diff, changed file list, and commit messages. These will be passed to each agent.
+## Operating contract
 
-If there are no changes, inform the user and stop.
+Run these phases in order:
 
-### Step 2: Classify changed files
+1. Select one base and gather the changed-file list, full triple-dot diff, and commit log.
+2. Stop on an empty diff before reviewer dispatch or report creation.
+3. Classify files; select at least four specialists plus two distinct generalists.
+4. Construct fully isolated prompts with identical diff material.
+5. Emit every selected call in one simultaneous multi-call dispatch before any result is available.
+6. Wait for every independent review, then converge findings, score in strict order, and write one report.
+7. Give a brief chat handoff naming the verdict and top findings.
 
-Categorize changed files to determine which agents are relevant:
+## 1. Select scope and reviewers
 
-| File pattern                                          | Relevant agents                                    |
-| ----------------------------------------------------- | -------------------------------------------------- |
-| Migrations (`migrations/`, `*.sql` DDL)               | database, reliability, compatibility               |
-| Backend views/API (Django views, serializers, urls)   | security, reliability, performance, data-integrity |
-| Background tasks (Celery/cron/queue consumers)        | reliability, performance, data-integrity           |
-| `*.tsx`, `*.ts` (frontend)                            | frontend, security, performance, copy              |
-| Raw SQL / ORM query changes                           | database, performance, data-integrity              |
-| Deploy/runtime config (Docker, env, infra manifests)  | compatibility, reliability                         |
-| `requirements*.txt`, `pyproject.toml`, `package.json` | security, compatibility                            |
-| Public API / SDK-facing code                          | compatibility, frontend, security, copy            |
-| Any file with user-facing strings                     | copy                                               |
-| CI workflows (GitHub Actions, Bitbucket Pipelines)    | security                                           |
+Read [agent selection](references/agent-selection.md) in full **before selecting the base** and **before classifying** files.
 
-Always run at least 4 specialist agents. If fewer than 4 are relevant based on file
-classification, add the most broadly applicable ones (reliability, security, performance,
-compatibility) until at least 4 specialists are active.
+An explicit base wins. Otherwise probe exactly `origin/develop → origin/main → origin/master` and choose the first existing remote. Use the same selected base for `--name-only`, the complete `<base>...HEAD` diff, and `<base>...HEAD` commit log. Validate remote names and file taxonomy against the current repository.
 
-**Always launch both generalist agents** (`generalist-a` and `generalist-b`) regardless of
-file classification. They review all changes.
+An empty diff is terminal: tell the user there are no changes relative to the selected base and stop before reviewer dispatch; do not write `QAREPORT.md` even if requested.
 
-### Step 3: Launch parallel review agents
+For a nonempty diff, select relevant specialist domains. If fewer than four are selected, add missing broad specialists in this order until the floor is met: `reliability → security → performance → compatibility`. Always deploy at least four specialists and always add two distinct generalists:
 
-Launch all relevant agents **simultaneously** using the Agent tool.
+- generalist A: fresh-eyes correctness/maintainability as a senior engineer;
+- generalist B: adversarial breakability as a QA engineer.
 
-**CRITICAL:** Launch ALL agents in a single message with multiple Agent tool calls so they
-run in true parallel. Do NOT launch them sequentially.
+Do not describe generalist A as a “new team member”; isolation forbids `team` language in any recipient prompt.
 
-**CRITICAL — Agent independence:** Each agent must operate in total isolation. Do NOT
-include any of the following in any agent's prompt:
+## 2. Build isolated prompts and dispatch once
 
-- Names, codenames, or descriptions of other agents
-- The number of agents being launched
-- That a convergence analysis will be performed
-- That other reviewers are looking at the same code
-- Any reference to a "team" of reviewers
+Read only the selected sections of [personas](references/personas.md) and [incident patterns](references/incident-patterns.md) **before constructing specialist prompts**. Then read [reviewer prompts](references/reviewer-prompts.md) in full **before constructing any prompt** and **before dispatch**.
 
-Each agent believes it is the sole reviewer. This ensures fully independent findings.
+Every specialist receives only its own persona/checklist, only matching incident patterns, and the shared changed files/commit log/full diff. Copy receives no incident patterns. Generalists receive their distinct role instructions and shared diff material, not specialist personas or incident patterns.
 
-#### Specialist agent prompt template
+Total isolation is mandatory. No recipient prompt may reveal another reviewer, another role/name/codename, reviewer count, `team`, collaboration, planned convergence, synthesis, or another result. Each reviewer acts as the sole reviewer.
 
-For each specialist agent (security, database, reliability, performance, frontend,
-compatibility, data-integrity, copy), build the prompt from these parts:
+Every prompt requires reading the full diff and at least 50 lines above and below each changed location. Every response contains exact risk, structured findings with severity/file-line/why/suggestion, and summary; specialists also return checklist coverage.
 
-1. **Role** — Only this agent's persona description and checklist from `references/personas.md`
-2. **Context** — Only the incident patterns relevant to this agent's focus from
-   `references/incident-patterns.md`. Omit for the copy agent.
-3. **Diff material** — Changed files, commit messages, and the full diff
+Emit all selected reviewer calls together in **one simultaneous multi-call dispatch**. All selected calls must be emitted before any result can influence a prompt. Never launch sequentially or dispatch generalists later.
 
-```text
-You are a code reviewer specializing in {FOCUS_AREA}.
+## 3. Converge, score, and report
 
-## Your expertise
-{PERSONA_DESCRIPTION_AND_CHECKLIST from references/personas.md — this agent's section only}
+Read [synthesis and report](references/synthesis-and-report.md) in full **before convergence** and **before writing** `QAREPORT.md`. Converge only after every independent review completes. Merge materially identical concerns, preserve every contributing reviewer, and mark convergence as higher confidence; do not create extra risk votes from duplicates.
 
-## Known failure patterns
-{RELEVANT_PATTERNS from references/incident-patterns.md — only patterns matching
-this agent's focus area. Omit this entire section for the copy agent.}
+Exclude copy-only severity from blocking aggregation: copy-only findings are nonblocking nits even if the copy reviewer labels one CRITICAL.
 
-## Code changes to review
+Evaluate in this order and stop at the first matching risk rule:
 
-### Changed files
-{FILE_LIST}
+1. Any CRITICAL → CRITICAL.
+2. Two HIGH or one HIGH + two MEDIUM → HIGH.
+3. One HIGH or three MEDIUM → MEDIUM.
+4. Otherwise → LOW.
 
-### Commit messages
-{COMMIT_LOG}
+Map risk exactly:
 
-### Full diff
-{FULL_DIFF}
+- CRITICAL → 🚫 BLOCKED
+- HIGH → ⚠️ REQUEST CHANGES
+- MEDIUM → 💬 APPROVE WITH NITS
+- LOW with no actionable findings → ✅ APPROVE
 
-## Instructions
+Write exactly one `QAREPORT.md` in the repository root for a nonempty real run. It includes branch/base/date/file count/deployed reviewers, concise change summary/key findings, risk/verdict rationale, a summary row for **all deployed reviewers** including no-finding reviewers, risk legend/copy note, and priority-sorted deduplicated findings. Every finding starts `⬜ Open` and includes location, all contributing reviewers, reasoning, suggested fix, and convergence marker where applicable.
 
-1. Read the full diff carefully. For each changed file, also read the surrounding code
-   context using the Read tool (at least 50 lines above and below each change) to
-   understand what the change does in context.
+The chat handoff stays brief: verdict, top findings, and report path.
 
-2. Apply your review checklist systematically. For each item, determine if the change
-   introduces a risk.
+## Never rules
 
-3. Produce your review in this EXACT format:
-
-**Risk Level:** CRITICAL / HIGH / MEDIUM / LOW / NONE
-
-**Findings:**
-
-For each finding:
-- **[SEVERITY]** `file:line` — Description of the issue
-  - Why it matters: {explanation referencing known failure patterns if applicable}
-  - Suggestion: {specific fix or mitigation}
-
-If no findings: "No issues found in my focus area."
-
-**Checklist Coverage:**
-List each checklist item and mark it [x] reviewed or [-] not applicable.
-
-**Summary:**
-One paragraph summarizing your overall assessment.
-```
-
-#### Generalist agent prompt template
-
-Always launch both generalist agents (`generalist-a` and `generalist-b`). Their prompts
-are intentionally different — each has a distinct review angle to maximize the chance
-of surfacing issues that specialists miss.
-
-**Generalist A** — reviews from a "new team member" perspective:
-
-```text
-You are a senior software engineer reviewing this code change for the first time.
-You have no prior context about the codebase — approach it with fresh eyes.
-
-Focus on things that would concern you if you saw this code in a pull request:
-- Does the code do what the commit messages claim?
-- Are there obvious bugs, logic errors, or edge cases?
-- Is error handling adequate? What happens when things fail?
-- Are there race conditions or concurrency issues?
-- Is the code readable and maintainable?
-- Are there any "that looks wrong" moments?
-
-Do NOT focus on style, formatting, or minor nits. Focus on correctness and safety.
-
-## Code changes to review
-
-### Changed files
-{FILE_LIST}
-
-### Commit messages
-{COMMIT_LOG}
-
-### Full diff
-{FULL_DIFF}
-
-## Instructions
-
-1. Read the full diff carefully. For each changed file, also read the surrounding code
-   context using the Read tool (at least 50 lines above and below each change).
-
-2. Think about what could go wrong. Consider edge cases, failure modes, and
-   assumptions the author may have made.
-
-3. Produce your review in this EXACT format:
-
-**Risk Level:** CRITICAL / HIGH / MEDIUM / LOW / NONE
-
-**Findings:**
-
-For each finding:
-- **[SEVERITY]** `file:line` — Description of the issue
-  - Why it matters: {explanation}
-  - Suggestion: {specific fix or mitigation}
-
-If no findings: "No issues found."
-
-**Summary:**
-One paragraph summarizing your overall assessment.
-```
-
-**Generalist B** — reviews from an "adversarial tester" perspective:
-
-```text
-You are a QA engineer who tries to break things. Your job is to think about how
-this code could fail in production, be misused, or cause unexpected behavior.
-
-Think like an attacker, an impatient user, a misconfigured deployment, or an
-edge-case dataset. For each change, ask:
-- What if the input is malformed, huge, empty, or malicious?
-- What if the external service is slow, down, or returns garbage?
-- What if two requests hit this code at the same time?
-- What if this runs against a database with millions of rows?
-- What happens during deployment — is there a window where old and new code coexist?
-- What if a developer misunderstands this code and extends it incorrectly?
-
-Do NOT focus on style or readability. Focus on breakability.
-
-## Code changes to review
-
-### Changed files
-{FILE_LIST}
-
-### Commit messages
-{COMMIT_LOG}
-
-### Full diff
-{FULL_DIFF}
-
-## Instructions
-
-1. Read the full diff carefully. For each changed file, also read the surrounding code
-   context using the Read tool (at least 50 lines above and below each change).
-
-2. Try to find ways to break it. Think adversarially.
-
-3. Produce your review in this EXACT format:
-
-**Risk Level:** CRITICAL / HIGH / MEDIUM / LOW / NONE
-
-**Findings:**
-
-For each finding:
-- **[SEVERITY]** `file:line` — Description of the issue
-  - Why it matters: {explanation}
-  - Suggestion: {specific fix or mitigation}
-
-If no findings: "No issues found."
-
-**Summary:**
-One paragraph summarizing your overall assessment.
-```
-
-### Step 4: Synthesize the report
-
-After all agents complete, compile their findings into a unified report.
-
-#### 4a. Convergence analysis
-
-Check if multiple agents flagged the same file or concern. Convergent findings
-(independently identified by 2+ agents) are higher confidence and should be highlighted
-in the summary.
-
-#### 4b. Risk scoring
-
-Compute an overall risk score:
-
-- CRITICAL: Any agent returned Risk Level CRITICAL -> overall CRITICAL
-- HIGH: 2+ agents returned Risk Level HIGH, or 1 HIGH + 2 MEDIUM agents -> overall HIGH
-- MEDIUM: 1 agent returned Risk Level HIGH, or 3+ agents returned Risk Level MEDIUM -> overall MEDIUM
-- LOW: Only LOW/NONE agent risk levels -> overall LOW
-
-#### 4c. Verdict
-
-Map overall risk to a verdict:
-
-- ✅ **APPROVE** — Overall LOW risk, no actionable findings
-- 💬 **APPROVE WITH NITS** — MEDIUM risk, minor suggestions that won't block merge
-- ⚠️ **REQUEST CHANGES** — HIGH risk, specific fixes needed before merge
-- 🚫 **BLOCKED** — CRITICAL risk, blocking security/data issues found
-
-#### 4d. Final report format
-
-Write the report to `QAREPORT.md` in the repository root using the Write tool,
-then present a brief summary to the user with the verdict and top findings.
-
-The report MUST use emojis for visual structure and avoid long prose paragraphs.
-Keep everything scannable — tables, checklists, and short bullet points.
-
-```markdown
-# 🔍 QA Team Review Report
-
-| Key                 | Value                   |
-| ------------------- | ----------------------- |
-| **Branch**          | `{branch_name}`         |
-| **Base**            | `{base_branch}`         |
-| **Files changed**   | {count}                 |
-| **Agents deployed** | {emoji + codename list} |
-| **Date**            | {YYYY-MM-DD}            |
-
----
-
-## 📋 Summary
-
-{2-4 bullet points: what was changed and why. No long paragraphs.}
-
-### Key findings
-
-- {1-line per convergent or critical/high finding, with emoji severity prefix}
-
----
-
-## 🏁 Verdict
-
-> {emoji} **{APPROVE / APPROVE WITH NITS / REQUEST CHANGES / BLOCKED}**
-
-{1-2 sentences explaining the verdict. Reference the top blocking items if not approving.}
-
----
-
-## 👥 Agent summaries
-
-| Agent             | Risk                 | Summary                           |
-| ----------------- | -------------------- | --------------------------------- |
-| 🔒 security       | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 🗄️ database       | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 🔄 reliability    | {risk emoji + level} | {1-2 sentence summary from agent} |
-| ⚡ performance    | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 🎨 frontend       | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 🔗 compatibility  | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 📊 data-integrity | {risk emoji + level} | {1-2 sentence summary from agent} |
-| ✏️ copy           | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 🧑‍💻 generalist-a   | {risk emoji + level} | {1-2 sentence summary from agent} |
-| 🕵️ generalist-b   | {risk emoji + level} | {1-2 sentence summary from agent} |
-
-(Only include rows for agents that were deployed.)
-
-**Note:** ✏️ copy findings are always non-blocking nits. 🧑‍💻 generalist-a and 🕵️ generalist-b
-are independent generalist reviewers used for convergence validation — their findings
-carry extra weight when they independently match a specialist's finding.
-
-Risk emojis: 🔴 CRITICAL, 🟠 HIGH, 🟡 MEDIUM, 🟢 LOW, ⚪ NONE
-
----
-
-## 📝 Findings
-
-Actionable findings as a checklist table, sorted by priority (highest first).
-
-Each row is a checklist item. The `Status` column starts as `⬜ Open`.
-Use convergence markers when 2+ agents flagged the same issue.
-
-| #   | Status  | Priority    | Finding       | Location    | Agents      | Reasoning                                                    | Suggested fix  |
-| --- | ------- | ----------- | ------------- | ----------- | ----------- | ------------------------------------------------------------ | -------------- |
-| 1   | ⬜ Open | 🔴 Critical | {short title} | `file:line` | {codenames} | {why it matters — reference incident patterns if applicable} | {specific fix} |
-| 2   | ⬜ Open | 🟠 High     | {short title} | `file:line` | {codenames} | {reasoning}                                                  | {fix}          |
-| 3   | ⬜ Open | 🟡 Medium   | {short title} | `file:line` | {codenames} | {reasoning}                                                  | {fix}          |
-| ... | ...     | ...         | ...           | ...         | ...         | ...                                                          | ...            |
-| N   | ⬜ Open | 🟢 Low      | {short title} | `file:line` | {codenames} | {reasoning}                                                  | {fix}          |
-
-Priority mapping:
-
-- 🔴 Critical — Security vulnerability, data loss, or production outage risk
-- 🟠 High — Significant bug or security concern, must fix before merge
-- 🟡 Medium — Should fix, but not a merge blocker
-- 🟢 Low — Nit or minor improvement, nice to have
-
-Convergent findings (flagged by 2+ agents independently) should be noted
-in the `Agents` column and carry higher confidence.
-```
-
-## Reference Files
-
-### Persona Definitions
-
-- **`references/personas.md`** -- Full persona descriptions, context, and review checklists for specialist agents (not used for generalists — they have their own prompts)
-
-### Incident Patterns
-
-- **`references/incident-patterns.md`** -- Synthesized failure patterns from production incidents, used to ground specialist agent reviews in real-world failure modes (not used for generalists)
+- Never mix bases across file list, full diff, and commit log.
+- Never dispatch or write a report for an empty diff.
+- Never deploy fewer than four specialists or omit either distinct generalist.
+- Never split reviewer calls across batches, serialize them, or leak results into later prompts.
+- Never reveal other-reviewer/team/count/collaboration/convergence/synthesis information in a recipient prompt.
+- Never give copy incident patterns or a specialist another persona/unrelated patterns.
+- Never synthesize before all reviews complete or fabricate a finding.
+- Never reorder the risk rules, majority-vote, let copy block, or turn convergence into another risk vote.
+- Never omit a deployed reviewer row, even when it has no findings.
+- Never perform any mutation except the one allowed report write in a nonempty real run.

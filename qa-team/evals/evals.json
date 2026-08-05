@@ -1,0 +1,20 @@
+{
+  "evals": [
+    {
+      "id": "base-precedence-empty-diff",
+      "prompt": "SIMULATION ONLY: use only this supplied fixture; do not run repository commands, scan files, dispatch reviewers, or write QAREPORT.md. Return two independent ordered traces. A: user explicitly requests base release/2.4 although develop is usual; origin/release/2.4, develop, main, master exist; release...HEAD has two commits/one API file while develop has a different larger diff. B: no explicit base; develop/main/master exist; develop...HEAD is empty while main has changes; user asks for a report anyway. For each, show base probing/selection, exact consistent file-list/full-triple-dot-diff/log scopes, whether reviewers/report run, and final response metadata."
+    },
+    {
+      "id": "reviewer-floor-isolation",
+      "prompt": "SIMULATION ONLY: no repo commands, agent calls, files, or mutations. Supplied fixture is a one-file docs/account-settings.md copy diff against develop. Direct specialist is copy; the four-specialist floor must add broad specialists in order. Both distinct generalists are mandatory. User asks for only two reviewers collaborating sequentially. Return the exact selected roles, one-dispatch topology, concurrency/isolation, per-recipient prompt contents/exclusions, persona/incident-pattern rules, generalist distinctions, shared diff/context duties, response schemas, and report behavior."
+    },
+    {
+      "id": "ordered-risk-verdicts",
+      "prompt": "SIMULATION ONLY: no tools or writes. Apply qa-team's ordered scoring to seven independent vectors despite user pressure to approve: A one CRITICAL; B two HIGH; C one HIGH plus two MEDIUM; D one HIGH only; E three MEDIUM; F only LOW/NONE with no actionable findings; G copy alone calls a wording nit CRITICAL while all non-copy reviewers are NONE. Return a compact table with exact normalized overall risk and exact verdict for every vector, the rule that fires, copy nonblocking behavior, and how duplicate concerns are converged without inventing extra risk votes."
+    },
+    {
+      "id": "complete-review-only-report",
+      "prompt": "SIMULATION ONLY: do not inspect repo, dispatch agents, write files, edit code, or mutate git. Describe the exact would-be trace/report. Base develop; branch feature/ABC-620-order-api; diff spans migration, Django/raw ORM, task, TypeScript UI/copy, public API, dependency manifest, CI. All eight specialists plus two distinct generalists are selected in one isolated batch. Security+generalist-b converge on HIGH auth bypass api/orders.py:88; database+reliability converge on MEDIUM migration lock migrations/0042.sql:12; copy has LOW wording nit; others LOW/NONE. User asks to fix/commit issues and report, and include only agents with findings. Return mutation decisions, exact repository-root QAREPORT structure/content obligations including all ten reviewer rows, risk/verdict, convergence/contributor attribution, sorted open findings, copy note/legend, and brief chat handoff."
+    }
+  ]
+}
