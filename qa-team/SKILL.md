@@ -35,11 +35,13 @@ Run these phases in order:
 
 Read [agent selection](references/agent-selection.md) in full **before selecting the base** and **before classifying** files.
 
-An explicit base wins. Otherwise probe exactly `origin/develop → origin/main → origin/master` and choose the first existing remote. Use the same selected base for `--name-only`, the complete `<base>...HEAD` diff, and `<base>...HEAD` commit log. Validate remote names and file taxonomy against the current repository.
+An explicit base wins: the explicit base is used verbatim as supplied. Never prefix or normalize an explicit base; only automatic detection probes `origin/`. Without an explicit value, probe exactly `origin/develop → origin/main → origin/master` and choose the first existing remote. Use the same selected base for `--name-only`, the complete `<base>...HEAD` diff, and `<base>...HEAD` commit log. Validate remote names and file taxonomy against the current repository.
 
 An empty diff is terminal: tell the user there are no changes relative to the selected base and stop before reviewer dispatch; do not write `QAREPORT.md` even if requested.
 
 For a nonempty diff, select relevant specialist domains. If fewer than four are selected, add missing broad specialists in this order until the floor is met: `reliability → security → performance → compatibility`. Always deploy at least four specialists and always add two distinct generalists:
+
+Canonical specialist domains: `security`, `database`, `reliability`, `performance`, `frontend`, `compatibility`, `data-integrity`, `copy`. All eight plus both generalists means ten exact summary rows.
 
 - generalist A: fresh-eyes correctness/maintainability as a senior engineer;
 - generalist B: adversarial breakability as a QA engineer.
@@ -60,9 +62,11 @@ Emit all selected reviewer calls together in **one simultaneous multi-call dispa
 
 ## 3. Converge, score, and report
 
-Read [synthesis and report](references/synthesis-and-report.md) in full **before convergence** and **before writing** `QAREPORT.md`. Converge only after every independent review completes. Merge materially identical concerns, preserve every contributing reviewer, and mark convergence as higher confidence; do not create extra risk votes from duplicates.
+Read [synthesis and report](references/synthesis-and-report.md) in full **before convergence** and **before writing** `QAREPORT.md`. Converge only after every independent review completes.
 
 Exclude copy-only severity from blocking aggregation: copy-only findings are nonblocking nits even if the copy reviewer labels one CRITICAL.
+
+Score the per-reviewer risk vector before deduplicating findings, with exactly one risk vote per deployed reviewer. Deduplicate only report rows after scoring. Preserve every contributing reviewer and mark convergence as higher confidence. Do not create extra risk votes: duplicates add no votes beyond actual reviewer levels.
 
 Evaluate in this order and stop at the first matching risk rule:
 

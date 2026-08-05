@@ -62,6 +62,16 @@ class QaTeamProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(phrase, normalized)
 
+    def test_explicit_base_is_never_rewritten_as_a_remote(self):
+        router = " ".join(self.body.lower().split())
+        selection = " ".join(
+            (REFERENCES / "agent-selection.md").read_text(encoding="utf-8").lower().split()
+        )
+        for text in (router, selection):
+            self.assertIn("explicit base is used verbatim as supplied", text)
+            self.assertIn("never prefix or normalize an explicit base", text)
+            self.assertIn("only automatic detection probes `origin/`", text)
+
     def test_router_exposes_exact_ordered_scoring_and_verdicts(self):
         normalized = " ".join(self.body.lower().split())
         for phrase in (
@@ -78,6 +88,29 @@ class QaTeamProgressiveDisclosureTests(unittest.TestCase):
             "do not create extra risk votes",
         ):
             self.assertIn(phrase, normalized)
+
+        synthesis = " ".join(
+            (REFERENCES / "synthesis-and-report.md")
+            .read_text(encoding="utf-8")
+            .lower()
+            .split()
+        )
+        for text in (normalized, synthesis):
+            for phrase in (
+                "score the per-reviewer risk vector before deduplicating findings",
+                "exactly one risk vote per deployed reviewer",
+                "deduplicate only report rows after scoring",
+                "duplicates add no votes beyond actual reviewer levels",
+            ):
+                self.assertIn(phrase, text)
+
+    def test_router_exposes_the_canonical_specialist_roster_for_simulation(self):
+        normalized = " ".join(self.body.lower().split())
+        self.assertIn(
+            "canonical specialist domains: `security`, `database`, `reliability`, `performance`, `frontend`, `compatibility`, `data-integrity`, `copy`",
+            normalized,
+        )
+        self.assertIn("all eight plus both generalists means ten exact summary rows", normalized)
 
     def test_review_only_boundary_allows_exactly_one_report_write(self):
         normalized = " ".join(self.body.lower().split())

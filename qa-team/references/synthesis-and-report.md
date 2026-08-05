@@ -6,7 +6,7 @@ Read this file only after dispatch, but before convergence, scoring, or writing 
 
 Synthesize only after all reviews complete. Do not invent or strengthen findings beyond reviewer evidence.
 
-Group findings only when they describe the same material concern and location. Produce one row, retain all contributing reviewers, and mark it convergent/higher confidence. A duplicate is **not another risk vote**; risk counts reviewer-returned levels once each. Materially different concerns remain separate.
+Normalize copy, then score the per-reviewer risk vector before deduplicating findings, with exactly one risk vote per deployed reviewer. Deduplicate only report rows after scoring. Group findings only when they describe the same material concern and location; produce one row, retain all contributing reviewers, and mark it convergent/higher confidence. A duplicate is not another risk vote: duplicates add no votes beyond actual reviewer levels. Materially different concerns remain separate.
 
 Copy-only findings are always nonblocking LOW nits for aggregation, regardless of the copy reviewer’s label. A matching non-copy finding is scored from non-copy evidence normally. Matching generalist/specialist evidence raises confidence, not numeric vote count.
 

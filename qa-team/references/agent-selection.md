@@ -4,7 +4,7 @@ Read this file before selecting scope or reviewer roles.
 
 ## Select one base
 
-An explicit base argument always wins. Otherwise probe with `git rev-parse --verify` in fixed order and stop at the first match:
+An explicit base is used verbatim as supplied. Never prefix or normalize an explicit base; only automatic detection probes `origin/`. Without an explicit base, use `git rev-parse --verify` in fixed order and stop at the first match:
 
 1. `origin/develop`
 2. `origin/main`
