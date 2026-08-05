@@ -84,6 +84,8 @@ After valid RED, make the smallest change and verify it. Allow at most three tot
 
 Read [hand-back](references/handback.md) in full **before reporting or hand-back**. The inline final report includes every planned experiment as selected, resilient, fixed, failed, inconclusive, unreachable, or otherwise skipped; it never hides an unsuccessful or unselected case.
 
+Derive the overall verdict from the combined evidence, not the worst row alone: mixed meaningful success with a material unresolved result is `partial`; use `no` only when no meaningful resilience remains or the core feature is broadly unsafe.
+
 Leave the branch checked out and local. Recommend reseeding when experiments mutated data and `/clean-up` when fixes were substantial.
 
 ## Never rules

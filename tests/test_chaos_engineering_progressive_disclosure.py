@@ -115,6 +115,22 @@ class ChaosEngineeringProgressiveDisclosureTests(unittest.TestCase):
         self.assertIn("entire run", plan)
         self.assertIn("no execution or mutation", plan)
 
+    def test_overall_verdict_distinguishes_mixed_resilience_from_broad_failure(self):
+        normalized = " ".join(self.body.lower().split())
+        self.assertIn("mixed meaningful success", normalized)
+        self.assertIn("broadly unsafe", normalized)
+
+        handback = " ".join(
+            (REFERENCES / "handback.md").read_text(encoding="utf-8").lower().split()
+        )
+        for phrase in (
+            "at least one meaningful surface is resilient or fixed",
+            "material selected finding remains failed or inconclusive",
+            "no meaningful resilience remains",
+            "core feature is broadly unsafe",
+        ):
+            self.assertIn(phrase, handback)
+
     def test_references_preserve_load_bearing_contracts(self):
         contents = {
             path.name: " ".join(path.read_text(encoding="utf-8").lower().split())
