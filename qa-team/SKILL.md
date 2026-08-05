@@ -1,6 +1,6 @@
 ---
 name: qa-team
-description: Use when a branch or diff needs a comprehensive, independent multi-perspective code review rather than acceptance testing or quick triage.
+description: Use when the user asks for a multi-agent QA review team or comprehensive QA-team code review of a branch or diff, rather than acceptance testing.
 ---
 
 # QA Team: Multi-Agent Code Review

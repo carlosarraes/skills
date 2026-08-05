@@ -25,9 +25,9 @@ Claude Code skills for development workflows.
 | `prep-ticket` | Use when preparing to implement a Linear or Jira ticket by gathering context, blockers, related work, code entry points, and unanswered questions. |
 | `qa-evidence` | Use when completed Acme QA results for a ZEX or ZUP ticket must be recorded in the team QA spreadsheet. |
 | `qa-pr` | Use when the user wants to QA a GitHub or Bitbucket PR and leave observable acceptance-test evidence on the PR for reviewers. |
-| `qa-team` | Use when a branch or diff needs a comprehensive, independent multi-perspective code review rather than acceptance testing or quick triage. |
+| `qa-team` | Use when the user asks for a multi-agent QA review team or comprehensive QA-team code review of a branch or diff, rather than acceptance testing. |
 | `qa-ticket` | Use when the current ticket branch needs executable acceptance or smoke testing against a local backend or frontend, including fix-and-retry. |
-| `review-swarm` | Use when a PR or branch needs multiple independent review perspectives converged into findings and, when requested, posted to the PR. |
+| `review-swarm` | Use when the user asks for a review swarm, swarm review, or full multi-perspective swarm review of a PR or branch. |
 | `seed-data` | Use when an existing check-data plan must be inserted into the local database before QA. |
 | `ship-gitflow` | Use when a completed Acme ticket must ship through the twin production and homolog Bitbucket branch, PR, and pipeline flow, or one leg needs completion. |
 | `split-pr` | Use when a PR or branch is too large to review safely and should become a stack of small, independently runnable and mergeable PRs. |

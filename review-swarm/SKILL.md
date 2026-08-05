@@ -1,6 +1,6 @@
 ---
 name: review-swarm
-description: Use when a PR or branch needs multiple independent review perspectives converged into findings and, when requested, posted to the PR.
+description: Use when the user asks for a review swarm, swarm review, or full multi-perspective swarm review of a PR or branch.
 ---
 
 # Review Swarm: Multi-Perspective PR Review
