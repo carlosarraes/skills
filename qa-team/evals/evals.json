@@ -2,7 +2,7 @@
   "evals": [
     {
       "id": "base-precedence-empty-diff",
-      "prompt": "SIMULATION ONLY: use only this supplied fixture; do not run repository commands, scan files, dispatch reviewers, or write QAREPORT.md. Return two independent ordered traces. A: user explicitly requests base release/2.4 although develop is usual; origin/release/2.4, develop, main, master exist; release...HEAD has two commits/one API file while develop has a different larger diff. B: no explicit base; develop/main/master exist; develop...HEAD is empty while main has changes; user asks for a report anyway. For each, show base probing/selection, exact consistent file-list/full-triple-dot-diff/log scopes, whether reviewers/report run, and final response metadata."
+      "prompt": "SIMULATION ONLY: use only this supplied fixture; do not run repository commands, scan files, dispatch reviewers, or write QAREPORT.md. Return two independent ordered traces. A: user explicitly requests base release/2.4 although develop is usual; origin/release/2.4, develop, main, master exist; release...HEAD has two commits/one API file while develop has a different larger diff. B: no explicit base; origin/develop, origin/main, origin/master exist; origin/develop...HEAD is empty while origin/main has changes; user asks for a report anyway. For each, show base probing/selection, exact consistent file-list/full-triple-dot-diff/log scopes, whether reviewers/report run, and final response metadata."
     },
     {
       "id": "reviewer-floor-isolation",

@@ -275,6 +275,20 @@ class QaTeamProgressiveDisclosureTests(unittest.TestCase):
             self.assertIn("simulation only", prompt)
             self.assertRegex(prompt, r"(?:no|do not).*(?:commands|calls|writes|mutations|files)")
 
+    def test_automatic_base_eval_fixture_uses_remote_qualified_refs(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        prompt = next(
+            case["prompt"]
+            for case in payload["evals"]
+            if case["id"] == "base-precedence-empty-diff"
+        )
+
+        self.assertIn(
+            "origin/develop, origin/main, origin/master exist",
+            prompt,
+        )
+        self.assertIn("origin/develop...HEAD is empty", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
