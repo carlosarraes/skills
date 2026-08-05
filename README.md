@@ -4,6 +4,7 @@ Claude Code skills for development workflows.
 
 ## Skills
 
+<!-- SKILL-CATALOG:START -->
 | Skill | Description |
 |-------|-------------|
 | `atomic-commit` | Splits git changes into logical atomic commits using conventional commits |
@@ -28,6 +29,7 @@ Claude Code skills for development workflows.
 | `triage-incident` | Turns a pasted prod/homolog symptom into a bug-vs-expected verdict with cited mb/dog/code evidence; read-only, cards proposed but never created without approval |
 | `explain-diff` | Generates a teaching artifact (Background → Intuition → literate walkthrough → quiz) so you deeply understand a subsystem or diff; renders via `visual-explainer` |
 | `video-extract` | Pulls clean transcripts from one or more YouTube videos (captions-first via yt-dlp), ready to read or mine |
+<!-- SKILL-CATALOG:END -->
 
 ## Install
 
