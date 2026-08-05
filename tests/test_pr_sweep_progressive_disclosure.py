@@ -209,6 +209,10 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             self.assertIn("simulation only", prompt)
             self.assertRegex(prompt, r"(?:no|do not).*(?:external|call github|modify git|real label)")
 
+        size_prompt = next(case["prompt"].lower() for case in cases if case["id"] == "size-policy")
+        self.assertIn("#402's latest labeled-event size-check result has not been fetched and is unknown", size_prompt)
+        self.assertIn("unrelated checks are green", size_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
