@@ -130,6 +130,15 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
             retry,
         )
 
+    def test_router_keeps_exact_coverage_floor_when_references_are_not_read(self):
+        normalized = " ".join(self.body.lower().split())
+        for phrase in (
+            "create → read → update → list → delete → verify delete",
+            "document a changed rate limit but do not stress-hit it merely to prove the annotation",
+            "category is exactly `happy-path`, `error`, or `edge-case`",
+        ):
+            self.assertIn(phrase, normalized)
+
     def test_references_preserve_load_bearing_contracts(self):
         contents = {
             path.name: " ".join(path.read_text(encoding="utf-8").lower().split())

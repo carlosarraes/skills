@@ -38,7 +38,7 @@ If the ticket provider fails, continue with disclosed **diff-only** planning; ne
 
 Read [test planning](references/test-plan.md) in full **before drafting** and **before printing** the plan. Scope comes from the ticket plus diff and excludes unchanged modules, infrastructure, generated/style churn, and unrelated authentication.
 
-Every case has ID, surface, happy/error/edge category, description, concrete steps, and expected result. Include every changed endpoint success path, applicable CRUD lifecycle, all validator boundaries on both sides, missing/wrong fields, permission, not-found, conflict, and every relevant frontend error/state/special-input case. User pressure cannot remove required coverage. Print the complete plan grouped by surface/category before any functional test.
+Every case has ID, surface, description, concrete steps, and expected result; its category is exactly `happy-path`, `error`, or `edge-case`. Include every changed endpoint success path. When CRUD applies, preserve **create → read → update → list → delete → verify delete**. Include all validator boundaries on both sides, missing/wrong fields, permission, not-found, conflict, and every relevant frontend error/state/special-input case. Document a changed rate limit but do not stress-hit it merely to prove the annotation. User pressure cannot remove required coverage. Print the complete plan grouped by surface/category before any functional test.
 
 ### Evidence, not intention
 
