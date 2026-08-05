@@ -110,6 +110,26 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(phrase, normalized)
 
+    def test_frontend_edit_retry_transition_is_indivisible_and_ledgered(self):
+        router = " ".join(self.body.lower().split())
+        retry = " ".join(
+            (REFERENCES / "fix-retry-and-report.md")
+            .read_text(encoding="utf-8")
+            .lower()
+            .split()
+        )
+        frontend = " ".join(
+            (REFERENCES / "frontend-qa.md").read_text(encoding="utf-8").lower().split()
+        )
+        transition = "frontend edit → hmr wait → network-idle wait → fresh refs → retry"
+        self.assertIn(transition, router)
+        self.assertIn(transition, retry)
+        self.assertIn(transition, frontend)
+        self.assertIn(
+            "record each edit, both waits, fresh-ref acquisition, and retry in that order",
+            retry,
+        )
+
     def test_references_preserve_load_bearing_contracts(self):
         contents = {
             path.name: " ".join(path.read_text(encoding="utf-8").lower().split())
@@ -163,6 +183,12 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
             "openapi",
             "source route",
             "never guess",
+            "curl -s -w",
+            "-x post",
+            "-x patch",
+            "-x delete",
+            "content-type: application/json",
+            "body separately",
             "status and expected response content",
             "unique",
             "capture",

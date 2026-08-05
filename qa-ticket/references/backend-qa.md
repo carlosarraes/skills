@@ -16,6 +16,17 @@ Never guess a route or prefer a user-proposed path over contradictory OpenAPI/so
 
 Use the discovered local URL and project test auth. Capture the response body separately from the terminal HTTP status for each request. A backend PASS requires the **status and expected response content** to match the plan. A 2xx with missing or wrong fields is FAIL.
 
+Use the project's equivalent client when required; otherwise retain explicit method/payload capture with these compact curl patterns:
+
+```bash
+curl -s -w "\n%{http_code}" "<URL>"
+curl -s -w "\n%{http_code}" -X POST "<URL>" -H "Content-Type: application/json" -d '<JSON>'
+curl -s -w "\n%{http_code}" -X PATCH "<URL>/<ID>" -H "Content-Type: application/json" -d '<JSON>'
+curl -s -w "\n%{http_code}" -X DELETE "<URL>/<ID>"
+```
+
+Treat the last output line as status and everything before it as body; retain both in the attempt evidence.
+
 Use unique test data (for example a timestamp/UUID suffix) to prevent collisions. For create operations, capture the returned `id`/`_id` and reuse it. Preserve the planned CRUD sequence:
 
 1. create and capture ID;

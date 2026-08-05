@@ -25,4 +25,4 @@ If loading persists, wait and re-snapshot. If an element is offscreen, scroll an
 
 ## Retry synchronization
 
-After every frontend source edit, wait for HMR **and network idle** before the next attempt. This applies after the first edit as well as later edits. Acquire fresh refs after reload; never replay an invalidated ref.
+Treat **frontend edit → HMR wait → network-idle wait → fresh refs → retry** as one indivisible ordered transition. Complete it after every frontend source edit, including the first: confirm HMR, wait for network idle, acquire a new snapshot/current refs, and only then retry. Never replay an invalidated ref.

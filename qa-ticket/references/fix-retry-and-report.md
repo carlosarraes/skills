@@ -19,12 +19,12 @@ Allow **at most three total attempts per test**. Attempt 1 is the initial execut
 1. Execute attempt 1.
 2. Diagnose failure.
 3. Apply a minimal test correction or changed-scope code fix.
-4. Wait for backend reload as the project requires, or after **every** frontend edit wait for HMR and network idle.
+4. Wait for backend reload as the project requires. For frontend changes, **frontend edit → HMR wait → network-idle wait → fresh refs → retry** is one indivisible transition after every edit, including the first.
 5. Execute attempt 2; repeat diagnosis/remediation once if needed.
 6. Execute attempt 3, the final permitted attempt.
 7. If still failing, stop. Record FAILED and the complete attempt history. Never run attempt 4.
 
-Unavailable prerequisites before execution produce zero attempts and `SKIP/INCONCLUSIVE`. Keep every fix and touched path in the run ledger.
+Unavailable prerequisites before execution produce zero attempts and `SKIP/INCONCLUSIVE`. Keep every fix and touched path in the run ledger. For frontend retries, record each edit, both waits, fresh-ref acquisition, and retry in that order. Both waits mean HMR and network idle; a retry ledger without either wait is incomplete evidence.
 
 ## Final report contract
 

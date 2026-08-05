@@ -54,7 +54,7 @@ Read [backend QA](references/backend-qa.md) in full **before any backend** route
 
 Read [fix, retry, and report](references/fix-retry-and-report.md) in full **before diagnosing** the first failure or changing test/application code. Classify the cause as test bug, code bug, or environment/data issue before remediation.
 
-Allow **at most three total attempts per test**: the initial attempt counts. Diagnose between attempts. Keep fixes minimal and within changed functional scope. A test-input correction is not a production fix. After every frontend edit, wait for HMR and network idle before retrying. After attempt three, retain FAILED with its full history; never take a fourth attempt or turn failure into green prose.
+Allow **at most three total attempts per test**: the initial attempt counts. Diagnose between attempts. Keep fixes minimal and within changed functional scope. A test-input correction is not a production fix. Treat **frontend edit → HMR wait → network-idle wait → fresh refs → retry** as one indivisible ordered transition after every edit, including the first. After attempt three, retain FAILED with its full history; never take a fourth attempt or turn failure into green prose.
 
 ### Complete report and truthful verdict
 
