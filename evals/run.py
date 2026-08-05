@@ -78,8 +78,14 @@ def routing_prompt(catalog, prompt):
     return f"Select exactly one skill name from this catalog:\n{options}\n- NONE: no listed skill applies\n\nReply with only the selected name or NONE.\n\nUser request: {prompt}"
 
 
-def behavior_prompt(skill, prompt):
-    return f"Before acting, read and follow the selected skill's {skill}/SKILL.md.\n\nEvaluation request: {prompt}"
+def behavior_prompt(skill_path, prompt):
+    skill_path = Path(skill_path).resolve()
+    return (
+        f"Before acting, read and follow the skill at the exact snapshot path {skill_path}. "
+        "Ignore installed or catalog copies of this skill. "
+        f"Resolve direct references relative to the snapshot skill directory {skill_path.parent}."
+        f"\n\nEvaluation request: {prompt}"
+    )
 
 
 def result_path(output_dir, mode):
@@ -129,7 +135,8 @@ def run_behavior(root, skill, ref, runs, model, dry_run, output_dir, cases_path=
                 materialized_path = Path(temporary_root) / "repository"
                 materialize_ref(root, ref, materialized_path)
                 try:
-                    command = codex_command(behavior_prompt(skill, case["prompt"]), model, "workspace-write")
+                    skill_path = materialized_path / skill / "SKILL.md"
+                    command = codex_command(behavior_prompt(skill_path, case["prompt"]), model, "workspace-write")
                     record = {"case_id": case["id"], "sample": sample, "command": command, "worktree": str(materialized_path), "status": "", "diff": ""}
                     if dry_run:
                         record["response"] = None

@@ -178,6 +178,27 @@ class EvalRunnerTests(unittest.TestCase):
         self.assertEqual([r["response"] for r in result["results"]], ["fake-response", "fake-response"])
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True).stdout, "")
 
+    def test_behavior_passes_absolute_snapshot_skill_authority_to_codex(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        fake_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(fake_temp.cleanup)
+        fake_bin = Path(fake_temp.name) / "bin"
+        fake_bin.mkdir()
+        fake = fake_bin / "codex"
+        fake.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+        fake.chmod(0o755)
+        old_path = os.environ.get("PATH", "")
+        self.addCleanup(os.environ.__setitem__, "PATH", old_path)
+        os.environ["PATH"] = f"{fake_bin}:{old_path}"
+        result = load_runner().run_behavior(root, "one", "HEAD", 1, None, False, Path(fake_temp.name) / "out")
+        record = result["results"][0]
+        snapshot_skill = str(Path(record["worktree"]) / "one" / "SKILL.md")
+        self.assertIn(snapshot_skill, record["response"])
+        self.assertNotIn(str(root / "one" / "SKILL.md"), record["response"])
+        self.assertIn("ignore installed or catalog copies", record["response"].lower())
+        self.assertIn("resolve direct references relative to", record["response"].lower())
+
     def test_behavior_materializes_an_isolated_git_repository_and_captures_edits(self):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)
