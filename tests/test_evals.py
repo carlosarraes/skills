@@ -35,6 +35,33 @@ def fixture_repo():
 
 
 class EvalRunnerTests(unittest.TestCase):
+    def test_behavior_cases_override_still_requires_skill_at_ref(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        cases = root / "behavior-cases.json"
+        cases.write_text('[{"id": "override-case", "prompt": "do override"}]', encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER),
+                "behavior",
+                "--skill",
+                "missing",
+                "--ref",
+                "HEAD",
+                "--runs",
+                "1",
+                "--cases",
+                str(cases),
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("missing/SKILL.md", completed.stderr)
+
     def test_behavior_cases_override_does_not_require_ref_backed_evals(self):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)
@@ -67,6 +94,30 @@ class EvalRunnerTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(json.loads(completed.stdout)["results"][0]["case_id"], "override-case")
+
+    def test_behavior_rejects_an_explicit_empty_cases_path(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER),
+                "behavior",
+                "--skill",
+                "one",
+                "--ref",
+                "HEAD",
+                "--runs",
+                "1",
+                "--cases",
+                "",
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
 
     def test_behavior_accepts_the_existing_object_evals_shape(self):
         temp, root = fixture_repo()

@@ -120,7 +120,8 @@ def materialize_ref(root, ref, destination):
 
 
 def run_behavior(root, skill, ref, runs, model, dry_run, output_dir, cases_path=None):
-    cases = load_cases(cases_path) if cases_path else normalize_cases(json.loads(git_show(root, ref, f"{skill}/evals/evals.json")))
+    git_show(root, ref, f"{skill}/SKILL.md")
+    cases = load_cases(cases_path) if cases_path is not None else normalize_cases(json.loads(git_show(root, ref, f"{skill}/evals/evals.json")))
     results = []
     for case in cases:
         for sample in range(1, runs + 1):
