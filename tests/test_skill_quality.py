@@ -126,3 +126,21 @@ class SkillQualityTests(unittest.TestCase):
         self.assertTrue(first.startswith("prefix\n<!-- SKILL-CATALOG:START -->\n"))
         self.assertTrue(first.endswith("<!-- SKILL-CATALOG:END -->\nsuffix\n"))
         self.assertIn("| `one` | Use when one applies |", first)
+
+    def test_sync_preserves_crlf_and_binary_bytes_outside_the_catalog_block(self):
+        before = b"prefix\x00\r\n<!-- SKILL-CATALOG:START -->\r\nold\r\n<!-- SKILL-CATALOG:END -->\r\nsuffix\xff\r\n"
+        temp, root = init_repo({
+            "one/SKILL.md": "---\nname: one\ndescription: Use when one applies\n---\n# One\n",
+            "README.md": README,
+        })
+        self.addCleanup(temp.cleanup)
+        readme = root / "README.md"
+        readme.write_bytes(before)
+        quality = load_module()
+        quality.sync_readme(root)
+        after = readme.read_bytes()
+        start = b"<!-- SKILL-CATALOG:START -->"
+        end = b"<!-- SKILL-CATALOG:END -->"
+        self.assertTrue(after.startswith(before[:before.index(start)]))
+        self.assertTrue(after.endswith(before[before.index(end) + len(end):]))
+        self.assertIn(b"| `one` | Use when one applies |", after)

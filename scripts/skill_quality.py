@@ -161,16 +161,18 @@ def check(root):
 def sync_readme(root):
     root = Path(root)
     readme_path = root / "README.md"
-    readme = readme_path.read_text(encoding="utf-8")
+    readme = readme_path.read_bytes()
     result = check(root)
-    start = readme.find(START)
-    end = readme.find(END)
+    start_marker = START.encode("utf-8")
+    end_marker = END.encode("utf-8")
+    start = readme.find(start_marker)
+    end = readme.find(end_marker)
     if start < 0 or end < 0 or end < start:
         raise ValueError("README.md is missing managed catalog markers")
-    replacement = f"{START}\n{catalog_table(result['skills'])}\n{END}"
-    updated = readme[:start] + replacement + readme[end + len(END):]
+    replacement = (START + "\n" + catalog_table(result["skills"]) + "\n" + END).encode("utf-8")
+    updated = readme[:start] + replacement + readme[end + len(end_marker):]
     if updated != readme:
-        readme_path.write_text(updated, encoding="utf-8")
+        readme_path.write_bytes(updated)
     return result
 
 

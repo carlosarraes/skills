@@ -48,6 +48,9 @@ class EvalRunnerTests(unittest.TestCase):
     def test_routing_dry_run_loads_catalog_from_ref_and_builds_fresh_commands(self):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)
+        (root / "one" / "SKILL.md").write_text(
+            "---\nname: one\ndescription: Use when uncommitted wording applies\n---\n# One\n", encoding="utf-8"
+        )
         cases = root / "cases.json"
         cases.write_text('[{"id":"r1","prompt":"do one","expected":"one"}]', encoding="utf-8")
         completed = subprocess.run(
@@ -55,10 +58,11 @@ class EvalRunnerTests(unittest.TestCase):
             cwd=root, text=True, capture_output=True, check=True,
         )
         result = json.loads(completed.stdout)
-        self.assertEqual(result["catalog"], ["one"])
+        self.assertEqual(result["catalog"], [{"name": "one", "description": "Use when one applies"}])
         self.assertEqual(len(result["results"]), 2)
         command = result["results"][0]["command"]
         self.assertEqual(command[:4], ["codex", "exec", "--ephemeral", "--ignore-user-config"])
+        self.assertIn("one: Use when one applies", command[-1])
         self.assertNotIn("claude", " ".join(command).lower())
 
     def test_behavior_dry_run_reads_evals_at_ref_and_materializes_temporary_tree(self):
@@ -88,3 +92,42 @@ class EvalRunnerTests(unittest.TestCase):
         result = load_runner().run_behavior(root, "one", "HEAD", 2, None, False, Path(fake_temp.name) / "out")
         self.assertEqual([r["response"] for r in result["results"]], ["fake-response", "fake-response"])
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True).stdout, "")
+
+    def test_behavior_materializes_an_isolated_git_repository_and_captures_edits(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        fake_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(fake_temp.cleanup)
+        fake_bin = Path(fake_temp.name) / "bin"
+        fake_bin.mkdir()
+        fake = fake_bin / "codex"
+        fake.write_text(
+            "#!/bin/sh\ngit rev-parse --is-inside-work-tree\nprintf changed > one/SKILL.md\n", encoding="utf-8"
+        )
+        fake.chmod(0o755)
+        old_path = os.environ.get("PATH", "")
+        self.addCleanup(os.environ.__setitem__, "PATH", old_path)
+        os.environ["PATH"] = f"{fake_bin}:{old_path}"
+        result = load_runner().run_behavior(root, "one", "HEAD", 1, None, False, Path(fake_temp.name) / "out")
+        record = result["results"][0]
+        self.assertEqual(record["response"], "true")
+        self.assertIn("one/SKILL.md", record["status"])
+        self.assertIn("-name: one", record["diff"])
+        self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True).stdout, "")
+
+    def test_behavior_prompt_requires_reading_the_selected_skill_before_acting(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        record = load_runner().run_behavior(root, "one", "HEAD", 1, None, True, root / "out")["results"][0]
+        self.assertIn("one/SKILL.md", record["command"][-1])
+        self.assertIn("read and follow", record["command"][-1].lower())
+
+    def test_cli_rejects_non_positive_runs(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        completed = subprocess.run(
+            [sys.executable, str(RUNNER), "routing", "--ref", "HEAD", "--runs", "0", "--dry-run"],
+            cwd=root, text=True, capture_output=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("positive integer", completed.stderr)

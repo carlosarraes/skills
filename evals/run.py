@@ -2,12 +2,11 @@
 """Run isolated routing and behavior evaluations for skills."""
 
 import argparse
+import ast
 import json
 import subprocess
 import sys
-import tarfile
 import tempfile
-from io import BytesIO
 from pathlib import Path
 
 
@@ -17,15 +16,41 @@ def git_show(root, ref, path):
 
 def catalog_from_ref(root, ref):
     paths = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref], cwd=root, check=True, text=True, capture_output=True).stdout.splitlines()
-    names = []
+    catalog = []
     for path in sorted(item for item in paths if item.endswith("/SKILL.md")):
-        for line in git_show(root, ref, path).splitlines()[1:]:
-            if line == "---":
-                break
-            if line.startswith("name:"):
-                names.append(line.split(":", 1)[1].strip().strip("\"'"))
-                break
-    return names
+        metadata = frontmatter_metadata(git_show(root, ref, path))
+        catalog.append({"name": metadata["name"], "description": metadata["description"]})
+    return catalog
+
+
+def frontmatter_metadata(text):
+    if not text.startswith("---\n"):
+        raise ValueError("skill is missing frontmatter")
+    closing = text.find("\n---", 4)
+    if closing < 0:
+        raise ValueError("skill frontmatter is not closed")
+    metadata = {}
+    lines = text[4:closing].splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if value in (">", ">-", ">+"):
+            folded = []
+            while index < len(lines) and lines[index].startswith((" ", "\t")):
+                folded.append(lines[index].strip())
+                index += 1
+            value = " ".join(part for part in folded if part)
+        elif value[:1] in ("\"", "'"):
+            value = ast.literal_eval(value)
+        metadata[key] = value
+    if not metadata.get("name") or not metadata.get("description"):
+        raise ValueError("skill frontmatter requires name and description")
+    return metadata
 
 
 def load_cases(path):
@@ -49,8 +74,12 @@ def codex_command(prompt, model=None):
 
 
 def routing_prompt(catalog, prompt):
-    options = ", ".join(catalog + ["NONE"])
-    return f"Select exactly one skill name from: {options}. Reply with only that name.\n\nUser request: {prompt}"
+    options = "\n".join(f"- {skill['name']}: {skill['description']}" for skill in catalog)
+    return f"Select exactly one skill name from this catalog:\n{options}\n- NONE: no listed skill applies\n\nReply with only the selected name or NONE.\n\nUser request: {prompt}"
+
+
+def behavior_prompt(skill, prompt):
+    return f"Before acting, read and follow the selected skill's {skill}/SKILL.md.\n\nEvaluation request: {prompt}"
 
 
 def result_path(output_dir, mode):
@@ -71,7 +100,8 @@ def run_routing(root, ref, runs, model, cases_path, dry_run, output_dir):
             else:
                 completed = subprocess.run(command, cwd=root, text=True, capture_output=True)
                 response = completed.stdout.strip()
-                record.update({"response": response, "selected": response if response in set(catalog + ["NONE"]) else "INVALID", "returncode": completed.returncode, "stderr": completed.stderr})
+                names = {skill["name"] for skill in catalog}
+                record.update({"response": response, "selected": response if response in names | {"NONE"} else "INVALID", "returncode": completed.returncode, "stderr": completed.stderr})
             results.append(record)
     report = {"mode": "routing", "ref": ref, "catalog": catalog, "dry_run": dry_run, "results": results}
     if not dry_run:
@@ -80,9 +110,13 @@ def run_routing(root, ref, runs, model, cases_path, dry_run, output_dir):
 
 
 def materialize_ref(root, ref, destination):
-    archive = subprocess.run(["git", "archive", ref], cwd=root, check=True, capture_output=True).stdout
-    with tarfile.open(fileobj=BytesIO(archive)) as tar:
-        tar.extractall(destination, filter="data")
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(destination), ref],
+        cwd=root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def run_behavior(root, skill, ref, runs, model, dry_run, output_dir):
@@ -90,23 +124,36 @@ def run_behavior(root, skill, ref, runs, model, dry_run, output_dir):
     results = []
     for case in cases:
         for sample in range(1, runs + 1):
-            with tempfile.TemporaryDirectory(prefix="skill-eval-") as materialized:
-                materialized_path = Path(materialized)
+            with tempfile.TemporaryDirectory(prefix="skill-eval-") as temporary_root:
+                materialized_path = Path(temporary_root) / "repository"
                 materialize_ref(root, ref, materialized_path)
-                command = codex_command(case["prompt"], model)
-                record = {"case_id": case["id"], "sample": sample, "command": command, "worktree": str(materialized_path), "status": "", "diff": ""}
-                if dry_run:
-                    record["response"] = None
-                else:
-                    completed = subprocess.run(command, cwd=materialized_path, text=True, capture_output=True)
-                    record.update({"response": completed.stdout.strip(), "returncode": completed.returncode, "stderr": completed.stderr})
-                record["status"] = subprocess.run(["git", "status", "--porcelain"], cwd=materialized_path, text=True, capture_output=True).stdout
-                record["diff"] = subprocess.run(["git", "diff", "--no-ext-diff"], cwd=materialized_path, text=True, capture_output=True).stdout
-                results.append(record)
+                try:
+                    command = codex_command(behavior_prompt(skill, case["prompt"]), model)
+                    record = {"case_id": case["id"], "sample": sample, "command": command, "worktree": str(materialized_path), "status": "", "diff": ""}
+                    if dry_run:
+                        record["response"] = None
+                    else:
+                        completed = subprocess.run(command, cwd=materialized_path, text=True, capture_output=True)
+                        record.update({"response": completed.stdout.strip(), "returncode": completed.returncode, "stderr": completed.stderr})
+                    record["status"] = subprocess.run(["git", "status", "--porcelain"], cwd=materialized_path, check=True, text=True, capture_output=True).stdout
+                    record["diff"] = subprocess.run(["git", "diff", "--no-ext-diff"], cwd=materialized_path, check=True, text=True, capture_output=True).stdout
+                    results.append(record)
+                finally:
+                    subprocess.run(["git", "worktree", "remove", "--force", str(materialized_path)], cwd=root, check=True, text=True, capture_output=True)
     report = {"mode": "behavior", "skill": skill, "ref": ref, "dry_run": dry_run, "results": results}
     if not dry_run:
         result_path(output_dir, f"behavior-{skill}").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return report
+
+
+def positive_int(value):
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a positive integer") from error
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def main(argv=None):
@@ -114,14 +161,14 @@ def main(argv=None):
     subcommands = parser.add_subparsers(dest="mode", required=True)
     routing = subcommands.add_parser("routing")
     routing.add_argument("--ref", required=True)
-    routing.add_argument("--runs", type=int, required=True)
+    routing.add_argument("--runs", type=positive_int, required=True)
     routing.add_argument("--model")
     routing.add_argument("--cases", default=str(Path(__file__).with_name("routing-cases.json")))
     routing.add_argument("--dry-run", action="store_true")
     behavior = subcommands.add_parser("behavior")
     behavior.add_argument("--skill", required=True)
     behavior.add_argument("--ref", required=True)
-    behavior.add_argument("--runs", type=int, required=True)
+    behavior.add_argument("--runs", type=positive_int, required=True)
     behavior.add_argument("--model")
     behavior.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
