@@ -229,6 +229,15 @@ class EvalRunnerTests(unittest.TestCase):
         self.assertIn("one/SKILL.md", record["command"][-1])
         self.assertIn("read and follow", record["command"][-1].lower())
 
+    def test_behavior_prompt_exempts_only_the_required_snapshot_read_from_case_prohibitions(self):
+        prompt = load_runner().behavior_prompt("/tmp/snapshot/one/SKILL.md", "SIMULATION ONLY: no tools or file reads")
+        normalized = " ".join(prompt.lower().split())
+        self.assertIn("mandatory harness setup", normalized)
+        self.assertIn("perform this one skill-file read first", normalized)
+        self.assertIn("exempt from any no-tool, no-file-read, or no-command wording", normalized)
+        self.assertIn("all evaluation-request constraints apply immediately after", normalized)
+        self.assertIn("does not permit reading references", normalized)
+
     def test_cli_rejects_non_positive_runs(self):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)

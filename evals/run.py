@@ -81,9 +81,13 @@ def routing_prompt(catalog, prompt):
 def behavior_prompt(skill_path, prompt):
     skill_path = Path(skill_path).resolve()
     return (
-        f"Before acting, read and follow the skill at the exact snapshot path {skill_path}. "
+        "Mandatory harness setup: perform this one skill-file read first. "
+        "This required snapshot read is exempt from any no-tool, no-file-read, or no-command wording in the evaluation request. "
+        f"Read and follow the skill at the exact snapshot path {skill_path}. "
         "Ignore installed or catalog copies of this skill. "
-        f"Resolve direct references relative to the snapshot skill directory {skill_path.parent}."
+        f"Resolve direct references relative to the snapshot skill directory {skill_path.parent}. "
+        "All evaluation-request constraints apply immediately after that mandatory read. "
+        "This bootstrap exemption does not permit reading references; reference access remains governed by the loaded skill and evaluation request."
         f"\n\nEvaluation request: {prompt}"
     )
 
