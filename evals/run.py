@@ -119,8 +119,8 @@ def materialize_ref(root, ref, destination):
     )
 
 
-def run_behavior(root, skill, ref, runs, model, dry_run, output_dir):
-    cases = normalize_cases(json.loads(git_show(root, ref, f"{skill}/evals/evals.json")))
+def run_behavior(root, skill, ref, runs, model, dry_run, output_dir, cases_path=None):
+    cases = load_cases(cases_path) if cases_path else normalize_cases(json.loads(git_show(root, ref, f"{skill}/evals/evals.json")))
     results = []
     for case in cases:
         for sample in range(1, runs + 1):
@@ -170,6 +170,7 @@ def main(argv=None):
     behavior.add_argument("--ref", required=True)
     behavior.add_argument("--runs", type=positive_int, required=True)
     behavior.add_argument("--model")
+    behavior.add_argument("--cases")
     behavior.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     root = Path.cwd()
@@ -177,7 +178,7 @@ def main(argv=None):
     if args.mode == "routing":
         report = run_routing(root, args.ref, args.runs, args.model, args.cases, args.dry_run, output_dir)
     else:
-        report = run_behavior(root, args.skill, args.ref, args.runs, args.model, args.dry_run, output_dir)
+        report = run_behavior(root, args.skill, args.ref, args.runs, args.model, args.dry_run, output_dir, args.cases)
     print(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return 0
 

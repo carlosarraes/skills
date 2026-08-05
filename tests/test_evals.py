@@ -35,6 +35,39 @@ def fixture_repo():
 
 
 class EvalRunnerTests(unittest.TestCase):
+    def test_behavior_cases_override_does_not_require_ref_backed_evals(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        subprocess.run(["git", "rm", "-q", "one/evals/evals.json"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-qm", "remove evals"],
+            cwd=root,
+            check=True,
+        )
+        cases = root / "behavior-cases.json"
+        cases.write_text('{"evals": [{"id": "override-case", "prompt": "do override"}]}', encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RUNNER),
+                "behavior",
+                "--skill",
+                "one",
+                "--ref",
+                "HEAD",
+                "--runs",
+                "1",
+                "--cases",
+                str(cases),
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout)["results"][0]["case_id"], "override-case")
+
     def test_behavior_accepts_the_existing_object_evals_shape(self):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)
