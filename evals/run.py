@@ -66,8 +66,8 @@ def normalize_cases(payload):
     return payload
 
 
-def codex_command(prompt, model=None):
-    command = ["codex", "exec", "--ephemeral", "--ignore-user-config"]
+def codex_command(prompt, model=None, sandbox="read-only"):
+    command = ["codex", "exec", "--ephemeral", "--ignore-user-config", "--sandbox", sandbox]
     if model:
         command.extend(["--model", model])
     return command + [prompt]
@@ -93,7 +93,7 @@ def run_routing(root, ref, runs, model, cases_path, dry_run, output_dir):
     results = []
     for case in load_cases(cases_path):
         for sample in range(1, runs + 1):
-            command = codex_command(routing_prompt(catalog, case["prompt"]), model)
+            command = codex_command(routing_prompt(catalog, case["prompt"]), model, "read-only")
             record = {"case_id": case["id"], "expected": case["expected"], "sample": sample, "command": command}
             if dry_run:
                 record.update({"response": None, "selected": None})
@@ -128,7 +128,7 @@ def run_behavior(root, skill, ref, runs, model, dry_run, output_dir):
                 materialized_path = Path(temporary_root) / "repository"
                 materialize_ref(root, ref, materialized_path)
                 try:
-                    command = codex_command(behavior_prompt(skill, case["prompt"]), model)
+                    command = codex_command(behavior_prompt(skill, case["prompt"]), model, "workspace-write")
                     record = {"case_id": case["id"], "sample": sample, "command": command, "worktree": str(materialized_path), "status": "", "diff": ""}
                     if dry_run:
                         record["response"] = None

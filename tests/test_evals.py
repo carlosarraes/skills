@@ -62,6 +62,7 @@ class EvalRunnerTests(unittest.TestCase):
         self.assertEqual(len(result["results"]), 2)
         command = result["results"][0]["command"]
         self.assertEqual(command[:4], ["codex", "exec", "--ephemeral", "--ignore-user-config"])
+        self.assertEqual(command[4:6], ["--sandbox", "read-only"])
         self.assertIn("one: Use when one applies", command[-1])
         self.assertNotIn("claude", " ".join(command).lower())
 
@@ -119,6 +120,7 @@ class EvalRunnerTests(unittest.TestCase):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)
         record = load_runner().run_behavior(root, "one", "HEAD", 1, None, True, root / "out")["results"][0]
+        self.assertEqual(record["command"][4:6], ["--sandbox", "workspace-write"])
         self.assertIn("one/SKILL.md", record["command"][-1])
         self.assertIn("read and follow", record["command"][-1].lower())
 
