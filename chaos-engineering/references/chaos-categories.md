@@ -26,7 +26,7 @@ Launch exactly seven design agents in a **single parallel batch**, one per categ
 
 Agents are independent. Do not mention other agents, their count, a team, parallelism, aggregation, or later synthesis in any individual prompt. Do not give one result to another agent. Wait for the whole batch before synthesis. A designer may return “no experiment in scope,” which becomes an explicit skipped category.
 
-In simulation, emit the seven planned prompt summaries as one batch trace without launching agents.
+In the router-qualified whole-run simulation mode, emit the seven planned prompt summaries as one batch trace without launching agents. “Read-only experiments” alone does not activate this mode.
 
 ## Fixed categories and seeds
 

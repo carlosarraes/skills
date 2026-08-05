@@ -33,4 +33,4 @@ If the changed surface has zero usable tests, chaos observation may still be rep
 
 ## Simulation
 
-In explicit simulation/preview mode, describe this discovery ledger and the health checks that would run, but call no provider, network, browser, git mutation, or agent tool and write no files.
+Only the router's qualified whole-run mode applies: exact `SIMULATION ONLY`, or an explicit request that the entire run be a simulated/preview-only/read-only trace with no execution or mutation. In that mode, describe this discovery ledger and the health checks that would run, but call no provider, network, browser, git mutation, or agent tool and write no files. A request to execute read-only experiments remains a normal run.

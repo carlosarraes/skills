@@ -102,6 +102,19 @@ class ChaosEngineeringProgressiveDisclosureTests(unittest.TestCase):
             for signal in signals:
                 self.assertIn(signal, normalized)
 
+    def test_preview_mode_requires_an_explicit_whole_run_no_execution_request(self):
+        normalized = " ".join(self.body.lower().split())
+        self.assertIn("entire run", normalized)
+        self.assertIn("no execution or mutation", normalized)
+        self.assertIn("read-only experiments", normalized)
+        self.assertIn("still execute", normalized)
+
+        plan = " ".join(
+            (REFERENCES / "chaos-plan.md").read_text(encoding="utf-8").lower().split()
+        )
+        self.assertIn("entire run", plan)
+        self.assertIn("no execution or mutation", plan)
+
     def test_references_preserve_load_bearing_contracts(self):
         contents = {
             path.name: " ".join(path.read_text(encoding="utf-8").lower().split())

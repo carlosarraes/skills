@@ -6,7 +6,7 @@ Read this file before parsing the post-plan choice or executing experiments.
 
 Accept `all`, explicit IDs, one category, or `abort`. Validate IDs/category against the displayed plan and clarify invalid/ambiguous input. `abort` preserves the normal durable plan and stops all execution. Initial “run all” language from before plan display is not authorization.
 
-In simulation/preview mode, return the ordered would-be trace and decisions, but make no experiment, network, browser, DB, log, edit, commit, or other mutation call. No experiment runs merely because the prompt supplies assumed outcomes.
+In the router-qualified whole-run simulation mode, return the ordered would-be trace and decisions, but make no experiment, network, browser, DB, log, edit, commit, or other mutation call. No experiment runs merely because the prompt supplies assumed outcomes. A request for read-only experiments still follows normal selection and execution.
 
 ## Sequential attribution
 

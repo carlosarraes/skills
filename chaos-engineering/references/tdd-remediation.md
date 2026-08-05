@@ -40,4 +40,4 @@ Exactly one local commit per successful finding. A failed, inconclusive, resilie
 - Never stage or commit `CHANGELOG.md` or `TASKS.md`.
 - Never push, force-push, open a PR, merge, or amend.
 
-Simulation mode narrates the test validity decisions, attempt count, explicit paths, would-be subjects/bodies, hook behavior, and commit mapping, but performs no edits, tests, staging, commits, or publication.
+The router-qualified whole-run simulation mode narrates test-validity decisions, attempt count, explicit paths, would-be subjects/bodies, hook behavior, and commit mapping, but performs no edits, tests, staging, commits, or publication. “Read-only” attached only to experiments does not activate it.

@@ -24,7 +24,9 @@ Do not skip or reorder a gate because the user asked to “run everything,” su
 
 ## Preview and simulation mode
 
-An explicit `SIMULATION ONLY`, preview, read-only, or “return the trace” request is a dry run. Describe the exact actions, decision pauses, planned agent batch, artifact path/content, evidence, commits, and hand-back that a real run would produce, but call no networks, agents, browser, ticket provider, or git mutation and write no plan or report file. A normal run still creates the durable plan before selection; simulation does not weaken or replace that normal contract.
+Use dry-run mode only when the request contains the exact marker `SIMULATION ONLY`, or explicitly makes the **entire run** a simulated, preview-only, or read-only trace with **no execution or mutation**. Then describe the exact actions, decision pauses, planned agent batch, artifact path/content, evidence, commits, and hand-back that a real run would produce, but call no networks, agents, browser, ticket provider, or git mutation and write no plan or report file.
+
+`Read-only` by itself is not a mode switch. Requests such as “execute only read-only experiments” still execute the safe selected experiments through every normal gate. A normal run still creates the durable plan before selection; simulation does not weaken or replace that contract.
 
 ## Hard gates visible at entry
 

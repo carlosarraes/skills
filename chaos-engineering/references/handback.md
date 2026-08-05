@@ -38,4 +38,4 @@ Report unknown-platform/ticket-provider degradation, no-test remediation stop, u
 
 The branch remains checked out with the number of new local commits. Never push, force-push, open a PR, merge, amend, or rewrite history. The user decides publication.
 
-Recommend `/clean-up` when repairs were large or the cumulative diff merits a senior pass. Mention `/qa-ticket` when runtime happy-path evidence or a test baseline is still missing. In simulation, describe this exact report and boundary without writing files or performing git/publication actions.
+Recommend `/clean-up` when repairs were large or the cumulative diff merits a senior pass. Mention `/qa-ticket` when runtime happy-path evidence or a test baseline is still missing. In the router-qualified whole-run simulation mode, describe this exact report and boundary without writing files or performing git/publication actions.
