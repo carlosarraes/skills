@@ -24,7 +24,9 @@ Allow **at most three total attempts per test**. Attempt 1 is the initial execut
 6. Execute attempt 3, the final permitted attempt.
 7. If still failing, stop. Record FAILED and the complete attempt history. Never run attempt 4.
 
-Unavailable prerequisites before execution produce zero attempts and `SKIP/INCONCLUSIVE`. Keep every fix and touched path in the run ledger. For frontend retries, record each edit, both waits, fresh-ref acquisition, and retry in that order. Both waits mean HMR and network idle; a retry ledger without either wait is incomplete evidence.
+Unavailable prerequisites before execution produce zero attempts and `SKIP/INCONCLUSIVE`. Keep every fix and touched path in the run ledger. For frontend retries, record each edit, both waits, fresh-ref acquisition, and retry in that order. Both waits mean HMR and network idle.
+
+Write one complete ledger row per frontend edit: `Edit: <file> | HMR: observed | network idle: observed | fresh refs: acquired | next attempt: <N>`. Audit every frontend edit ledger entry before retry and before reporting. A row missing any field is an incomplete and invalid trace; it must be corrected before retry or report. Never summarize several edits under one collective wait entry.
 
 ## Final report contract
 

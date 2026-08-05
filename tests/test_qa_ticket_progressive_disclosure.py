@@ -129,6 +129,15 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
             "record each edit, both waits, fresh-ref acquisition, and retry in that order",
             retry,
         )
+        for text in (router, retry):
+            for phrase in (
+                "audit every frontend edit ledger entry before retry and before reporting",
+                "edit: <file> | hmr: observed | network idle: observed | fresh refs: acquired | next attempt: <n>",
+                "one complete ledger row per frontend edit",
+                "incomplete and invalid trace",
+                "corrected before retry or report",
+            ):
+                self.assertIn(phrase, text)
 
     def test_router_keeps_exact_coverage_floor_when_references_are_not_read(self):
         normalized = " ".join(self.body.lower().split())

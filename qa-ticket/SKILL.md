@@ -54,7 +54,9 @@ Read [backend QA](references/backend-qa.md) in full **before any backend** route
 
 Read [fix, retry, and report](references/fix-retry-and-report.md) in full **before diagnosing** the first failure or changing test/application code. Classify the cause as test bug, code bug, or environment/data issue before remediation.
 
-Allow **at most three total attempts per test**: the initial attempt counts. Diagnose between attempts. Keep fixes minimal and within changed functional scope. A test-input correction is not a production fix. Treat **frontend edit → HMR wait → network-idle wait → fresh refs → retry** as one indivisible ordered transition after every edit, including the first. After attempt three, retain FAILED with its full history; never take a fourth attempt or turn failure into green prose.
+Allow **at most three total attempts per test**: the initial attempt counts. Diagnose between attempts. Keep fixes minimal and within changed functional scope. A test-input correction is not a production fix. Treat **frontend edit → HMR wait → network-idle wait → fresh refs → retry** as one indivisible ordered transition after every edit, including the first.
+
+Write one complete ledger row per frontend edit: `Edit: <file> | HMR: observed | network idle: observed | fresh refs: acquired | next attempt: <N>`. Audit every frontend edit ledger entry before retry and before reporting. A row missing any field is an incomplete and invalid trace; it must be corrected before retry or report. After attempt three, retain FAILED with its full history; never take a fourth attempt or turn failure into green prose.
 
 ### Complete report and truthful verdict
 
@@ -69,6 +71,7 @@ State whether the acceptance criteria are satisfied. Any required FAIL or unexec
 - Never call status-only backend evidence, stale browser evidence, code inspection, intention, or an unavailable dependency PASS.
 - Never silently drop required happy, error, or edge coverage.
 - Never exceed three total attempts for one test.
+- Never retry or report while a frontend-edit ledger row is incomplete.
 - Never expand a fix into unchanged modules or unrelated refactoring.
 - Never omit a planned row, attempt, failure, skip, fix, changed file, limitation, or acceptance caveat from the final report.
 
