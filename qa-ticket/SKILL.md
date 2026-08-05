@@ -5,418 +5,74 @@ description: Use when the current ticket branch needs executable acceptance or s
 
 # QA Ticket
 
-Automatically QA-test the current branch by analyzing the ticket (Linear or Jira) and code changes, then executing targeted backend and frontend tests against the local dev environment.
+Run evidence-backed acceptance QA for the current ticket branch against its local development surfaces. This workflow may make minimal, changed-scope repairs during bounded retries; it does not infer runtime success from code.
 
-## Prerequisites
+## Operating contract
 
-Before running any tests, discover the project's local dev setup. Check CLAUDE.md, README.md, docker-compose.yml, package.json scripts, or Makefile for:
+Run these phases in order:
 
-- **Backend URL** (e.g., `localhost:8000`, `localhost:3000`)
-- **Frontend URL** (e.g., `localhost:8080`, `localhost:3001`)
-- **Auth setup** — whether a test/dev mode bypasses auth, or if credentials are needed
-- **Platform CLI** — `linear` or `jira` CLI authenticated (depending on platform argument)
+1. Preflight project-local setup, auth, URLs, platform, ticket, `develop...HEAD` diff, and surface health.
+2. Build a targeted plan from ticket requirements **plus** changed functional code.
+3. Print the complete plan before any functional test.
+4. Execute reachable backend and frontend cases with authoritative routes and fresh evidence.
+5. Diagnose each failure before any bounded retry or fix.
+6. Print a truthful final report containing every planned test and all evidence.
 
-Quick health check (run in parallel, replace ports with discovered values):
-```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:<BACKEND_PORT>/docs
-curl -s -o /dev/null -w "%{http_code}" http://localhost:<FRONTEND_PORT>
-```
+Do not weaken the coverage floor, evidence requirements, or report because the user asks for speed, happy paths only, or a green verdict.
 
-If backend returns non-200, skip backend tests and note in report. Same for frontend.
+## Whole-run simulation
 
-> **Data readiness**: this skill tests behavior, not data setup. If your local DB may lack the data needed to exercise the feature, run `/check-data` then `/seed-data` first — they plan and load realistic test rows (happy / edge / error / stupid paths). qa-ticket assumes data is in place.
+Enable simulation only for the exact marker `SIMULATION ONLY` or when the user explicitly makes the **entire run** a no-execution preview. After loading this router, issue **no repository commands, no provider commands, no service commands, no browser commands, and no mutations**. Do not inspect files, read references, call agents, or invent observations. Use only supplied scenario facts to return the ordered would-be trace, plan, evidence classifications, limitations, and report. Label all described actions and fixes as simulated.
 
----
+Normal runs are unchanged: “smoke test,” “read-only tests,” or a request not to edit production code is not simulation and still performs discovery and executable QA.
 
-## Step 1: Extract ticket and gather context
+## Hard gates
 
-Run all three in the **same turn** (parallel Bash calls) since they're independent.
+### Preflight and context before testing
 
-### 1a. Parse optional platform argument
+Read [QA context](references/qa-context.md) in full **before preflight** and **before gathering** ticket/diff context. In a normal run, discover project-local URLs/auth/setup and health-check backend/frontend before functional tests. Resolve the selected platform (`linear` default; `jira` accepted), normalize the ticket ID, and gather the `develop...HEAD` diff independently.
 
-If the user passed an argument (e.g., `/qa-ticket jira`), set **platform** to that value. Supported values: `linear` (default), `jira`. If no argument or unrecognized value, default to `linear`.
+If the ticket provider fails, continue with disclosed **diff-only** planning; never invent requirements. If a surface is unavailable, keep its planned cases as `SKIP/INCONCLUSIVE`, never PASS. If no diff exists, report that and stop. Ask for the ticket ID when the branch has none.
 
-### 1b. Extract ticket ID from branch name
+### Complete targeted plan before execution
 
-```bash
-git rev-parse --abbrev-ref HEAD
-```
+Read [test planning](references/test-plan.md) in full **before drafting** and **before printing** the plan. Scope comes from the ticket plus diff and excludes unchanged modules, infrastructure, generated/style churn, and unrelated authentication.
 
-Extract the ticket ID using a **case-insensitive** match — branches are typically lowercase (e.g., `feature/abc-123-add-sku-validation`, `feature/xyz-456-fix-bug`). Match the pattern `[a-zA-Z]{2,5}-\d+` and uppercase it (e.g., `ABC-123`, `XYZ-456`) for the platform CLI.
+Every case has ID, surface, happy/error/edge category, description, concrete steps, and expected result. Include every changed endpoint success path, applicable CRUD lifecycle, all validator boundaries on both sides, missing/wrong fields, permission, not-found, conflict, and every relevant frontend error/state/special-input case. User pressure cannot remove required coverage. Print the complete plan grouped by surface/category before any functional test.
 
-If no ticket ID pattern is found, ask the user: "Could not extract a ticket ID from branch `<name>`. What's the ticket ID (e.g., ABC-123, XYZ-456)?"
+### Evidence, not intention
 
-### 1c. Fetch ticket details
+Discover routes authoritatively; a user guess never overrides OpenAPI, router, source, or diff evidence.
 
-**Linear** (default):
-```bash
-linear issue view <TICKET-ID>
-```
+- Backend PASS requires the expected **status and expected response content**. Use unique data, capture returned IDs, keep lifecycle order, and clean up.
+- Frontend PASS requires the browser skill, safe dev auth, current refs, waits, and a **fresh post-action** snapshot/URL/visible-state assertion. DOM-changing actions invalidate old refs. Stale text and code inspection are not evidence.
+- An unavailable service, data fixture, provider, or browser is `SKIP/INCONCLUSIVE`, never PASS. A spinner caused by failed data is not an empty-state pass.
 
-**Jira**:
-```bash
-jira issue view <TICKET-ID> --plain
-```
+Read [backend QA](references/backend-qa.md) in full **before any backend** route discovery or test. Read [frontend QA](references/frontend-qa.md) in full **before any frontend** route discovery, browser setup, or test. Skip an unaffected surface with an explicit report note.
 
-Extract: title, description, labels, priority, acceptance criteria (often in the description). The description defines what to test.
+### Bounded diagnosis and remediation
 
-### 1d. Fetch code diff against develop
+Read [fix, retry, and report](references/fix-retry-and-report.md) in full **before diagnosing** the first failure or changing test/application code. Classify the cause as test bug, code bug, or environment/data issue before remediation.
 
-```bash
-git diff develop...HEAD --stat
-git diff develop...HEAD
-```
+Allow **at most three total attempts per test**: the initial attempt counts. Diagnose between attempts. Keep fixes minimal and within changed functional scope. A test-input correction is not a production fix. After every frontend edit, wait for HMR and network idle before retrying. After attempt three, retain FAILED with its full history; never take a fourth attempt or turn failure into green prose.
 
-Parse the diff to understand:
-- Which backend modules changed (e.g., `backend/src/proposition_manager/`)
-- Which frontend components changed (e.g., `frontend/src/pages/`)
-- Whether changes are backend-only, frontend-only, or fullstack
-- What API endpoints are affected (route definitions, handlers)
-- What models/schemas changed
+### Complete report and truthful verdict
 
----
+Read [fix, retry, and report](references/fix-retry-and-report.md) again **before the final report**. Include every planned test, result, attempts, expected/actual evidence, skip or failure, diagnosis, fix, and every changed file. Keep PASS notes concise; preserve complete unsuccessful histories.
 
-## Step 2: Analyze and create test plan
+State whether the acceptance criteria are satisfied. Any required FAIL or unexecuted case prevents an unqualified satisfied verdict. Separate product failures from environment limitations and provide a concrete recovery next step for each unresolved product or environment issue.
 
-Based on the ticket description + code diff, create a **targeted** test checklist. Only test what the changes actually affect.
+## Never rules
 
-### Categorize changes
+- Never run a functional test before local preflight/context and the printed plan.
+- Never test a guessed route when authoritative evidence exists.
+- Never call status-only backend evidence, stale browser evidence, code inspection, intention, or an unavailable dependency PASS.
+- Never silently drop required happy, error, or edge coverage.
+- Never exceed three total attempts for one test.
+- Never expand a fix into unchanged modules or unrelated refactoring.
+- Never omit a planned row, attempt, failure, skip, fix, changed file, limitation, or acceptance caveat from the final report.
 
-- **Backend API**: route handlers, services, models, database logic
-- **Frontend UI**: React components, pages, hooks, forms
-- **Fullstack**: changes spanning both sides
+## Related skills
 
-### Generate test cases
-
-Each test case has:
-- **ID**: T1, T2, T3, etc.
-- **Type**: `backend` or `frontend`
-- **Category**: `happy-path`, `error`, or `edge-case`
-- **Description**: What it verifies (tied to a ticket requirement or code change)
-- **Steps**: Concrete actions
-- **Expected result**: What success looks like
-
-### Test coverage requirements
-
-Good QA means testing all three categories thoroughly. Skipping errors and edge cases leads to false confidence. Follow this checklist when generating tests:
-
-#### 1. Happy path (the feature works as intended)
-- Every new/changed endpoint gets at least one success test
-- Full CRUD cycle if applicable (create → read → update → list → delete)
-- Frontend: primary user flow end-to-end (navigate → interact → verify result)
-
-#### 2. Error handling (the feature fails gracefully)
-- **Validation boundaries**: For every validator in schemas/models (min_length, max_length, regex, required fields, enum values), test both sides of the boundary. E.g., if max_length=2000, test with 2000 chars (pass) and 2001 chars (fail).
-- **Missing/invalid fields**: Omit each required field one at a time. Send wrong types (string where int expected, etc.).
-- **Permission checks**: If the code has authorization logic (e.g., "only author can delete"), test the unauthorized path explicitly — use a different user ID or simulate a forbidden action.
-- **Resource not found**: Test with non-existent IDs (valid UUID format but doesn't exist in DB).
-- **Duplicate/conflict errors**: If the code prevents duplicates or has optimistic concurrency (ETags, revisions), test the conflict case.
-- **Rate limiting**: If endpoints have rate limits (check for `@limiter.limit`), note it in the plan (no need to actually hit the limit, just document it exists).
-- **Frontend error states**: Submit invalid data through the UI and verify error messages/toasts appear. Test what happens when the API returns an error.
-
-#### 3. Edge cases (boundary conditions and unusual inputs)
-- **Capacity limits**: If the code enforces limits (e.g., max 100 items), test at the boundary. If feasible, test what happens when the limit is reached.
-- **Empty states**: What does the UI show with zero items? What happens when you delete the last item?
-- **Special characters**: Test inputs with unicode, emoji, HTML tags, very long strings, newlines.
-- **Concurrent operations**: If relevant, test what happens with rapid sequential requests (e.g., double-click submit).
-- **Multiple items**: Don't just test with one item — add 2-3, verify they all appear, delete one and verify the others remain.
-- **Keyboard interactions**: If the frontend code has keyboard handlers (onKeyDown, onKeyPress), test those paths (e.g., Enter to submit).
-- **State transitions**: If the feature involves state changes (open/close, expand/collapse, draft/published), test toggling back and forth.
-
-### What NOT to test
-Unchanged modules, authentication (bypassed by ENVIRONMENT=test), infrastructure, code style.
-
-### Print the plan before executing
-
-Group by category so coverage gaps are visible:
-
-```
-## Test Plan for <TICKET-ID>: <ticket title>
-
-### Backend Tests — Happy Path
-- [ ] T1: POST /api/<resource> with valid payload creates a record (201)
-- [ ] T2: GET /api/<resource>/:id returns the created record (200)
-
-### Backend Tests — Errors
-- [ ] T3: POST /api/<resource> with missing required field returns 422
-- [ ] T4: POST /api/<resource> with empty string for required field returns 422
-- [ ] T5: DELETE /api/<resource>/:id by non-owner returns 403
-- [ ] T6: GET /api/<resource>/:nonexistent returns 404
-
-### Backend Tests — Edge Cases
-- [ ] T7: POST /api/<resource> with max-length field (boundary)
-- [ ] T8: POST /api/<resource> with unicode/emoji in text field
-
-### Frontend Tests — Happy Path
-- [ ] T9: Creation form submits and shows in table/list
-
-### Frontend Tests — Errors
-- [ ] T10: Validation error appears when required field is left empty
-
-### Frontend Tests — Edge Cases
-- [ ] T11: Submit via Enter key (not just button click)
-- [ ] T12: Empty state shows correct message
-```
-
----
-
-## Step 3: Execute backend tests
-
-Use `curl` against the backend URL discovered in Prerequisites. If the project runs in a test/dev mode that bypasses auth, no Authorization header is needed. Otherwise, include the appropriate auth header.
-
-### Curl patterns
-
-**GET (list)**:
-```bash
-curl -s -w "\n%{http_code}" http://localhost:<BACKEND_PORT>/api/<resource>
-```
-
-**POST (create)**:
-```bash
-curl -s -w "\n%{http_code}" -X POST http://localhost:<BACKEND_PORT>/api/<resource> \
-  -H "Content-Type: application/json" \
-  -d '{"field": "value"}'
-```
-
-**PUT/PATCH (update)**:
-```bash
-curl -s -w "\n%{http_code}" -X PATCH http://localhost:<BACKEND_PORT>/api/<resource>/<id> \
-  -H "Content-Type: application/json" \
-  -d '{"field": "updated_value"}'
-```
-
-**DELETE**:
-```bash
-curl -s -w "\n%{http_code}" -X DELETE http://localhost:<BACKEND_PORT>/api/<resource>/<id>
-```
-
-### Result evaluation
-
-- Parse HTTP status code from the last line (`%{http_code}` output)
-- Parse JSON response body (everything before the status code line)
-- **PASS**: status code matches expectation AND response body contains expected data
-- **FAIL**: status code mismatch OR response body doesn't match
-
-### CRUD test sequencing
-
-When testing CRUD on a resource, follow this order to manage test data:
-1. **Create** (POST) — capture the returned `id` or `_id`
-2. **Read** (GET by id) — verify it's retrievable
-3. **Update** (PATCH/PUT) — modify a field, verify the change
-4. **List** (GET all) — verify it appears
-5. **Delete** (DELETE) — clean up
-6. **Verify delete** (GET by id) — confirm 404
-
-### Discovering API routes
-
-Discover available routes from the project. Try these approaches in order:
-
-1. **OpenAPI/Swagger spec** (if the backend serves one):
-   ```bash
-   curl -s http://localhost:<BACKEND_PORT>/openapi.json | python3 -c "import sys,json; paths=json.load(sys.stdin)['paths']; [print(p) for p in sorted(paths)]"
-   ```
-2. **Route files in the codebase** — search for route definitions (e.g., `@app.get`, `@router.post`, `app.use`, `Router()`)
-3. **Code diff** — the diff from Step 1d already shows which route files changed; focus on those
-
----
-
-## Step 4: Execute frontend tests
-
-When the test plan includes frontend tests, **load the agent-browser skill first** using the Skill tool:
-
-```
-Skill: agent-browser
-```
-
-This gives you access to `agent-browser` commands for browser automation.
-
-### Frontend auth setup
-
-Discover how the frontend handles authentication in dev/test mode. Check CLAUDE.md, README.md, or the frontend source for:
-
-- **Test mode bypass** — some apps skip auth entirely when `ENVIRONMENT=test` or similar
-- **localStorage/cookie mock** — if the app reads a cached session from localStorage, seed it before navigating. Look for the localStorage key name and expected shape in the auth code
-- **Login flow** — if no bypass exists, use `agent-browser` to log in through the UI with test credentials
-
-Example pattern for localStorage-based auth:
-```bash
-agent-browser open http://localhost:<FRONTEND_PORT> && agent-browser wait --load networkidle
-agent-browser eval "localStorage.setItem('<AUTH_KEY>', JSON.stringify(<MOCK_SESSION>)); 'done'"
-```
-
-After setting auth, navigate to the target page.
-
-### Navigation
-
-Navigate directly to the relevant page:
-
-```bash
-agent-browser open http://localhost:<FRONTEND_PORT>/<route> && agent-browser wait --load networkidle && agent-browser snapshot -i
-```
-
-### Discovering frontend routes
-
-Don't assume route paths — discover them from the project:
-
-1. **Code diff** — the changed frontend files from Step 1d indicate which pages/routes are affected
-2. **Router config** — search for route definitions (e.g., `<Route path=`, `createBrowserRouter`, `next.js app/ or pages/` directory structure)
-3. **Navigation from home** — open the root URL, take a snapshot, and follow links to the relevant page
-
-### Interaction pattern
-
-For every frontend test, follow this cycle:
-
-1. **Navigate** to the target page
-2. **Snapshot** (`agent-browser snapshot -i`) to discover interactive elements and their refs
-3. **Interact** (click, fill, select) using refs from the snapshot
-4. **Wait** for the action (`agent-browser wait --load networkidle`)
-5. **Re-snapshot** to verify the result — refs are invalidated after DOM changes, so you must always re-snapshot
-6. **Assert** by checking snapshot output for expected text, elements, or state changes
-
-### Example: testing a form
-
-```bash
-# Navigate
-agent-browser open http://localhost:<FRONTEND_PORT>/<route> && agent-browser wait --load networkidle
-
-# Discover elements
-agent-browser snapshot -i
-# Output: @e1 [button] "Add SKU", @e2 [table] ...
-
-# Click add
-agent-browser click @e1
-agent-browser wait --load networkidle
-agent-browser snapshot -i
-# Output: @e3 [input] "Name", @e4 [input] "Description", @e5 [button] "Save"
-
-# Fill and submit
-agent-browser fill @e3 "Test SKU"
-agent-browser fill @e4 "Created by QA automation"
-agent-browser click @e5
-agent-browser wait --load networkidle
-
-# Verify
-agent-browser snapshot -i
-# Look for success toast, new table row, or navigation to detail page
-```
-
-### Frontend assertions
-
-- **Element presence**: Check snapshot output for expected text
-- **Navigation**: `agent-browser get url` to verify URL changed
-- **Error states**: After invalid submission, snapshot and look for validation messages
-- **Visual**: `agent-browser screenshot` if needed for manual review
-
-### Important agent-browser rules
-
-- Always re-snapshot after any click, navigation, or form submission
-- Use `agent-browser wait --load networkidle` after actions that trigger API calls
-- If snapshot shows a loading spinner, wait and re-snapshot
-- If element not found, scroll (`agent-browser scroll down 500`) and re-snapshot
-- **Radix UI workaround**: Some Radix primitives (Collapsible, Dialog triggers, Accordion) may not respond to `agent-browser click @ref`. If a click doesn't change the element's state (e.g., `expanded` stays `false`), fall back to a JS click via eval:
-  ```bash
-  agent-browser eval --stdin <<'EVALEOF'
-  const btn = document.querySelector('button[data-state="closed"]');
-  if (btn) btn.click();
-  EVALEOF
-  ```
-  Then wait and re-snapshot to verify the state changed.
-
----
-
-## Step 5: Fix-and-retry loop
-
-When a test fails, don't immediately mark it as failed. Attempt to diagnose and fix.
-
-### Protocol (max 3 attempts per test)
-
-1. **Attempt 1**: Run the test as designed
-2. **On failure — diagnose**:
-   - Backend: read error response body, check server logs if unclear
-   - Frontend: `agent-browser screenshot`, check snapshot for error messages
-3. **Identify root cause**:
-   - **Code bug**: Fix the file, wait for hot-reload, retry
-   - **Test bug**: Adjust test parameters (wrong URL, payload, expected value), retry
-   - **Environment issue**: Server down, DB not seeded — report and skip
-4. **Attempt 2**: Re-run after fix
-5. **On second failure**: Diagnose again, try another fix
-6. **Attempt 3**: Final retry
-7. **After 3 failures**: Mark as **FAILED**, record full details
-
-### Fix guidelines
-
-- Make minimal changes — don't refactor unrelated code
-- After editing backend files, wait ~2 seconds for uvicorn hot-reload
-- After editing frontend files, wait for Vite HMR (`agent-browser wait --load networkidle`)
-- If unsure about a fix, read surrounding code for context first
-
----
-
-## Step 6: Generate report
-
-After all tests complete (or fail after 3 attempts), output the report directly in the conversation.
-
-### Report format
-
-```
-# QA Report: <TICKET-ID> — <ticket title>
-
-**Branch**: <branch name>
-**Ticket**: <TICKET-ID>
-**Date**: <current date>
-**Result**: X/Y tests passed
-
-## Test Results
-
-| # | Type | Category | Test | Result | Attempts | Notes |
-|---|------|----------|------|--------|----------|-------|
-| T1 | Backend | Happy path | POST /api/items creates record | PASS | 1 | — |
-| T2 | Backend | Error | POST /api/items missing name → 422 | PASS | 1 | — |
-| T3 | Backend | Edge case | POST /api/items with 2000-char name | PASS | 1 | — |
-| T4 | Frontend | Happy path | Form submission | PASS | 2 | Fixed missing field validation |
-| T5 | Frontend | Error | Validation error display | FAIL | 3 | Toast not appearing |
-| T6 | Frontend | Edge case | Enter key submits form | PASS | 1 | — |
-
-## Fixes Applied
-
-### T3 (attempt 2)
-- **File**: `backend/src/<module>/routes/<resource>.py:45`
-- **Change**: Added missing required field validation
-- **Why**: Payload was accepted without required field, causing 500 on DB insert
-
-## Failed Tests — Details
-
-### T4: Validation error display
-- **Expected**: Error toast when submitting empty name
-- **Actual**: Form submits without validation, returns 500
-- **Root cause**: Missing Zod validation on frontend form schema
-- **Attempts**: 3 — added zod rule → still failed → checked backend → also missing validation
-
-## Summary
-
-<2-3 sentences: what works, what doesn't, whether acceptance criteria are met, recommended follow-up>
-```
-
-### Report rules
-
-- Show ALL tests, not just failures
-- Keep PASS notes minimal
-- For FAIL tests, include full details: expected vs actual, root cause, what was tried
-- Explicitly state whether the ticket's acceptance criteria are satisfied
-- List every file changed during fix-and-retry
-
----
-
-## Edge cases
-
-- **No ticket ID in branch** (case-insensitive): Ask the user for the ticket ID
-- **Platform CLI fails**: Proceed with code diff only; note that test plan is based solely on changes
-- **Jira CLI not installed**: If platform is jira but `jira` command not found, report error and suggest: `brew install ankitpokhrel/jira-cli/jira-cli`
-- **Unknown platform argument**: If argument is not `linear` or `jira`, default to Linear with a note
-- **Backend not running**: Skip backend tests, note in report
-- **Frontend not running**: Skip frontend tests, note in report
-- **No changes on branch**: Report "No changes found relative to develop" and stop
-- **Only backend changes**: Skip frontend tests, note in report
-- **Only frontend changes**: Skip backend tests, note in report
-- **agent-browser unavailable**: Skip frontend tests, note in report
-- **Test data collisions**: Use unique identifiers (timestamps) in test data names; clean up via DELETE after testing
+- Run `/check-data` then `/seed-data` when local rows are missing; this skill tests behavior rather than provisioning fixtures.
+- Load `agent-browser` before frontend execution.
