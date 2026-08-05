@@ -110,6 +110,20 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(phrase, normalized)
 
+        retry = " ".join(
+            (REFERENCES / "fix-retry-and-report.md")
+            .read_text(encoding="utf-8")
+            .lower()
+            .split()
+        )
+        for text in (normalized, retry):
+            for phrase in (
+                "simulation ledger: `edit: <file> | hmr: would wait | network idle: would wait | fresh refs: would acquire | next attempt: <n>`",
+                "classify supplied outcomes separately",
+                "never claim a simulated wait, ref acquisition, edit, or retry was observed or occurred",
+            ):
+                self.assertIn(phrase, text)
+
     def test_frontend_edit_retry_transition_is_indivisible_and_ledgered(self):
         router = " ".join(self.body.lower().split())
         retry = " ".join(

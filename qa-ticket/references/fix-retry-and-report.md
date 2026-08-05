@@ -28,6 +28,8 @@ Unavailable prerequisites before execution produce zero attempts and `SKIP/INCON
 
 Write one complete ledger row per frontend edit: `Edit: <file> | HMR: observed | network idle: observed | fresh refs: acquired | next attempt: <N>`. Audit every frontend edit ledger entry before retry and before reporting. A row missing any field is an incomplete and invalid trace; it must be corrected before retry or report. Never summarize several edits under one collective wait entry.
 
+In whole-run simulation, do not use the observed row. For each described edit, emit this simulation ledger: `Edit: <file> | HMR: would wait | network idle: would wait | fresh refs: would acquire | next attempt: <N>`. Classify supplied outcomes separately. Never claim a simulated wait, ref acquisition, edit, or retry was observed or occurred.
+
 ## Final report contract
 
 The inline report contains:

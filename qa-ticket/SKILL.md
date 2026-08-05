@@ -24,6 +24,8 @@ Do not weaken the coverage floor, evidence requirements, or report because the u
 
 Enable simulation only for the exact marker `SIMULATION ONLY` or when the user explicitly makes the **entire run** a no-execution preview. After loading this router, issue **no repository commands, no provider commands, no service commands, no browser commands, and no mutations**. Do not inspect files, read references, call agents, or invent observations. Use only supplied scenario facts to return the ordered would-be trace, plan, evidence classifications, limitations, and report. Label all described actions and fixes as simulated.
 
+For each described frontend edit, emit this simulation ledger: `Edit: <file> | HMR: would wait | network idle: would wait | fresh refs: would acquire | next attempt: <N>`. Classify supplied outcomes separately. Never claim a simulated wait, ref acquisition, edit, or retry was observed or occurred.
+
 Normal runs are unchanged: “smoke test,” “read-only tests,” or a request not to edit production code is not simulation and still performs discovery and executable QA.
 
 ## Hard gates
