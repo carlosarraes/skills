@@ -26,7 +26,7 @@ Pull with rebase. Acme worktrees historically use `example-platform-mon-<NUM>-<s
 1. **L1 CI:** inspect logs and correlate the failure with the diff.
    - Real failure: smallest root-cause repair and a regression test when feasible.
    - Flake unrelated to the diff: rerun the failed job; do not change source.
-   - Title-only/conventional check: edit the PR title; no commit.
+   - Title-only/conventional check: edit the PR title; no commit. Title edits rerun the title check but preserve reviews.
    - Size gate or conflict: use the already selected policy path, not an improvised code fix.
 2. **L2 inline threads:** smallest correct fix or specific evidenced pushback. Make one focused commit per code finding so each is traceable.
 3. **L3:** de-duplicated Greptile summary-only items and discrete human review-body items. One commit per discrete requested change, but one coordinated push for the PR.
@@ -47,6 +47,8 @@ gh api graphql -f query='mutation{
 ```
 
 In simulated IDs this means reply to `C-*` and resolve `T-*`; never swap them. A follow-up inline reply says `Filed as follow-up: <ticket-url>` and then resolves. A pushback reply cites concrete code, precedent, ticket scope, or a tested invariant and then resolves. When the reviewer explicitly says not to file or fix, make no code/ticket, reply `Noted, thanks`, and resolve.
+
+A bot reply on its own already-resolved thread is a new finding only when it asks for additional code; otherwise leave the resolved finding closed.
 
 Never reply directly to a top-level review body or Greptile summary. For a nonblocking top-level follow-up, post exactly one PR-level acknowledgment covering the filed items.
 

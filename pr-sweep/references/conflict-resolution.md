@@ -12,6 +12,8 @@ Read this file before resolving, staging, continuing a rebase, or pushing any co
 
 Only after this evidence may a routine hunk take branch, upstream, or a manual merge. Upstream may already contain equivalent work, making a rebased commit empty; dropping that empty commit is valid. Preserve both intents when both are required.
 
+For a format-only cherry-pick in a stacked split, a commit may reference files absent from that layer. After investigation, remove those absent paths from that cherry-pick so a later owning commit can add them cleanly; never generalize this mechanical case to substantive conflicts.
+
 ## Mandatory STOP
 
 STOP without modifying conflicted files, staging, rebase continuation, or push when any applies:

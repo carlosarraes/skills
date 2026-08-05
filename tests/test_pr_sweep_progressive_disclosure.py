@@ -137,6 +137,10 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "resolve",
             "follow-up",
             "never bypass hooks",
+            "already-resolved thread",
+            "additional code",
+            "title edits",
+            "preserve reviews",
         ):
             self.assertIn(phrase, fix)
 
@@ -148,12 +152,22 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "2,000",
             "split",
             "never infer",
-            "other checks are green",
+            "unrelated check results",
+            "status summaries",
         ):
             self.assertIn(phrase, size)
 
         conflict = contents["conflict-resolution.md"]
-        for phrase in ("git status", "both sides", "history", "stop", "user work", "--force-with-lease"):
+        for phrase in (
+            "git status",
+            "both sides",
+            "history",
+            "stop",
+            "user work",
+            "--force-with-lease",
+            "format-only",
+            "cherry-pick",
+        ):
             self.assertIn(phrase, conflict)
 
         convergence = contents["review-convergence.md"]
@@ -161,7 +175,18 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             self.assertIn(phrase, convergence)
 
         cadence = contents["cadence.md"]
-        for phrase in ("every nonterminal cycle", "before", "report", "waiting", "all selected prs are done"):
+        for phrase in (
+            "every nonterminal cycle",
+            "before",
+            "report",
+            "waiting",
+            "all selected prs are done",
+            "5 minutes",
+            "20 minutes",
+            "cache",
+            "time-sensitive",
+            "validate",
+        ):
             self.assertIn(phrase, cadence)
 
     def test_six_read_only_behavior_cases_are_tracked(self):

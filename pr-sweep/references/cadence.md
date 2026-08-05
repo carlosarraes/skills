@@ -15,7 +15,9 @@ Schedule the next firing **before** composing the report on **every nonterminal 
 
 The sole terminal condition is **all selected PRs are DONE** after a fresh refresh. Only then omit the wakeup. “No code left” and “nothing changed” do not terminate the loop.
 
-When `ScheduleWakeup` is the available mechanism, call it with the same loop prompt and scope before reporting; the audited default was roughly 600 seconds. Never merely promise a wakeup in prose. Historically a 10-minute interval balanced 5–12 minute bot passes and 5–7 minute CI runs. Treat those values as observations, not immutable policy. Adjust to the current project without losing the unconditional re-arm rule.
+When `ScheduleWakeup` is the available mechanism, call it with the same loop prompt and scope before reporting; the audited default was roughly 600 seconds. Never merely promise a wakeup in prose.
+
+The audited guardrails were no shorter than **5 minutes** and no longer than **20 minutes**, with 10 minutes the default. The time-sensitive rationale was that bot passes took 5–12 minutes, CI 5–7 minutes, and the then-current prompt cache had a 5-minute TTL: after a cache miss, 10 minutes amortized the next cycle while useful work completed. **Validate** current scheduler, cache, provider, and project latency before using these bounds; preserve liveness even when the timing changes.
 
 ## Persist before handoff
 
