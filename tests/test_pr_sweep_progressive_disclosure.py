@@ -118,6 +118,8 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "never reply",
             "terminal-good",
             "pr url",
+            "every collected finding",
+            "exactly one terminal action",
         ):
             self.assertIn(phrase, collection)
 
@@ -139,7 +141,15 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             self.assertIn(phrase, fix)
 
         size = contents["acme-size-gate.md"]
-        for phrase in ("idempotent", "effective loc", "size/override", "2,000", "split"):
+        for phrase in (
+            "idempotent",
+            "effective loc",
+            "size/override",
+            "2,000",
+            "split",
+            "never infer",
+            "other checks are green",
+        ):
             self.assertIn(phrase, size)
 
         conflict = contents["conflict-resolution.md"]

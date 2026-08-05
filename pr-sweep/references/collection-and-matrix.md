@@ -136,6 +136,8 @@ Build a stable finding ledger before dispatch:
 3. If unmatched, assign a stable summary-only key. It may receive one commit or one evidenced pushback, but **never reply** to or resolve the summary.
 4. Carry finding keys and commit SHAs across cycles so updated summary wording does not create a duplicate fix.
 
+Before dispatch, reconcile **every collected finding** to **exactly one terminal action** in the cycle ledger: fix/commit, rerun, reply-resolve, follow-up, evidenced pushback, explicit wait, or STOP. A duplicate summary maps to its inline key; each genuine summary-only item keeps its own assigned action. Do not dispatch with an unassigned finding, and report the ledger's finding-to-commit/pushback accounting.
+
 Report the current score, but judge completion by underlying findings.
 
 ## Disposition decision

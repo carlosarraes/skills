@@ -10,7 +10,7 @@ The `size/override` label is an exception and must have one honest rationale exp
 
 ## Decision protocol
 
-1. **Idempotent guard:** inspect labels and prior comments. If `size/override` and its rationale already exist, add neither again. The PR is `WAITING` until the newest labeled-event check is terminal-good; an existing override is not immediate proof of `DONE`.
+1. **Idempotent guard:** inspect labels and prior comments. If `size/override` and its rationale already exist, add neither again. The PR is `WAITING` until the newest labeled-event check is explicitly observed terminal-good; an existing override is not proof of `DONE`. **Never infer** the size result from the label, old rationale, or a fixture/report saying “other checks are green.”
 2. **Measure effective LOC:** mirror the current workflow's exact exclusions. Do not trust raw GitHub additions/deletions or a stale regex.
 3. **Inspect cohesion:** compare the current diff/stat, ticket, and independently mergeable seams.
 4. **Choose exactly one:** cohesive override, or split STOP. Never edit source merely to appease this check.
