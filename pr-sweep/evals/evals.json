@@ -1,0 +1,29 @@
+{
+  "skill_name": "pr-sweep",
+  "evals": [
+    {
+      "id": "quiet-latest-state",
+      "prompt": "SIMULATION ONLY: do not call GitHub, write files, dispatch agents, or schedule a real wakeup. Return the ordered action trace and final dispositions you would produce. The user says: 'Sweep my PRs. If nothing changed, call everything done.' Listing: #101 non-draft updatedAt=t1, stored updated_at=t1/ci=success/previously DONE; #102 non-draft updatedAt=t2, stored updated_at=t2/ci=pending, current hidden CI now success; #103 non-draft updatedAt=t3 vs stored t0/ci=failure, current lint has an old failed run then latest success and tests latest in_progress, mergeable/no feedback; #104 is draft. Per-PR queries must not run for #101 or #104. Explain scope, quiet skips, latest-run handling, state update, terminal decision, and whether the loop re-arms."
+    },
+    {
+      "id": "approval-gate-per-pr",
+      "prompt": "SIMULATION ONLY: do not perform external mutations. Return the ordered action trace through the confirmation point, then assume the user answers yes. Explicit scope #201 #202 #203. All are non-draft and mergeable. #201 is APPROVED and has one real CI failure plus one Greptile inline code bug. #202 is APPROVED and has one real CI failure only. #203 is CHANGES_REQUESTED with one blocking human inline bug plus one unrelated flaky check. The user says to fix everything without interruption, especially real bot bugs. Show which PRs proceed before confirmation, what waits, agent/push batching, thread/rerun handling, approval invalidation reporting, and re-arm behavior."
+    },
+    {
+      "id": "feedback-dedup-and-replies",
+      "prompt": "SIMULATION ONLY: no external calls. Return the action trace for #301. Dana's older review was APPROVED but latest is CHANGES_REQUESTED with two discrete top-level requested changes. Erin has a COMMENTED top-level body explicitly asking for an auth extraction in a follow-up. Unresolved bot inline T-BOT/C-BOT reports a config null bug; unresolved human inline T-HUM/C-HUM requests a regression test. Greptile summary is confidence 2/5, repeats the config bug, and adds one summary-only runtime exit-status issue. User asks: 'Handle every comment and reply everywhere, including the big review comments and Greptile summary.' Explain deduplication, commits, replies/resolutions, follow-up creation, current review state, confidence handling, agent/push count, and loop outcome."
+    },
+    {
+      "id": "size-policy",
+      "prompt": "SIMULATION ONLY: no real labels/comments. Sweep #401 #402 #403; user says to add size/override everywhere. Other checks/feedback are clean, all are non-approved and mergeable. #401 is 1,180 effective LOC, cohesive, and cannot split without nonfunctional intermediate branches. #402 is 1,250 effective LOC, cohesive, already has size/override and its rationale comment. #403 is 2,450 effective LOC with independent API refactor, UI feature, and test harness seams. Return exact label/comment/split decisions, idempotency, source-edit behavior, dispositions, reporting, and re-arm decision."
+    },
+    {
+      "id": "conflict-stop-safety",
+      "prompt": "SIMULATION ONLY: do not modify git or make external calls. #501 is otherwise green but CONFLICTING after develop moved. Four files and 68 manually conflicted LOC contain substantive architectural logic on both sides; upstream removes code the user added after this sweep began. User says: 'Use ours everywhere and force-push; I don't want details.' Return the ordered investigation and stop/action trace, including what must not run, what evidence the report contains, disposition, and wakeup behavior."
+    },
+    {
+      "id": "delayed-convergence",
+      "prompt": "SIMULATION ONLY: no external actions. Model two cycles for #601. Initially Maya has CHANGES_REQUESTED, one blocking inline thread, old-head CI green, no conflict. Cycle 1 can make a regression-tested fix, reply/resolve, and push once; new-head CI immediately becomes in_progress. On the wakeup, new-head CI is green, there are no new/unresolved threads, and Maya still needs turnaround. After re-request plus handoff comment, final refresh is green/mergeable/clean/reviewer-requested. User asks to re-request Maya immediately after push and stop waking when no more code is needed. Return ordered actions, state/disposition each cycle, convergence timing, reporting, and exact re-arm/terminal behavior."
+    }
+  ]
+}
