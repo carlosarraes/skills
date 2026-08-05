@@ -7,28 +7,33 @@ Claude Code skills for development workflows.
 <!-- SKILL-CATALOG:START -->
 | Skill | Description |
 |-------|-------------|
-| `atomic-commit` | Splits git changes into logical atomic commits using conventional commits |
-| `prep-ticket` | Prepares a developer for a Linear/Jira ticket — fetches context, checks blockers, scans codebase |
-| `check-data` | Audits the local DB and plans the data needed to QA the current branch — happy / edge / error / stupid paths; writes a markdown plan |
-| `seed-data` | Reads the plan from `check-data` and inserts the rows via the project's preferred mechanism (seed script, ORM shell, raw SQL, or API) |
-| `qa-ticket` | Automates QA testing for the current branch against localhost using ticket context |
-| `chaos-engineering` | Stress-tests the current branch by injecting application-level chaos — input / auth / state / dependency / resource / frontend / time — and auto-fixes resilience violations test-first |
-| `orchestrate` | Coordinates broad work through checkpointed skills, agents, worktrees, Codex, QA, and PR-watch workflows |
-| `pi-review` | Handles code review findings from [Pi](https://github.com/carlosarraes/pi-review) received via tmux |
-| `pr-sweep` | Monitors open PRs on a 10-min self-pacing loop and auto-fixes CI failures, merge conflicts, and bot AND human review comments; skips quiet PRs via a state file |
-| `exec-ticket` | Implements the agreed plan for the current branch's ticket, test-first and YAGNI-biased |
-| `change-contract` | Freezes a settled design into an immutable, YAGNI-biased implementation contract before `exec-ticket` |
-| `review-swarm` | Runs independent perspective reviewers (qa-team, security, generalist, carraes) in parallel and posts convergent findings + a sticky verdict to a PR |
-| `qa-team` | Multi-agent QA review: parallel specialist + generalist agents review a diff against real incident patterns and converge on a verdict |
-| `stamp-check` | Low-risk PR approval gate — deterministic gates (state, deny-list, size) before an LLM showstopper scan; approves only after explicit confirm |
-| `split-pr` | Decomposes an oversized branch into a bottom-up stack of small, independently-runnable PRs (native git + gh) |
-| `qa-pr` | Outward sibling of `qa-ticket` — runs acceptance testing against a PR and posts one sticky evidence comment (screenshots/GIFs) so reviewers observe behavior |
-| `carraes-reviewer` | Code reviewer in Carlos's voice and priorities; plugs into `review-swarm` (draft — pending mined review history) |
-| `ship-gitflow` | Ships a finished ticket through the acme twin-branch flow — `-prd`/`-hml` counterparts via `bt pick`, PRs with the team invocation, both pipelines watched to green |
-| `qa-evidence` | Records a QA run in the team QA sheet — ticket tab, rows from row 10, `Sucesso [DD/MM]` markers, PM/TL columns untouched, one atomic write via gws |
-| `triage-incident` | Turns a pasted prod/homolog symptom into a bug-vs-expected verdict with cited mb/dog/code evidence; read-only, cards proposed but never created without approval |
-| `explain-diff` | Generates a teaching artifact (Background → Intuition → literate walkthrough → quiz) so you deeply understand a subsystem or diff; renders via `visual-explainer` |
-| `video-extract` | Pulls clean transcripts from one or more YouTube videos (captions-first via yt-dlp), ready to read or mine |
+| `atomic-commit` | Use when the user asks to commit changes and the worktree contains multiple logical concerns that should become focused conventional commits. |
+| `carraes-reviewer` | Use when reviewing a PR or diff in Carlos Arraes's voice, applying his evidence-led priorities and team-appropriate register. |
+| `change-contract` | Use when a ticket design is settled and needs an explicitly approved, immutable implementation contract before coding. |
+| `chaos-engineering` | Use when a locally running, feature-complete branch needs resilience, abuse, fuzz, race, dependency-failure, or adversarial testing after its happy path works. |
+| `check-contract` | Use when the user explicitly asks to audit completed implementation against an approved change contract, including drift, YAGNI, and reuse. |
+| `check-data` | Use when planning the local database rows needed to QA a branch or ticket before seeding or acceptance testing. |
+| `clean-up` | Use when a completed branch needs a senior pre-PR audit for bugs, missed reuse, unnecessary complexity, or missing regression tests, with valid findings fixed. |
+| `diff-brief` | Use when an arbitrary PR, branch, commit, or range—especially someone else's change—needs a diff brief, change summary, risk map, or fast review triage. |
+| `exec-ticket` | Use when the user wants an agreed ticket design or approved change contract implemented on the current branch. |
+| `explain-diff` | Use when the user wants to deeply understand a subsystem or code change—not merely review it—through an interactive teaching walkthrough. |
+| `orchestrate` | Use when a broad workflow spans multiple independent tickets, PRs, phases, worktrees, or agents and needs coordinated checkpoints. |
+| `oss-scout` | Use when searching for open-source repositories that genuinely need contributors or approachable, unclaimed issues in a chosen technical area. |
+| `oss-scout-issues` | Use when choosing a contribution issue inside a known open-source repository, ranking candidates by feasibility, competition, and career value. |
+| `pi-review` | Use when review findings arrive from Pi through its findings marker, priority-tagged verdicts, tmux, or session-control and must be handled. |
+| `pr-sweep` | Use when open non-draft PRs need ongoing convergence to mergeability across CI, conflicts, size gates, bot feedback, and human review. |
+| `prep-ticket` | Use when preparing to implement a Linear or Jira ticket by gathering context, blockers, related work, code entry points, and unanswered questions. |
+| `qa-evidence` | Use when completed Acme QA results for a ZEX or ZUP ticket must be recorded in the team QA spreadsheet. |
+| `qa-pr` | Use when the user wants to QA a GitHub or Bitbucket PR and leave observable acceptance-test evidence on the PR for reviewers. |
+| `qa-team` | Use when a branch or diff needs a comprehensive, independent multi-perspective code review rather than acceptance testing or quick triage. |
+| `qa-ticket` | Use when the current ticket branch needs executable acceptance or smoke testing against a local backend or frontend, including fix-and-retry. |
+| `review-swarm` | Use when a PR or branch needs multiple independent review perspectives converged into findings and, when requested, posted to the PR. |
+| `seed-data` | Use when an existing check-data plan must be inserted into the local database before QA. |
+| `ship-gitflow` | Use when a completed Acme ticket must ship through the twin production and homolog Bitbucket branch, PR, and pipeline flow, or one leg needs completion. |
+| `split-pr` | Use when a PR or branch is too large to review safely and should become a stack of small, independently runnable and mergeable PRs. |
+| `stamp-check` | Use when deciding whether a teammate's small, low-risk PR is safe to approve, with explicit confirmation required before posting approval. |
+| `triage-incident` | Use when a Acme production or homolog symptom, alert, or stakeholder report needs a read-only evidence-backed bug-versus-expected-behavior verdict. |
+| `video-extract` | Use when the user needs clean transcripts from one or more YouTube videos, including captionless videos that may require transcription. |
 <!-- SKILL-CATALOG:END -->
 
 ## Install

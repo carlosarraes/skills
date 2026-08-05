@@ -1,6 +1,6 @@
 ---
 name: chaos-engineering
-description: "Stress-tests the current branch by injecting application-level chaos — malformed input, auth bypass, races, dependency failure, resource abuse, frontend chaos, time skew — then auto-fixes resilience violations test-first with one conventional commit per finding. Extracts ticket from branch (Linear default, Jira via 'jira' arg), reads diff + ticket, dispatches 7 parallel chaos-design agents, writes `.notes/<branch>/chaos-plan.md` (or `ai_docs/<branch>/chaos-plan.md`), then prompts the user to confirm before running backend (curl) and frontend (agent-browser) attacks. Trigger on 'chaos engineering', 'chaos test', 'break this feature', 'stress test', 'find weaknesses', 'resilience test', 'fuzz this endpoint', 'what could break this', 'attack my endpoint', '/chaos-engineering'. Localhost only — refuses staging/prod. Pairs with /qa-ticket: qa-ticket proves it works, chaos-engineering proves it survives."
+description: Use when a locally running, feature-complete branch needs resilience, abuse, fuzz, race, dependency-failure, or adversarial testing after its happy path works.
 ---
 
 # Chaos Engineering

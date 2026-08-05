@@ -1,6 +1,6 @@
 ---
 name: pr-sweep
-description: "Use when the user wants their open non-draft PRs driven to a clean, mergeable state: CI/pipeline green, merge conflicts resolved, size gate satisfied, and every review thread (bot AND human) resolved or turned around. Covers Greptile findings (inline threads + the summary comment's confidence score and T-Rex runtime logs) / Cursor BugBot, CI failures and flakes, the Acme PR size gate, inline review threads, and top-level 'changes requested' review bodies (one big comment listing fixes). Triggers: 'sweep my PRs', 'monitor my PRs', 'watch CI + bots', 'fix bot/review comments', 'handle Greptile/Cursor findings', 'resolve PR conflicts', 'address review feedback', 'handle changes requested', 'reply to my reviewer', 'fix and re-request review', 'babysit my PRs', '/pr-sweep', or just flipped PRs Draft to Ready. Sweeps all the user's open PRs (gh pr list --author @me); explicit list narrows scope; pass 'jira' for Jira follow-ups (Linear default)."
+description: Use when open non-draft PRs need ongoing convergence to mergeability across CI, conflicts, size gates, bot feedback, and human review.
 ---
 
 # PR Sweep

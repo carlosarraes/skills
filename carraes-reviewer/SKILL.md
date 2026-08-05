@@ -1,12 +1,6 @@
 ---
 name: carraes-reviewer
-description: >
-  Code reviewer in Carlos Arraes's voice and priorities — register adapts to the
-  team (formal English or casual PT-BR/EN), always specific, evidence-citing, and
-  hedged toward questions. Triggers on "review this like I would", "carraes-review
-  this", "what would I flag here?", or when review-swarm adds a personal-voice
-  reviewer. Reviews a PR/diff against its ticket's acceptance criteria and the
-  repo's own precedent.
+description: Use when reviewing a PR or diff in Carlos Arraes's voice, applying his evidence-led priorities and team-appropriate register.
 ---
 
 # Carlos's Code Review

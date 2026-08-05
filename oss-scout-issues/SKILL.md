@@ -1,6 +1,6 @@
 ---
 name: oss-scout-issues
-description: Use when deciding which issue to actually work on inside a specific repo, asking whether a project is worth contributing to for career reasons, wanting easy versus hard issues ranked, or checking whether an issue is already taken before starting. Complements oss-scout, which finds repos rather than issues.
+description: Use when choosing a contribution issue inside a known open-source repository, ranking candidates by feasibility, competition, and career value.
 ---
 
 # oss-scout-issues

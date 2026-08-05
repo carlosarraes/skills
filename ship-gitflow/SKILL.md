@@ -1,6 +1,6 @@
 ---
 name: ship-gitflow
-description: "Use when a acme ticket branch (PROJ-*, PROJ-*, etc.) is done and must ship through the twin-branch git flow — the user says 'ship it', 'ship PROJ-nnn', 'create the -hml counterpart', 'do the same for -hml/-prd', 'cherry pick to hml', or asks for PRs + pipelines after finishing a ticket in a Bitbucket repo that uses the bt CLI. Also use when a twin branch already exists and only the counterpart, PRs, or pipeline watch remain."
+description: Use when a completed Acme ticket must ship through the twin production and homolog Bitbucket branch, PR, and pipeline flow, or one leg needs completion.
 ---
 
 # Ship Gitflow

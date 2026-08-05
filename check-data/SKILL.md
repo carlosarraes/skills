@@ -1,6 +1,6 @@
 ---
 name: check-data
-description: "Plans the data the local DB needs to properly QA the current branch. Inspects branch diff + ticket + DB, then writes a markdown plan to `ai_docs/<branch>/data-plan.md` (or `.notes/<branch>/data-plan.md` if `.notes/` exists) covering happy / edge / error / stupid-path rows. Trigger on 'check data', 'data readiness', 'plan seed data', 'what data do I need', or '/check-data'. Does NOT generate test cases (use `/qa-ticket`) or insert data (use `/seed-data`). Supports Linear (default) and Jira — pass 'jira' as 2nd arg."
+description: Use when planning the local database rows needed to QA a branch or ticket before seeding or acceptance testing.
 ---
 
 # Check Data

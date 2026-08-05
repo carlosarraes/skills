@@ -1,6 +1,6 @@
 ---
 name: qa-ticket
-description: "Automates QA testing for the current branch by extracting the ticket ID (e.g., ABC-123, XYZ-456) from the git branch, fetching ticket details and code diff, generating a targeted test plan, and executing backend (curl) and frontend (agent-browser) tests. Fixes bugs found during testing and retries. Use this skill whenever the user asks to 'QA this branch', 'test this ticket', 'run QA', 'qa-ticket', 'test my changes', 'verify this works', 'smoke test this', 'run acceptance tests', or wants automated testing of their current feature branch against localhost. Also trigger when the user mentions 'acceptance testing', 'manual QA', 'end-to-end test my changes', or 'does this work'. Supports Linear (default) and Jira — pass 'jira' as argument to use Jira (e.g., '/qa-ticket jira')."
+description: Use when the current ticket branch needs executable acceptance or smoke testing against a local backend or frontend, including fix-and-retry.
 ---
 
 # QA Ticket

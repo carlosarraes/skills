@@ -1,6 +1,6 @@
 ---
 name: change-contract
-description: Turn a settled ticket design into an approved implementation contract.
+description: Use when a ticket design is settled and needs an explicitly approved, immutable implementation contract before coding.
 disable-model-invocation: true
 ---
 

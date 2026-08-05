@@ -1,6 +1,6 @@
 ---
 name: exec-ticket
-description: "Use when the user wants to implement or execute the agreed plan for the current branch's ticket — the build step after the approach has been designed and stress-tested (typically prep-ticket → brainstorm → grill-me → exec-ticket). Trigger when the user says 'exec ticket', 'exec-ticket', 'execute ticket', 'execute the plan', 'implement this ticket', 'build this ticket', 'code this ticket', 'implement ABC-123', 'now build it', 'start coding this', or wants a grilled plan turned into working code. Supports Linear (default) and Jira — pass platform as the second argument (e.g., '/exec-ticket ABC-123 jira')."
+description: Use when the user wants an agreed ticket design or approved change contract implemented on the current branch.
 ---
 
 # Exec Ticket

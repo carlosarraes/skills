@@ -1,12 +1,6 @@
 ---
 name: review-swarm
-description: >
-  Use when the user wants a full multi-perspective review of a PR or branch —
-  "review-swarm", "swarm review", "swarm this PR", "full review on #123",
-  "review before I flip it to Ready", or when they want independent reviewer
-  agents' findings posted to a PR as inline comments. Accepts an optional PR
-  number/URL or base branch as argument. Complements pr-sweep: review-swarm
-  generates the review; pr-sweep drives the resulting threads to resolution.
+description: Use when a PR or branch needs multiple independent review perspectives converged into findings and, when requested, posted to the PR.
 ---
 
 # Review Swarm: Multi-Perspective PR Review

@@ -1,6 +1,6 @@
 ---
 name: clean-up
-description: "Audit a branch for bugs, code-reuse misses, quality issues, and missing regression tests, then fix valid findings test-first (one focused commit per finding) and finish with /simplify. Use when the user says 'clean up this branch', 'clean up <ticket>', '/clean-up', 'audit this branch', 'review and refactor my branch', 'sanity-check before PR', 'tidy up before merge', or 'find latent bugs in my branch'. Targets vibe-coded branches that need a senior-engineer pass before merge — dispatches parallel review agents, leans on existing helpers before adding abstractions, and never auto-pushes or opens a PR. Accepts a branch name or ticket ID (e.g., 'clean up feature/foo' or 'clean up PROJ-883'); operates on the current branch if neither is given."
+description: Use when a completed branch needs a senior pre-PR audit for bugs, missed reuse, unnecessary complexity, or missing regression tests, with valid findings fixed.
 ---
 
 # Clean-up: branch review + TDD refactor

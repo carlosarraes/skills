@@ -1,6 +1,6 @@
 ---
 name: check-contract
-description: Use only for explicit contract audits.
+description: Use when the user explicitly asks to audit completed implementation against an approved change contract, including drift, YAGNI, and reuse.
 disable-model-invocation: true
 ---
 

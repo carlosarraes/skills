@@ -1,6 +1,6 @@
 ---
 name: atomic-commit
-description: "Split git changes into logical atomic commits using conventional commits. Use this skill whenever the user wants to 'commit my changes', 'make atomic commits', 'split my commits', 'break up my changes', 'commit everything', 'group my changes into commits', 'create conventional commits', or asks to commit staged/unstaged git changes as separate logical units. Even if the user just says 'commit' and there are multiple unrelated changes, this skill applies. Trigger on any committing scenario where changes could benefit from being split into focused, atomic units."
+description: Use when the user asks to commit changes and the worktree contains multiple logical concerns that should become focused conventional commits.
 ---
 
 # Atomic Commit

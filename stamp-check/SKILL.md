@@ -1,11 +1,6 @@
 ---
 name: stamp-check
-description: >
-  Use when the user is asked to approve ("stamp") a teammate's small PR, wants a
-  merge-readiness gate on a low-risk PR, or says "stamp-check #123", "can I stamp
-  this?", "is this PR safe to approve?", "stamp this for me". Takes a PR number or
-  URL. Checks deterministic policy gates before any judgment and never posts an
-  approval without explicit user confirmation.
+description: Use when deciding whether a teammate's small, low-risk PR is safe to approve, with explicit confirmation required before posting approval.
 ---
 
 # Stamp Check: low-risk PR approval gate

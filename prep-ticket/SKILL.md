@@ -1,6 +1,6 @@
 ---
 name: prep-ticket
-description: "Prepares a developer to work on a Linear ticket by fetching all context, checking blockers, scanning the codebase, and producing a structured readiness report, ending with a pointer to /grill-me to stress-test the suggested approach. Use this skill whenever the user says 'prep ticket', 'prep-ticket', 'prepare ticket', 'get ready for ABC-123', 'prep XYZ-456', 'analyze ticket', 'ticket prep', 'break down this ticket', 'ticket readiness', 'is DBZ-789 ready', 'what's blocking DEV-42', 'what do I need to know about QA-1024', or wants to understand a Linear ticket before starting work on it. Also trigger when the user mentions checking if a ticket is unblocked, gathering ticket context, or preparing to implement a specific ticket. Supports Linear (default) and Jira — pass platform as second argument (e.g., '/prep-ticket ABC-123 jira')."
+description: Use when preparing to implement a Linear or Jira ticket by gathering context, blockers, related work, code entry points, and unanswered questions.
 ---
 
 # Prep Ticket

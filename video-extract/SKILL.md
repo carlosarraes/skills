@@ -1,12 +1,6 @@
 ---
 name: video-extract
-description: >
-  Use when the user wants the transcript(s) of one or more YouTube videos —
-  "extract this video", "get the transcript", "video-extract <url>", "pull these
-  talks", "transcribe this", "mine this talk", or pastes YouTube links to read/
-  summarize. Handles a batch of videos, captions-first (fast, free), with an
-  audio-transcription fallback for videos that have none. Produces clean plain-
-  text transcripts ready to read or mine for ideas.
+description: Use when the user needs clean transcripts from one or more YouTube videos, including captionless videos that may require transcription.
 ---
 
 # Video Extract: YouTube → clean transcript

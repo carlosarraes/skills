@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Coordinate broad work through checkpointed skill/subagent/worktree workflows. Use when the user asks to orchestrate, coordinate, parallelize, use subagents, run a fleet, drive multiple tickets/PRs, watch CI/reviews, or execute/QA work across phases. Routes to existing focused skills when they fit, including prep-ticket, brainstorming, grilling, exec-ticket, qa-ticket, chaos-engineering, and pr-sweep.
+description: Use when a broad workflow spans multiple independent tickets, PRs, phases, worktrees, or agents and needs coordinated checkpoints.
 ---
 
 # Orchestrate

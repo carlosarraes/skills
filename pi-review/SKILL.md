@@ -1,6 +1,6 @@
 ---
 name: pi-review
-description: "Handle code review findings from Pi (another AI agent) received via tmux or --session-control. You MUST use this skill whenever you see text prefixed with '[pi-review findings]' — that marker means Pi sent review results to the builder. Also trigger on [P0]-[P3] priority tags with a verdict line, or when the user says 'handle pi findings', 'fix pi review', 'fix and commit pi findings', 'address pi review', or 'respond to Pi'. For each valid finding, apply a minimal fix, make one focused commit explaining WHY, then reply to Pi through the same channel (session-control sender_info/send_to_session when present, otherwise tmux)."
+description: Use when review findings arrive from Pi through its findings marker, priority-tagged verdicts, tmux, or session-control and must be handled.
 ---
 
 # Pi Review Findings Handler

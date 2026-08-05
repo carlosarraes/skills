@@ -1,6 +1,6 @@
 ---
 name: qa-evidence
-description: "Use after a QA pass on a acme ticket (PROJ-*, PROJ-*, etc.) when the results must land in the team QA spreadsheet — the user says 'update the sheet', 'fill the PROJ-nnn tab', 'preencher a planilha', 'fill the cenários', 'update the QA sheet with the tests we did', or a /qa-ticket run in homolog just finished and its evidence needs recording. Uses the gws CLI."
+description: Use when completed Acme QA results for a ZEX or ZUP ticket must be recorded in the team QA spreadsheet.
 ---
 
 # QA Evidence

@@ -39,6 +39,15 @@ README = "# Skills\n\n<!-- SKILL-CATALOG:START -->\n| Skill | Description |\n|--
 
 
 class SkillQualityTests(unittest.TestCase):
+    def test_first_party_descriptions_fit_the_routing_metadata_budget(self):
+        result = load_module().check(ROOT)
+
+        self.assertEqual(result["inventory_count"], 27)
+        self.assertLessEqual(result["description_characters"], 8_360)
+        self.assertTrue(
+            all(skill["description"].startswith("Use when") for skill in result["skills"])
+        )
+
     def test_discovers_only_tracked_skill_files(self):
         temp, root = init_repo({
             "one/SKILL.md": "---\nname: one\ndescription: Use when one applies\n---\n# One\n",

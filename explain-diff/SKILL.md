@@ -1,14 +1,6 @@
 ---
 name: explain-diff
-description: >
-  Use when you want to deeply understand code you (or an agent) wrote but don't
-  really grasp — "explain this to me", "explain-diff", "help me understand the
-  overage feature", "teach me this subsystem/PR/branch", "I keep having to ask
-  an LLM about my own code", "walk me through what changed". Generates a rich
-  interactive teaching artifact (Background → Intuition → Literate walkthrough →
-  Quiz) so you understand well enough to have the next idea, not just approve the
-  change. Explains a whole subsystem/feature (architecture mode) or a
-  PR/branch/commit (diff mode). Renders via visual-explainer.
+description: Use when the user wants to deeply understand a subsystem or code change—not merely review it—through an interactive teaching walkthrough.
 ---
 
 # Explain Diff: understand to participate, not just to verify

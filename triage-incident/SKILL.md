@@ -1,6 +1,6 @@
 ---
 name: triage-incident
-description: "Use when a production or homolog symptom lands in chat and needs a verdict — the user pastes a PM/tech-lead message ('estamos tendo X', 'cliente comprou plano inativo?', 'check what happened'), a Datadog alert ('[Triggered] Pagamentos errors'), or asks to check a company/email/subscription state with mb/dog. acme-specific: Metabase (mb), Datadog (dog), backoffice, jira."
+description: Use when a Acme production or homolog symptom, alert, or stakeholder report needs a read-only evidence-backed bug-versus-expected-behavior verdict.
 ---
 
 # Triage Incident

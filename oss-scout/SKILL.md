@@ -1,6 +1,6 @@
 ---
 name: oss-scout
-description: Use when looking for open-source projects to contribute to, asking which repos genuinely need contributors, wanting unclaimed approachable issues that aren't crowded with competing PRs, or hunting for projects in a specific area (systems programming, databases, backend, compilers) to level up in. Also use when resuming or widening a previous contributor search.
+description: Use when searching for open-source repositories that genuinely need contributors or approachable, unclaimed issues in a chosen technical area.
 ---
 
 # oss-scout

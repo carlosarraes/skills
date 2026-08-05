@@ -1,12 +1,6 @@
 ---
 name: split-pr
-description: >
-  Use when a PR or branch is too big to review or stamp and needs to become a
-  stack of small, independently-reviewable PRs — "split this PR", "this is too
-  big, break it up", "stack these changes", "split-pr #123", or when pr-sweep's
-  size gate recommended a split instead of an override. Decomposes one oversized
-  branch into a bottom-up stack where each layer is independently runnable and
-  each diff is small enough to observe rather than just reason about.
+description: Use when a PR or branch is too large to review safely and should become a stack of small, independently runnable and mergeable PRs.
 ---
 
 # Split PR: decompose an oversized branch into an observable stack

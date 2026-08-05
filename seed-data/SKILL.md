@@ -1,6 +1,6 @@
 ---
 name: seed-data
-description: "Inserts the rows from `/check-data`'s plan (`ai_docs/<branch>/data-plan.md` or `.notes/<branch>/data-plan.md`) into the local DB. Auto-picks the mechanism: project seed script, ORM shell, raw SQL, or HTTP POST. Trigger on 'seed data', 'seed the db', 'load test data', 'run the data plan', or '/seed-data'. Requires `/check-data` to have run first. Does NOT plan data (use `/check-data`) or generate test cases (use `/qa-ticket`)."
+description: Use when an existing check-data plan must be inserted into the local database before QA.
 ---
 
 # Seed Data

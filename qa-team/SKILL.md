@@ -1,13 +1,6 @@
 ---
 name: qa-team
-description: >
-  Multi-agent QA review team for code changes. This skill should be used when the user
-  asks to "review my code", "run QA", "qa-team", "review this branch", "code review",
-  "check my changes", or wants a comprehensive multi-perspective code review of the
-  current branch's changes. Spawns parallel specialist agents (security, database,
-  reliability, compatibility, data integrity, performance, frontend, copy) that
-  independently review the diff and produce a converged report. Also includes
-  two generalist reviewers for convergence validation.
+description: Use when a branch or diff needs a comprehensive, independent multi-perspective code review rather than acceptance testing or quick triage.
 ---
 
 # QA Team: Multi-Agent Code Review
