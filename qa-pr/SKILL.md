@@ -179,10 +179,11 @@ comment. Show the user:
 
 Defaults and allowed choices:
 
-- Public repository: recommend unlisted Snapdoc links, expiring in 3 days.
-- Private/unknown repository: require an explicit choice between unlisted and
-  passcode; recommend unlisted with a 3-day expiry and explain that anyone with
-  the URL can access it.
+- Every repository, public or private: passcode-protect both artifacts, expiring
+  in 3 days. State plainly at the checkpoint that no reviewer can open the
+  evidence until the passcode reaches them out of band.
+- Unlisted is an opt-out the user must ask for. Honor it when they do, and
+  explain that anyone holding the URL can then view the evidence.
 - Snapdoc accepts TTLs from 1 hour through 7 days. Never silently make evidence
   permanent or extend its expiry.
 
@@ -190,10 +191,22 @@ The existing marked comment is authorization to rerun with the same destination,
 privacy, and non-expanded expiry. A first publication or any destination, privacy,
 or expiry expansion requires a fresh checkpoint.
 
-For passcode protection, receive the passcode out of band and send it only to the
-two Snapdoc create invocations (video and report). Never echo it, log it, write it
-to scratch, include it in the report/manifest/hidden markers, or place it on the
-forge. Updates retain the artifact's protection and do not receive `--passcode`.
+Receive the passcode out of band and send it only to the two Snapdoc create
+invocations (video and report). Never echo it, log it, write it to scratch,
+include it in the report/manifest/hidden markers, or place it on the forge.
+Updates retain the artifact's protection and do not receive `--passcode`.
+
+Snapdoc resolves `--passcode` from the flag, then `SNAPDOC_PASSCODE`, then the
+config file, so a protected publish can succeed without the flag ever appearing
+on the command line. Never infer protection from that: read `has_passcode` in
+each create response and require `true` on both artifacts. If either comes back
+`false`, the evidence is unprotected — do not comment on the PR. Apply `snapdoc
+protect <id> --passcode <code>` to the affected ID, confirm `has_passcode` is
+now `true`, and only then continue.
+
+Both artifacts carry the same protection. Protecting only the video leaves the
+report — which holds the case table, observations, and manifest — readable by
+anyone with its link.
 
 Changing privacy on a rerun does not require new artifacts. `snapdoc protect <id>
 --passcode <code>` adds or rotates protection, and `--remove-passcode` drops it,
@@ -228,14 +241,15 @@ artifact; show it in the checkpoint and follow the user's retention choice.
 For a first publication or a missing ID, create artifacts:
 
 ```bash
-snapdoc publish <evidence.mp4> --json --ttl <ttl> --watch-only \
+snapdoc publish <evidence.mp4> --json --ttl <ttl> --watch-only --passcode <code> \
   --title "<owner/repo> PR #<number> QA @ <short-sha>" --poster <poster.jpg>
-snapdoc publish <report.md> --markdown --json --ttl <ttl> \
+snapdoc publish <report.md> --markdown --json --ttl <ttl> --passcode <code> \
   --title "<owner/repo> PR #<number> QA report @ <short-sha>"
 ```
 
-Default Snapdoc creation is unlisted. Add `--passcode` only for the approved
-protected create path, without persisting its value.
+Pass `--passcode` on both creates unless the user opted out to unlisted at the
+checkpoint, and never persist its value. Confirm `has_passcode` in each response
+as described in section 6.
 
 Always create video evidence `--watch-only`. The evidence format links the watch
 page and never embeds the MP4 inline, so nothing is lost, and the recording stops
@@ -281,6 +295,11 @@ JSON, rerun/revalidate, and update the same artifacts only when safe.
 Before comment upsert, also verify the published video/report hashes and case results
 match the manifest, report, and proposed comment. A mismatch is stale evidence:
 stop and rebuild or rerender it instead of posting inconsistent proof.
+
+Confirm the published protection matches what the checkpoint approved: re-read
+`has_passcode` on both artifacts and require it to agree with the `privacy` value
+going into the manifest and hidden state. Posting a comment that calls evidence
+protected when it is not is a false claim about who can read it.
 
 Find the one comment containing `<!-- qa-pr-evidence -->`:
 

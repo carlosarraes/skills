@@ -72,7 +72,7 @@ flowchart LR
 
 | Field | Value |
 | --- | --- |
-| Privacy | <public | unlisted | passcode> |
+| Privacy | <passcode | unlisted | public> — `passcode` unless the user opted out |
 | Expires | <UTC timestamp | never> |
 | Video artifact | `<id>` version `<version>` part 1 of `<count>` |
 | Report artifact | `<id>` version `<version>` |
@@ -120,7 +120,7 @@ terminal newline before hashing it. Render these rows in this order:
 | Snapdoc | Version |
 | Video SHA-256 | Hash from `chapters.json`, or `not applicable` |
 | Video details | Duration, dimensions, codec, part count, or `not applicable` |
-| Privacy | `public`, `unlisted`, or `passcode` |
+| Privacy | `passcode` (the default), `unlisted`, or `public` |
 | Expiry | UTC timestamp or `never` |
 | Video artifact | ID and current version for every part, or `not applicable` |
 | Report artifact | ID and current version |
@@ -140,7 +140,7 @@ identifier. Artifact state uses one marker per logical artifact:
 > 🤖 Automated comment by **QA PR** — not written by a human
 <!-- qa-pr-video-artifact: <id> part="1" -->
 <!-- qa-pr-report-artifact: <id> -->
-<!-- qa-pr-evidence-state: privacy="unlisted" expires="<UTC>" parts="1" -->
+<!-- qa-pr-evidence-state: privacy="passcode" expires="<UTC>" parts="1" -->
 ```
 
 For multipart video, repeat the normal video marker with the same logical run
@@ -173,6 +173,8 @@ Previous runs.
 
 [Watch the QA run](<stable_watch_url>) · [Open the evidence report](<stable_report_url>)
 
+🔒 Passcode-protected — ask <requester> for the code. Expires <UTC>.
+
 | Case | Category | Result | Evidence |
 | --- | --- | --- | --- |
 | T1 — <title> | happy | ✅ | [00:12](<version_url>?t=12.000) |
@@ -192,6 +194,11 @@ passcode-protected. Never embed a raw media URL — watch-only evidence has none
 and never place a passcode in GitHub; share it out of band with authorized
 reviewers.
 
+Keep the 🔒 line whenever privacy is `passcode`, and drop it entirely when the
+user opted out to unlisted. Protected links render an unlock page rather than the
+evidence, so without that line a reviewer reads a working link as a broken one.
+Name who to ask; never hint at the code itself.
+
 ## Sticky comment — report only
 
 Omit video markers, video links, and video manifest values when there were no
@@ -207,6 +214,8 @@ meaningful frontend cases:
 ## QA evidence — <verdict emoji> <PASS | PASS WITH NOTES | FAIL> <sub>(@ <short_sha>)</sub>
 
 [Open the evidence report](<stable_report_url>)
+
+🔒 Passcode-protected — ask <requester> for the code. Expires <UTC>.
 
 | Case | Category | Result | Evidence |
 | --- | --- | --- | --- |
