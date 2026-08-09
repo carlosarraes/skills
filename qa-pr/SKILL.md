@@ -47,8 +47,9 @@ Complete this gate in order:
 
 1. Require `agent-browser`, `ffmpeg`, `ffprobe`, and `snapdoc` on `PATH`.
 2. Run `snapdoc whoami`; authentication and the configured API must work.
-3. Run `snapdoc publish --help` and require `--poster`. This proves the installed
-   Snapdoc supports native video evidence.
+3. Run `snapdoc publish --help` and require both `--poster` and `--watch-only`.
+   This proves the installed Snapdoc supports native video evidence and can
+   withhold the raw media URL.
 4. Discover the localhost frontend/backend origins, route, auth mode, and fixture
    or data setup. Record sanitized labels for the manifest.
 5. Verify the local app and auth/session endpoint before opening the feature.
@@ -135,14 +136,20 @@ Render the report from `references/evidence-format.md` with:
 - a Mermaid requirement → acceptance case → observed result graph using
   accessible `accTitle` and `accDescr`;
 - a concise acceptance-case table;
-- timestamp links of the form `version_file_url#t=<seconds.milliseconds>` for
+- timestamp links of the form `version_url?t=<seconds.milliseconds>` for
   every video chapter;
 - sanitized backend request/response sections;
 - fix commits and retests; and
 - the complete commit/environment/publication manifest from the reference.
 
 The report table is the browser-visible chapter navigator. Snapdoc's watch page
-does not provide one.
+does not provide one, but it does honor `?t=`, so every chapter link opens the
+watch page seeked to that moment.
+
+Never timestamp the raw media URL. A `#t=` on `version_file_url` bypasses the
+watch page, so on protected or watch-only evidence it lands the reviewer on a
+bare 401/403 with nothing to act on. `version_url?t=` resolves to the unlock
+prompt when locked and survives the unlock redirect.
 
 After any fix, require a committed, clean local HEAD. Immediately before the
 first outward action, refetch the live PR and require:
@@ -188,14 +195,22 @@ two Snapdoc create invocations (video and report). Never echo it, log it, write 
 to scratch, include it in the report/manifest/hidden markers, or place it on the
 forge. Updates retain the artifact's protection and do not receive `--passcode`.
 
+Changing privacy on a rerun does not require new artifacts. `snapdoc protect <id>
+--passcode <code>` adds or rotates protection, and `--remove-passcode` drops it,
+all while keeping the artifact ID — so links already posted on the PR keep
+working. Rotating also revokes every open unlock session and viewer link. Apply
+`protect` to both the video and report IDs, and pass the passcode the same way as
+a create: straight to the command, never persisted or echoed.
+
 ## 7. Publish or update stable Snapdoc artifacts
 
 Read the existing `<!-- qa-pr-evidence -->` comment before publishing. Parse its
 video/report artifact IDs, ordered `part` attributes, privacy, expiry, current
 stable links, and Previous runs version-pinned links.
 
-When privacy is unchanged, update the same artifact IDs so current URLs stay
-stable:
+Update the same artifact IDs so current URLs stay stable. This holds even when
+privacy changes: apply `snapdoc protect` to the existing IDs rather than minting
+replacements.
 
 ```bash
 snapdoc publish <evidence.mp4> --json --ttl <ttl> \
@@ -210,10 +225,10 @@ For multipart video, match IDs by ordered part number. Reuse matching parts and
 create only newly required parts. Do not silently expire a removed or superseded
 artifact; show it in the checkpoint and follow the user's retention choice.
 
-For a first publication, changed privacy, or a missing ID, create artifacts:
+For a first publication or a missing ID, create artifacts:
 
 ```bash
-snapdoc publish <evidence.mp4> --json --ttl <ttl> \
+snapdoc publish <evidence.mp4> --json --ttl <ttl> --watch-only \
   --title "<owner/repo> PR #<number> QA @ <short-sha>" --poster <poster.jpg>
 snapdoc publish <report.md> --markdown --json --ttl <ttl> \
   --title "<owner/repo> PR #<number> QA report @ <short-sha>"
@@ -222,9 +237,15 @@ snapdoc publish <report.md> --markdown --json --ttl <ttl> \
 Default Snapdoc creation is unlisted. Add `--passcode` only for the approved
 protected create path, without persisting its value.
 
+Always create video evidence `--watch-only`. The evidence format links the watch
+page and never embeds the MP4 inline, so nothing is lost, and the recording stops
+being hotlinkable by anyone who obtains the media URL. A watch-only artifact
+reports `file_url` and `version_file_url` as `null`; use `version_url` for every
+chapter link and manifest field.
+
 Publish video first and save each JSON response in scratch. Use its artifact ID,
-version, stable watch/file URLs, and `version_file_url` to finish the report's
-timestamp and manifest fields. Then publish the report and save its JSON response.
+version, and `version_url` to finish the report's timestamp and manifest fields.
+Then publish the report and save its JSON response.
 
 The report must name its own artifact ID and version. On the first run, bootstrap
 it once: create the report, take the returned ID, render that ID and expected
@@ -243,8 +264,9 @@ upload fails, use Snapdoc's poster-only retry rather than uploading a new versio
 snapdoc publish --json --update <video-id> --poster <poster.jpg>
 ```
 
-For protected evidence, the PR contains only protected watch/report links. Never
-embed or link the raw media URL, and keep the passcode out of GitHub/Bitbucket.
+The PR contains only watch/report links. Never embed or link a raw media URL —
+watch-only evidence has none to link — and keep any passcode out of
+GitHub/Bitbucket.
 
 ## 8. Final gate and sticky-comment upsert
 

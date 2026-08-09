@@ -43,7 +43,7 @@ flowchart LR
 
 | Case | Category | Result | Evidence | Notes |
 | --- | --- | --- | --- | --- |
-| T1 — <title> | happy | ✅ PASS | [00:12 — T1](<version_file_url>#t=12.000) | <observation> |
+| T1 — <title> | happy | ✅ PASS | [00:12 — T1](<version_url>?t=12.000) | <observation> |
 | T2 — <title> | edge | ✅ PASS | [request/response](#t2-request-and-response) | <observation> |
 
 ### T2 request and response
@@ -80,13 +80,18 @@ flowchart LR
 
 The case table is the browser-visible chapter interface because Snapdoc's watch
 page does not expose a chapter picker. Each frontend evidence cell links to the
-version-pinned MP4 file URL at the chapter start:
+version-pinned watch page, seeked to the chapter start:
 
 ```markdown
-[00:12 — T1](<version_file_url>#t=12.000)
+[00:12 — T1](<version_url>?t=12.000)
 ```
 
-Use three decimal places in `#t=` values. Current-run watch links may be stable,
+Link the watch page, never the raw MP4. A `#t=` on `version_file_url` skips the
+watch page entirely, so on protected or watch-only evidence every chapter link
+dead-ends on a bare 401/403. `version_url?t=` shows the unlock prompt instead
+and keeps the timestamp across the unlock redirect.
+
+Use three decimal places in `?t=` values. Current-run watch links may be stable,
 but report chapter links and all Previous runs links are version-pinned so a
 later artifact update cannot rewrite what an older verdict proved.
 
@@ -170,8 +175,8 @@ Previous runs.
 
 | Case | Category | Result | Evidence |
 | --- | --- | --- | --- |
-| T1 — <title> | happy | ✅ | [00:12](<version_file_url>#t=12.000) |
-| T2 — <title> | edge | ✅ | [00:48](<version_file_url>#t=48.000) |
+| T1 — <title> | happy | ✅ | [00:12](<version_url>?t=12.000) |
+| T2 — <title> | edge | ✅ | [00:48](<version_url>?t=48.000) |
 
 <bugs found and fixed, with linked SHAs, or “No bugs found.”>
 
@@ -182,10 +187,10 @@ Previous runs.
 </details>
 ```
 
-For public or unlisted artifacts, the video link may be the normal Snapdoc watch
-URL. For passcode-protected artifacts, put only the protected watch/report links
-in the PR. Never embed a raw media URL for protected media and never place the
-passcode in GitHub; share it out of band with authorized reviewers.
+Every video link is a Snapdoc watch URL, whether the artifact is unlisted or
+passcode-protected. Never embed a raw media URL — watch-only evidence has none —
+and never place a passcode in GitHub; share it out of band with authorized
+reviewers.
 
 ## Sticky comment — report only
 
