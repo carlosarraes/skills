@@ -24,7 +24,7 @@ A hosted link (or local file when the user declines hosting) where every screen 
 2. Make every listed state reachable — data, auth, feature setup. A step that consumes its fixture (a modal that appears only once per account) needs one fixture per capture attempt; plan that before driving. Completion: every listed shot has a named fixture or account that produces it.
 3. Drive the flow with agent-browser at the fixed viewport; let each screen settle before shooting. Completion: every entry on the shot list has an image file.
 4. Read each image back. Retake anything blank, half-loaded, or obscured (a toast that tells the flow's story may stay). Completion: every file visually shows its listed state.
-5. Build the page from [references/page-recipe.md](references/page-recipe.md): a three-sentence intro that tells the flow's story in plain register, numbered steps, badges only when new/unchanged/reused screens mix, the not-shown footnote.
+5. Read [references/page-recipe.md](references/page-recipe.md) before writing any HTML, then build the page it describes: a three-sentence intro that tells the flow's story in plain register, numbered steps, badges only when new/unchanged/reused screens mix, the not-shown footnote.
 6. Host it — snapdoc when available (update the existing artifact id to keep a stable link), otherwise the platform's artifact hosting — and report the link plus the not-shown list.
 
 ## Common mistakes
