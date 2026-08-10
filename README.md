@@ -28,6 +28,7 @@ Each step is optional — jump in wherever your ticket already is.
 | `diff-brief` | Use when an arbitrary PR, branch, commit, or range—especially someone else's change—needs a diff brief, change summary, risk map, or fast review triage. |
 | `exec-ticket` | Use when the user wants an agreed ticket design or approved change contract implemented on the current branch. |
 | `explain-diff` | Use when the user wants to deeply understand a subsystem or code change—not merely review it—through an interactive teaching walkthrough. |
+| `flow-walkthrough` | Use when a working UI flow should become a step-by-step visual walkthrough — real screenshots of every screen on one hosted page, captioned so tech and product people can both read it (design critique, product review, feature demo). |
 | `orchestrate` | Use when a broad workflow spans multiple independent tickets, PRs, phases, worktrees, or agents and needs coordinated checkpoints. |
 | `oss-scout` | Use when searching for open-source repositories that genuinely need contributors or approachable, unclaimed issues in a chosen technical area. |
 | `oss-scout-issues` | Use when choosing a contribution issue inside a known open-source repository, ranking candidates by feasibility, competition, and career value. |

@@ -26,6 +26,8 @@
   {"id":"stamp-check-positive","prompt":"Run the low-risk PR stamp check before I approve it.","expected":"stamp-check"},
   {"id":"triage-incident-positive","prompt":"Investigate this production symptom and give a cited bug-versus-expected verdict.","expected":"triage-incident"},
   {"id":"video-extract-positive","prompt":"Extract a clean transcript from this YouTube video.","expected":"video-extract"},
+  {"id":"flow-walkthrough-positive","prompt":"Take screenshots of the whole signup flow and make a step-by-step page my PM can read.","expected":"flow-walkthrough"},
+  {"id":"ambiguous-flow-walkthrough-design","prompt":"I want to see the new checkout screen by screen with images so design can critique it.","expected":"flow-walkthrough"},
   {"id":"ambiguous-qa-ticket-evidence","prompt":"The QA run just passed; add the evidence to the team spreadsheet.","expected":"qa-evidence"},
   {"id":"ambiguous-qa-pr-ticket","prompt":"QA the PR for the current ticket and post proof for reviewers.","expected":"qa-pr"},
   {"id":"ambiguous-contract-execution","prompt":"The design is settled; write the immutable contract before implementation.","expected":"change-contract"},
