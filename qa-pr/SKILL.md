@@ -180,8 +180,9 @@ comment. Show the user:
 Defaults and allowed choices:
 
 - Every repository, public or private: passcode-protect both artifacts, expiring
-  in 3 days. State plainly at the checkpoint that no reviewer can open the
-  evidence until the passcode reaches them out of band.
+  in 3 days. The passcode is generated fresh at publish time and published in the
+  sticky comment's 🔒 line, so evidence access is gated by repository read
+  access — a leaked watch or report URL alone reveals nothing.
 - Unlisted is an opt-out the user must ask for. Honor it when they do, and
   explain that anyone holding the URL can then view the evidence.
 - Snapdoc accepts TTLs from 1 hour through 7 days. Never silently make evidence
@@ -191,14 +192,19 @@ The existing marked comment is authorization to rerun with the same destination,
 privacy, and non-expanded expiry. A first publication or any destination, privacy,
 or expiry expansion requires a fresh checkpoint.
 
-Receive the passcode out of band and send it only to the two Snapdoc create
-invocations (video and report). Never echo it, log it, write it to scratch,
-include it in the report/manifest/hidden markers, or place it on the forge.
-Updates retain the artifact's protection and do not receive `--passcode`.
+Generate the passcode at publish time with `openssl rand -hex 8` and pass it
+explicitly via `--passcode` to both Snapdoc create invocations (video and
+report). Never let `SNAPDOC_PASSCODE` or the config file supply it implicitly —
+an inherited value may not match what the comment publishes. The sticky
+comment's 🔒 line is the passcode's single published location: keep it out of
+the report, the manifest, and the hidden markers, so one comment PATCH always
+shows the current code. On a rerun that keeps protection, reuse the passcode
+parsed from the existing 🔒 line; updates retain the artifact's protection and
+do not receive `--passcode`.
 
-Snapdoc resolves `--passcode` from the flag, then `SNAPDOC_PASSCODE`, then the
-config file, so a protected publish can succeed without the flag ever appearing
-on the command line. Never infer protection from that: read `has_passcode` in
+Snapdoc also resolves `--passcode` from `SNAPDOC_PASSCODE` and the config file
+when the flag is absent, which is exactly why the flag must carry the generated
+value. Never infer protection from the command line: read `has_passcode` in
 each create response and require `true` on both artifacts. If either comes back
 `false`, the evidence is unprotected — do not comment on the PR. Apply `snapdoc
 protect <id> --passcode <code>` to the affected ID, confirm `has_passcode` is
@@ -212,14 +218,16 @@ Changing privacy on a rerun does not require new artifacts. `snapdoc protect <id
 --passcode <code>` adds or rotates protection, and `--remove-passcode` drops it,
 all while keeping the artifact ID — so links already posted on the PR keep
 working. Rotating also revokes every open unlock session and viewer link. Apply
-`protect` to both the video and report IDs, and pass the passcode the same way as
-a create: straight to the command, never persisted or echoed.
+`protect` to both the video and report IDs with a freshly generated
+`openssl rand -hex 8` value, then PATCH the sticky comment so its 🔒 line shows
+the new code — the old one stops working the moment `protect` succeeds.
 
 ## 7. Publish or update stable Snapdoc artifacts
 
 Read the existing `<!-- qa-pr-evidence -->` comment before publishing. Parse its
-video/report artifact IDs, ordered `part` attributes, privacy, expiry, current
-stable links, and Previous runs version-pinned links.
+video/report artifact IDs, ordered `part` attributes, privacy, expiry, the
+🔒 line's current passcode, current stable links, and Previous runs
+version-pinned links.
 
 Update the same artifact IDs so current URLs stay stable. This holds even when
 privacy changes: apply `snapdoc protect` to the existing IDs rather than minting
@@ -247,9 +255,9 @@ snapdoc publish <report.md> --markdown --json --ttl <ttl> --passcode <code> \
   --title "<owner/repo> PR #<number> QA report @ <short-sha>"
 ```
 
-Pass `--passcode` on both creates unless the user opted out to unlisted at the
-checkpoint, and never persist its value. Confirm `has_passcode` in each response
-as described in section 6.
+Pass the generated `--passcode` on both creates unless the user opted out to
+unlisted at the checkpoint. Confirm `has_passcode` in each response as described
+in section 6.
 
 Always create video evidence `--watch-only`. The evidence format links the watch
 page and never embeds the MP4 inline, so nothing is lost, and the recording stops
@@ -279,8 +287,8 @@ snapdoc publish --json --update <video-id> --poster <poster.jpg>
 ```
 
 The PR contains only watch/report links. Never embed or link a raw media URL —
-watch-only evidence has none to link — and keep any passcode out of
-GitHub/Bitbucket.
+watch-only evidence has none to link. The current passcode appears exactly once
+on the forge: in the sticky comment's 🔒 line.
 
 ## 8. Final gate and sticky-comment upsert
 

@@ -151,7 +151,8 @@ and increasing part numbers:
 <!-- qa-pr-video-artifact: <part-2-id> part="2" -->
 ```
 
-Never store a passcode in hidden state. Parse existing markers before a rerun.
+The passcode lives only in the visible 🔒 line, never duplicated into hidden
+state. Parse existing markers — and the 🔒 line's passcode — before a rerun.
 When privacy is unchanged, update the referenced artifact IDs in place. When the
 privacy mode must change, obtain the outward-action checkpoint and replace the
 state markers only after the replacement artifacts exist.
@@ -173,7 +174,7 @@ Previous runs.
 
 [Watch the QA run](<stable_watch_url>) · [Open the evidence report](<stable_report_url>)
 
-🔒 Passcode-protected — ask <requester> for the code. Expires <UTC>.
+🔒 Passcode: `<code>` — the links above require it. Expires <UTC>.
 
 | Case | Category | Result | Evidence |
 | --- | --- | --- | --- |
@@ -190,14 +191,17 @@ Previous runs.
 ```
 
 Every video link is a Snapdoc watch URL, whether the artifact is unlisted or
-passcode-protected. Never embed a raw media URL — watch-only evidence has none —
-and never place a passcode in GitHub; share it out of band with authorized
-reviewers.
+passcode-protected. Never embed a raw media URL — watch-only evidence has none.
+The 🔒 line publishes the current passcode on the PR itself: evidence access is
+thereby gated by repository read access, so a Snapdoc URL that leaks beyond the
+repository reveals nothing on its own.
 
 Keep the 🔒 line whenever privacy is `passcode`, and drop it entirely when the
 user opted out to unlisted. Protected links render an unlock page rather than the
 evidence, so without that line a reviewer reads a working link as a broken one.
-Name who to ask; never hint at the code itself.
+The line must show the code that is live after the run: reuse the parsed code on
+a protection-preserving rerun, and show the freshly generated code after any
+rotation.
 
 ## Sticky comment — report only
 
@@ -215,7 +219,7 @@ meaningful frontend cases:
 
 [Open the evidence report](<stable_report_url>)
 
-🔒 Passcode-protected — ask <requester> for the code. Expires <UTC>.
+🔒 Passcode: `<code>` — the report link requires it. Expires <UTC>.
 
 | Case | Category | Result | Evidence |
 | --- | --- | --- | --- |
