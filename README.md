@@ -2,6 +2,17 @@
 
 Claude Code skills for development workflows.
 
+## Workflow
+
+Most skills chain into a ticket pipeline; the rest are standalone review/utility tools.
+
+- **Build**: `prep-ticket` → *grill the design* → `change-contract` → `exec-ticket` → `check-contract` → `clean-up`
+- **QA**: `check-data` → `seed-data` → `qa-ticket` (+ `chaos-engineering` for hostile testing) → `qa-evidence`
+- **Ship**: `atomic-commit` → `ship-gitflow`, with `qa-pr` leaving acceptance evidence on the PR
+- **Review** (someone else's change): `diff-brief` to triage → `qa-team` / `review-swarm` / `stamp-check` to judge → `split-pr` if too big → `pr-sweep` to drive PRs to merge
+
+Each step is optional — jump in wherever your ticket already is.
+
 ## Skills
 
 <!-- SKILL-CATALOG:START -->
