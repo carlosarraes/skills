@@ -42,7 +42,7 @@ class SkillQualityTests(unittest.TestCase):
     def test_first_party_descriptions_fit_the_routing_metadata_budget(self):
         result = load_module().check(ROOT)
 
-        self.assertEqual(result["inventory_count"], 27)
+        self.assertEqual(result["inventory_count"], 28)
         self.assertLessEqual(result["description_characters"], 8_360)
         self.assertTrue(
             all(skill["description"].startswith("Use when") for skill in result["skills"])

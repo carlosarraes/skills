@@ -41,6 +41,7 @@ Each step is optional — jump in wherever your ticket already is.
 | `review-swarm` | Use when the user asks for a review swarm, swarm review, or full multi-perspective swarm review of a PR or branch. |
 | `seed-data` | Use when an existing check-data plan must be inserted into the local database before QA. |
 | `ship-gitflow` | Use when a completed Acme ticket must ship through the twin production and homolog Bitbucket branch, PR, and pipeline flow, or one leg needs completion. |
+| `simplification-audit` | Use when the user wants a whole-codebase simplification audit of data structures, state representation, control flow, algorithms, or ownership, rather than a branch review, general risk audit, or implementation. |
 | `split-pr` | Use when a PR or branch is too large to review safely and should become a stack of small, independently runnable and mergeable PRs. |
 | `stamp-check` | Use when deciding whether a teammate's small, low-risk PR is safe to approve, with explicit confirmation required before posting approval. |
 | `triage-incident` | Use when a Acme production or homolog symptom, alert, or stakeholder report needs a read-only evidence-backed bug-versus-expected-behavior verdict. |
