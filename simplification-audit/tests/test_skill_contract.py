@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -6,6 +7,7 @@ ROOT = Path(__file__).parents[1]
 SKILL = ROOT / "SKILL.md"
 REVIEWER = ROOT / "references" / "reviewer-brief.md"
 REPORT = ROOT / "references" / "report-contract.md"
+EVALS = ROOT / "evals" / "evals.json"
 
 
 def normalized(text):
@@ -168,6 +170,33 @@ class SimplificationAuditSkillTests(unittest.TestCase):
             "Confidence",
         ):
             self.assertIn(normalized(phrase), flat_report)
+
+    def test_behavioral_evals_cover_positive_and_near_miss_branches(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        self.assertEqual(payload["skill_name"], "simplification-audit")
+        cases = payload["evals"]
+        self.assertEqual(len(cases), 5)
+        self.assertEqual(
+            {case["id"] for case in cases},
+            {
+                "monorepo-exhaustive-coverage",
+                "small-repo-direct-review",
+                "branch-cleanup-near-miss",
+                "general-risk-audit-near-miss",
+                "all-skips-are-complete",
+            },
+        )
+        for case in cases:
+            self.assertTrue(case["prompt"].strip())
+            self.assertTrue(case["expected_output"].strip())
+            self.assertTrue(case["expectations"])
+            joined = " ".join(case["expectations"]).lower()
+            for phrase in (
+                "routing boundary",
+                "read-only",
+                "repository state",
+            ):
+                self.assertIn(phrase, joined, case["id"])
 
 
 if __name__ == "__main__":

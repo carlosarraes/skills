@@ -1,0 +1,91 @@
+{
+  "skill_name": "simplification-audit",
+  "evals": [
+    {
+      "id": "monorepo-exhaustive-coverage",
+      "prompt": "SIMULATION ONLY: use only the supplied fixture; do not run repository commands, inspect additional files, dispatch agents, create a report file, or mutate git. The audited repository is at revision abc123 with an empty initial git status, and the fixture is complete. Perform a whole-codebase simplification audit and describe the report that must be returned in chat. The exhaustive fixture has exactly these six non-overlapping subsystem boundaries and evidence: frontend (`apps/web/src/`, public route components, callers in `apps/web/src/routes/`, tests in `apps/web/tests/`); backend (`services/api/`, REST handlers and service callers, tests in `services/api/tests/`); shared packages (`packages/domain/` and `packages/ui/`, their public exports and package tests, excluding generated API output); platform bridge (`platform/bridge/`, native adapter interfaces and their app callers/tests); generated API contracts (`contracts/openapi/` and `generated/api-client/`, contract source, generated consumers, and generation checks); tooling (`tooling/`, `scripts/`, and `.github/`, task entry points and tooling tests). The frontend fixture shows scattered nullable/boolean checkout state in `apps/web/src/checkout/useCheckoutState.ts:40-88` that can represent contradictory states; the shared-packages fixture shows duplicated permission branching in `packages/domain/src/permissions.ts:20-64`; backend, platform bridge, generated API contracts, and tooling are locally clear. Use stable row IDs exactly `frontend`, `backend`, `shared-packages`, `platform-bridge`, `generated-api-contracts`, and `tooling`. Apply the bounded reviewer brief to each exact boundary, allowing at most two opportunities per row, and keep lanes non-overlapping. Finalize each row as an accepted recommendation or an explicit skip, perform all five audit-the-audit passes, and render the complete report contract with non-mutation proof.",
+      "expected_output": "A complete in-chat simplification-audit report for revision abc123 has exactly six coverage rows with the required stable IDs and exact boundaries. It records bounded, non-overlapping reviews, accepts only material findings for the frontend and shared-packages evidence, and gives terminal evidence-backed skip rows for backend, platform-bridge, generated-api-contracts, and tooling. It includes every required field for accepted findings, all five audit-the-audit pass results, the nine report sections in order, and a final git-status comparison proving unchanged repository state. The response stays within the simplification-audit routing boundary and does not begin implementation.",
+      "expectations": [
+        "Use exactly six coverage rows with stable IDs frontend, backend, shared-packages, platform-bridge, generated-api-contracts, and tooling.",
+        "Record each row's exact ownership boundary, key files, public interfaces, major callers, tests, review evidence, and terminal status.",
+        "Keep every bounded review inside one exact subsystem boundary with no overlap between review lanes.",
+        "Keep each subsystem review to at most two opportunities and reject style-only or speculative abstractions.",
+        "Accept only material findings supported by the supplied frontend contradictory-state evidence and shared-packages duplicated-branching evidence.",
+        "Give backend, platform-bridge, generated-api-contracts, and tooling explicit evidence-backed skip results when their local code is clear.",
+        "Treat generated API output as its own ownership boundary and do not recommend editing generated files as an implementation shortcut.",
+        "Include Verdict, exact Evidence, Current complexity or invalid states, Proposed representation, Smallest credible implementation scope, Regression risks, Validation, Confidence, authoritative subsystem, materiality, priority, dependencies, and candidate history for every accepted finding.",
+        "Record all five audit-the-audit passes: missing directories/packages/subsystem boundaries; duplicate findings and overlapping ownership; materiality and over-abstraction; report-schema completeness; and dependency-aware priority ranking.",
+        "Render the complete report contract's nine sections in order, including coverage summary, coverage matrix, prioritized recommendations, explicit skips, rejected/duplicate/superseded candidates, cross-cutting patterns, and audit log.",
+        "Remain read-only throughout the audit and do not run tests or builds, edit files, commit, push, or open a pull request.",
+        "Stay within the simplification-audit routing boundary and do not turn the request into a clean-up, QA, improve, or implementation workflow.",
+        "Prove repository state is unchanged by comparing the empty initial git status with the final git status exactly.",
+        "Return the final report in chat and do not create a report file in the supplied simulation."
+      ]
+    },
+    {
+      "id": "small-repo-direct-review",
+      "prompt": "SIMULATION ONLY: use only this supplied fixture; do not run repository commands, inspect files, create files, or mutate git. No subagents are available. The small repository is at revision def456 with an empty initial git status and has exactly one application subsystem (`app/`, public application entry points and callers, tests in `app/tests/`) plus one tests/tooling subsystem (`tests/` and `tooling/`, test runners and configuration checks). Perform the same bounded reviewer contract directly, without pretending that a reviewer agent was dispatched. The application fixture has a material duplicated state transition in `app/src/session.py:30-72`; the tests/tooling fixture is already clear and should be an evidence-backed skip. Return the complete in-chat report with exactly two explicit coverage rows, terminal statuses, validation, audit log, and non-mutation proof.",
+      "expected_output": "A complete in-chat simplification-audit report for revision def456 performs the reviewer contract directly because no subagents are available. It contains exactly two explicit coverage rows, accepts the material application finding, marks tests/tooling skip with evidence, includes the complete report contract and audit log, and proves the repository state is unchanged. It remains read-only and honors the simplification-audit routing boundary without dispatching agents or starting implementation.",
+      "expectations": [
+        "Use exactly two explicit coverage rows for app and tests/tooling, with stable IDs, exact boundaries, key files, public interfaces, major callers, and tests.",
+        "Perform the same bounded reviewer contract directly when no subagents are available, and do not claim that an agent was dispatched.",
+        "Keep the application and tests/tooling reviews non-overlapping and confined to their stated boundaries.",
+        "Accept the application session-state finding only with exact supplied evidence and all required finding-schema fields.",
+        "Give tests/tooling an evidence-backed terminal skip rather than padding the report with a weak recommendation.",
+        "Ensure both coverage rows terminate as recommend or skip and no row remains queued or in review.",
+        "Include the complete report contract, including coverage summary, coverage matrix, prioritized recommendations, dependency order, explicit skips, candidate history, cross-cutting patterns, and audit log.",
+        "Record validation and confidence for the accepted application finding and rationale for the tests/tooling skip.",
+        "Remain read-only and do not run tests or builds, edit files, commit, push, or open a pull request.",
+        "Stay within the simplification-audit routing boundary and do not route the work to clean-up, improve, QA, or implementation.",
+        "Prove repository state is unchanged by comparing the empty initial git status with the final git status exactly.",
+        "Return the final report in chat without creating a report file in the supplied simulation."
+      ]
+    },
+    {
+      "id": "branch-cleanup-near-miss",
+      "prompt": "SIMULATION ONLY: do not inspect a repository, run commands, dispatch agents, edit files, or mutate git. The user asks: `Inspect the feature/checkout branch diff against main, fix the issues you find, run the relevant checks, and commit the result.` This is a branch/diff cleanup request, not a whole-codebase simplification audit. Return only the correct routing decision and the boundary-preserving handoff behavior for this skill. The initial and final repository status for this simulation are empty.",
+      "expected_output": "Route the request to `clean-up`. Do not start a whole-repository simplification audit, build a simplification coverage contract, or perform implementation. This skill remains read-only until clean-up takes over, and the simulation's repository state remains unchanged.",
+      "expectations": [
+        "Route the feature-branch diff inspection and fix request to clean-up.",
+        "Do not perform a whole-repository simplification audit or create a simplification coverage contract.",
+        "Do not dispatch bounded simplification reviewers or run the five audit-the-audit passes for this near-miss request.",
+        "Remain read-only until the clean-up skill takes over and do not run checks, edit files, commit, push, or open a pull request.",
+        "Honor the simplification-audit routing boundary by returning a clean-up handoff instead of doing branch work.",
+        "Prove repository state is unchanged in the simulation by preserving the empty initial and final status.",
+        "Do not invent recommendations, coverage rows, or a final simplification report for the branch diff."
+      ]
+    },
+    {
+      "id": "general-risk-audit-near-miss",
+      "prompt": "SIMULATION ONLY: do not inspect a repository, run commands, dispatch agents, edit files, or mutate git. The user asks for a broad audit covering bugs, security vulnerabilities, dependency risk, performance problems, and a roadmap of implementation plans across the repository. This is a general risk audit and planning request, not a simplification audit. Return only the correct routing decision and the boundary-preserving handoff behavior for this skill. The initial and final repository status for this simulation are empty.",
+      "expected_output": "Route the broad bugs/security/dependencies/performance/roadmap request to `improve`. Do not establish a simplification coverage contract or produce simplification findings. This skill remains read-only, honors its routing boundary, and leaves repository state unchanged.",
+      "expectations": [
+        "Route the broad bug, security, dependency, performance, and roadmap audit to improve.",
+        "Do not create the simplification-audit coverage contract or inspect each subsystem under the simplification reviewer brief.",
+        "Do not produce simplification recommendations, explicit skips, or audit-the-audit results for this near-miss request.",
+        "Remain read-only and do not run tests or builds, edit files, commit, push, or open a pull request.",
+        "Honor the simplification-audit routing boundary by returning an improve handoff instead of performing a general risk audit.",
+        "Prove repository state is unchanged in the simulation by preserving the empty initial and final status.",
+        "Do not invent a simplification report or implementation plan under the wrong skill."
+      ]
+    },
+    {
+      "id": "all-skips-are-complete",
+      "prompt": "SIMULATION ONLY: use only the supplied fixture; do not run repository commands, inspect additional files, dispatch agents, create a report file, or mutate git. The audited repository is at revision ghi789 with an empty initial git status. Its complete inventory has exactly four subsystems: frontend (`apps/web/`), backend (`services/api/`), shared packages (`packages/`), and tooling (`tooling/`); each local boundary, interface, caller, test, and implementation is already clear, and every reviewer finds no material invalid state, duplicated decision, repeated work, lifecycle contradiction, or ownership ambiguity. Perform the whole-codebase simplification audit. Expect exhaustive coverage, an evidence-backed `skip` for every row, zero padded recommendations, all five audit-the-audit passes, the complete report contract, and final non-mutation proof.",
+      "expected_output": "A complete in-chat simplification-audit report for revision ghi789 has exactly four exhaustive coverage rows and an evidence-backed terminal `skip` for every row. It has zero recommendations, records all five audit-the-audit passes and the complete report contract, and proves the repository state is unchanged. It remains read-only and stays inside the simplification-audit routing boundary.",
+      "expectations": [
+        "Enumerate exactly four exhaustive coverage rows for frontend, backend, shared packages, and tooling with their exact boundaries and evidence.",
+        "Give every coverage row an evidence-backed terminal skip because no local candidate clears the materiality gate.",
+        "Keep zero recommendations and do not pad the report with style-only, speculative, renaming-only, or line-count-only opportunities.",
+        "Keep each bounded review non-overlapping and record the reviewer evidence that supports each skip.",
+        "Record all five audit-the-audit passes: missing directories/packages/subsystem boundaries; duplicate findings and overlapping ownership; materiality and over-abstraction; report-schema completeness; and dependency-aware priority ranking.",
+        "Render the complete report contract's nine sections in order, including coverage summary, coverage matrix, explicit skips, rejected/duplicate/superseded candidates, cross-cutting patterns, and audit log.",
+        "Ensure every row is terminal and no queued or in-review status remains despite the absence of recommendations.",
+        "Remain read-only and do not run tests or builds, edit files, commit, push, or open a pull request.",
+        "Stay within the simplification-audit routing boundary and do not turn clear code into an improve, clean-up, QA, or implementation task.",
+        "Prove repository state is unchanged by comparing the empty initial git status with the final git status exactly.",
+        "Return the final report in chat without creating a report file in the supplied simulation."
+      ]
+    }
+  ]
+}
