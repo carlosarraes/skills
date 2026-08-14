@@ -90,12 +90,14 @@ Phase 3 independent validation before assigning its terminal status.
 
 ### 5. Report and prove non-mutation
 
-Read the [report contract](references/report-contract.md) in full before
-rendering. Render the final report in chat using that contract, name the best
-first implementation slices without beginning implementation, then repeat the
-baseline capture procedure, including the final `git status --short`, and compare
-the revision, status, and manifest. Apply the mismatch protocol before reporting
-proof.
+Read the [report contract](references/report-contract.md) in full. Capture the
+final revision, final `git status --short`, and final complete manifest using the
+baseline procedure. Compare the final revision, status, and manifest with their
+baselines. If any comparison differs, apply the mismatch protocol; when safe
+restoration is unavailable or proof is incomplete, render an explicit stopped or
+incomplete result and end. Only after proof succeeds, render the final report in
+chat using the contract and name the best first implementation slices without
+beginning implementation.
 
 **Complete when:** The report accounts for every coverage row, finding, and skip; accepted findings carry the required evidence and decision fields; the revision, status, and complete manifest match their baselines exactly; and commands and proof limits are recorded. If the manifest was incomplete, report that limit without claiming byte-for-byte proof.
 

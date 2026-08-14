@@ -84,6 +84,20 @@ class SimplificationAuditSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), flat_report)
 
+    def test_phase_five_proves_non_mutation_before_rendering(self):
+        phase_five = normalized(
+            self.skill[self.skill.index("### 5. Report and prove non-mutation") :]
+        )
+        ordered = (
+            "capture the final revision, final `git status --short`, and final complete manifest",
+            "compare the final revision, status, and manifest with their baselines",
+            "if any comparison differs, apply the mismatch protocol",
+            "only after proof succeeds, render the final report",
+        )
+        positions = [phase_five.index(phrase) for phrase in ordered]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("explicit stopped or incomplete result", normalized(phase_five))
+
     def test_workflow_has_five_ordered_completion_gates(self):
         headings = (
             "### 1. Establish the coverage contract",
@@ -122,7 +136,7 @@ class SimplificationAuditSkillTests(unittest.TestCase):
         )
         self.assertLess(
             self.skill.index("[report contract](references/report-contract.md)"),
-            self.skill.index("Render the final report"),
+            self.skill.index("render the final report"),
         )
 
     def test_every_review_assignment_receives_the_full_brief_verbatim(self):
@@ -311,6 +325,111 @@ class SimplificationAuditSkillTests(unittest.TestCase):
             self.assertIn("snapshot references", joined, case_id)
             self.assertIn("evidence inputs", joined, case_id)
             self.assertIn("not opened", joined, case_id)
+
+    def test_positive_simulations_supply_complete_per_row_evidence_facts(self):
+        cases = {
+            case["id"]: case
+            for case in json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
+        }
+        required_facts = {
+            "monorepo-exhaustive-coverage": {
+                "frontend": (
+                    "apps/web/src/checkout/useCheckoutState.ts",
+                    "useCheckoutState",
+                    "apps/web/src/routes/CheckoutRoute.tsx::CheckoutRoute",
+                    "apps/web/tests/checkout-state.test.ts",
+                ),
+                "backend": (
+                    "services/api/src/orders/order_service.py",
+                    "OrderService.submit",
+                    "services/api/src/http/orders.py::create_order",
+                    "services/api/tests/test_order_service.py",
+                ),
+                "shared-packages": (
+                    "packages/domain/src/permissions.ts",
+                    "can",
+                    "apps/web/src/routes/AdminRoute.tsx::AdminRoute",
+                    "packages/domain/tests/permissions.test.ts",
+                ),
+                "platform-bridge": (
+                    "platform/bridge/src/paymentAdapter.ts",
+                    "PaymentAdapter.authorize",
+                    "apps/web/src/checkout/submitPayment.ts::submitPayment",
+                    "platform/bridge/tests/paymentAdapter.test.ts",
+                ),
+                "generated-api-contracts": (
+                    "generated/api-client/src/payments.ts",
+                    "PaymentsApi.createPayment",
+                    "services/api/src/payments/client.py::submit_payment",
+                    "contracts/openapi/tests/generated-client-sync.test.ts",
+                ),
+                "tooling": (
+                    "tooling/src/tasks/check.ts",
+                    "runCheckTask",
+                    "scripts/check.ts::main",
+                    "tooling/tests/check.test.ts",
+                ),
+            },
+            "small-repo-direct-review": {
+                "app": (
+                    "app/src/session.py",
+                    "Session.transition",
+                    "app/src/main.py::handle_session",
+                    "app/tests/test_session.py",
+                ),
+                "tests-tooling": (
+                    "tooling/test_runner.py",
+                    "run_suite",
+                    "tests/conftest.py::pytest_sessionstart",
+                    "tests/test_tooling.py",
+                ),
+            },
+            "all-skips-are-complete": {
+                "frontend": (
+                    "apps/web/src/navigation/router.ts",
+                    "Router.navigate",
+                    "apps/web/src/main.ts::bootstrap",
+                    "apps/web/tests/router.test.ts",
+                ),
+                "backend": (
+                    "services/api/src/users/service.py",
+                    "UserService.load",
+                    "services/api/src/http/users.py::get_user",
+                    "services/api/tests/test_user_service.py",
+                ),
+                "shared-packages": (
+                    "packages/domain/src/result.ts",
+                    "Result.map",
+                    "apps/web/src/data/loadUser.ts::loadUser",
+                    "packages/domain/tests/result.test.ts",
+                ),
+                "tooling": (
+                    "tooling/src/check.ts",
+                    "runChecks",
+                    "scripts/check.ts::main",
+                    "tooling/tests/check.test.ts",
+                ),
+            },
+        }
+        for case_id, rows in required_facts.items():
+            prompt = cases[case_id]["prompt"]
+            for row_id, facts in rows.items():
+                for fact in facts:
+                    self.assertIn(fact, prompt, f"{case_id}:{row_id}:{fact}")
+            joined = normalized(
+                cases[case_id]["expected_output"]
+                + " "
+                + " ".join(cases[case_id]["expectations"])
+            )
+            for phrase in (
+                "supplied exact implementation file",
+                "public interface",
+                "major caller",
+                "test path",
+                "materiality rationale",
+                "not opened",
+            ):
+                self.assertIn(phrase, joined, case_id)
 
     def test_near_miss_prompts_do_not_lead_the_routing_answer(self):
         cases = {
