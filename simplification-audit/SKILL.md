@@ -45,10 +45,10 @@ in full. Dispatch or perform each review for one exact, non-overlapping
 subsystem boundary. Use fresh read-only reviewers when available; otherwise
 apply the same brief directly. Keep only actively managed review lanes open and
 harvest completed work before opening more. Record review evidence and mark a
-row `recommend` only when a candidate survives later validation; otherwise mark
-it `skip`.
+row provisional `recommend` when at least one candidate clears the reviewer
+materiality gate; otherwise mark it `skip`.
 
-**Complete when:** Every coverage-contract row has review evidence and a provisional terminal status of `recommend` or `skip`; no row remains `queued` or `in review`.
+**Complete when:** Every coverage-contract row has review evidence and a provisional status of `recommend` or `skip`; no row remains `queued` or `in review`.
 
 ### 3. Validate and synthesize
 
@@ -57,8 +57,9 @@ in full. Independently open every cited location, public interface, major caller
 and relevant test. Reject, narrow, or demote candidates that misunderstand
 intentional semantics, duplicate another candidate, lack material impact, or
 only rename existing complexity. Assign each accepted finding to one
-authoritative subsystem and retain terminal rationale for rejected or superseded
-candidates.
+authoritative subsystem. Phase 3 independently finalizes, demotes, or rejects
+provisional recommendations and retains terminal rationale for rejected or
+superseded candidates.
 
 **Complete when:** Every accepted recommendation satisfies the report contract, every rejected or superseded candidate has a reason, and every coverage row is `recommend` or `skip`.
 
@@ -84,5 +85,6 @@ final `git status --short` and compare it with the baseline.
 ## Routing boundary
 
 Use `clean-up` for fixing a branch. Use `qa-team` or `review-swarm` for branch
-or diff QA. Use `improve` for broad risk or roadmap audits and implementation
-plans. This skill audits whole-codebase simplification opportunities only.
+or diff QA. Use `improve` for broad bug, security, dependency, risk, or roadmap
+audits and implementation plans. This skill audits whole-codebase simplification
+opportunities only.

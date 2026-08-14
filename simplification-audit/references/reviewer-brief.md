@@ -32,10 +32,11 @@ branching.
 
 ## Return schema
 
-Return `skip` when no candidate clears the materiality gate. For each of at
-most two opportunities, provide:
+Return `skip` as the sole subsystem result when no candidate clears the
+materiality gate. Each listed opportunity is a provisional `recommend`. For
+each of at most two opportunities, provide:
 
-1. **Verdict:** `recommend` or `skip`.
+1. **Verdict:** `recommend`.
 2. **Evidence:** exact file-and-line references.
 3. **Current complexity or invalid states.**
 4. **Proposed representation** and why it is simpler.

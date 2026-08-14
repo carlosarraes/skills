@@ -112,6 +112,44 @@ class SimplificationAuditSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), flat_reviewer)
 
+    def test_phase_two_assigns_provisional_results_before_phase_three_finalizes(self):
+        phase_two = self.skill[
+            self.skill.index("### 2. Run bounded reviews") : self.skill.index(
+                "### 3. Validate and synthesize"
+            )
+        ]
+        phase_three = self.skill[
+            self.skill.index("### 3. Validate and synthesize") : self.skill.index(
+                "### 4. Audit the audit"
+            )
+        ]
+        flat_phase_two = normalized(phase_two)
+        self.assertIn("provisional `recommend`", flat_phase_two)
+        self.assertIn("clears the reviewer materiality gate", flat_phase_two)
+        self.assertIn("otherwise mark it `skip`", flat_phase_two)
+        self.assertNotIn("survives later validation", flat_phase_two)
+        self.assertIn(
+            "independently finalizes, demotes, or rejects", normalized(phase_three)
+        )
+
+    def test_routing_sends_broad_bug_security_and_dependency_audits_to_improve(self):
+        self.assertIn(
+            "broad bug, security, dependency, risk, or roadmap audits",
+            self.flat_skill,
+        )
+
+    def test_reviewer_makes_skip_a_row_result_and_opportunities_provisional_recommendations(self):
+        return_schema = self.reviewer[self.reviewer.index("## Return schema") :]
+        self.assertIn(
+            "Return `skip` as the sole subsystem result when no candidate clears",
+            return_schema,
+        )
+        self.assertIn(
+            "Each listed opportunity is a provisional `recommend`.", return_schema
+        )
+        self.assertIn("**Verdict:** `recommend`.", return_schema)
+        self.assertNotIn("**Verdict:** `recommend` or `skip`.", return_schema)
+
     def test_report_contract_has_complete_schema_and_audit_log(self):
         flat_report = normalized(self.report)
         for phrase in (
