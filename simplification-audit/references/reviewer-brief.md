@@ -33,8 +33,12 @@ branching.
 ## Return schema
 
 Return `skip` as the sole subsystem result when no candidate clears the
-materiality gate. Each listed opportunity is a provisional `recommend`. For
-each of at most two opportunities, provide:
+materiality gate. This skip record lists the exact locations, files, interfaces,
+major callers, and tests inspected, plus a concise materiality rationale for why
+the evidence does not justify a recommendation.
+
+Each listed opportunity is a provisional `recommend`. For each of at most two
+opportunities, provide:
 
 1. **Verdict:** `recommend`.
 2. **Evidence:** exact file-and-line references.

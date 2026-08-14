@@ -13,6 +13,11 @@ Each row contains: stable ID, descriptive name, exact ownership boundary, key
 files, public interfaces/callers/tests, status, review evidence, and terminal
 rationale. Every row terminates as `recommend` or `skip`.
 
+A terminal `skip` consumes the reviewer's skip record: exact locations, files,
+interfaces, major callers, and tests inspected, plus its concise materiality
+rationale. A row rejected or demoted during independent validation receives the
+same evidence-backed skip record before terminalization.
+
 ## Finding record
 
 Each candidate records: Verdict; Evidence with exact file-and-line references;
@@ -27,7 +32,8 @@ priority, dependencies, and candidate history (`accepted`, `rejected`,
 
 Render these nine sections in order:
 
-1. Scope, repository revision, and non-mutation proof.
+1. Scope, repository revision, and non-mutation proof: initial and final status,
+   initial and final manifest comparison, proof commands, and proof limits.
 2. Coverage summary.
 3. Coverage matrix.
 4. Prioritized recommendations.
@@ -42,4 +48,9 @@ Render these nine sections in order:
 Require an exhaustive matrix with a terminal status for every subsystem row,
 complete accepted findings, recorded rejections, and deduplication. Confirm
 priorities respect dependencies, all five audit-the-audit results are recorded,
-and final `git status --short` matches the baseline exactly.
+and final `git status --short` matches the baseline exactly. Require the
+immutable repository revision plus initial and final revision, status, and
+byte-sensitive manifest comparisons. State proof commands and proof limits.
+Claim byte-for-byte preservation only when the manifest accounted for every
+entry outside `.git`; otherwise identify the incomplete coverage and stop short
+of that claim. Record any mismatch and the safe mismatch protocol outcome.

@@ -29,6 +29,11 @@
   {"id":"ambiguous-qa-ticket-evidence","prompt":"The QA run just passed; add the evidence to the team spreadsheet.","expected":"qa-evidence"},
   {"id":"ambiguous-qa-pr-ticket","prompt":"QA the PR for the current ticket and post proof for reviewers.","expected":"qa-pr"},
   {"id":"ambiguous-contract-execution","prompt":"The design is settled; write the immutable contract before implementation.","expected":"change-contract"},
+  {"id":"simplification-audit-unlabeled-positive","prompt":"Review the whole repository for materially simpler ways to model data structures, state, control flow, algorithms, and ownership. Inventory every subsystem, return recommendations and evidence-backed skips, and do not implement anything.","expected":"simplification-audit"},
+  {"id":"simplification-audit-ambiguous-branch-fix","prompt":"Review the current branch for quality and simplification issues, fix every valid finding, and run the relevant checks.","expected":"clean-up"},
+  {"id":"simplification-audit-multi-agent-branch-qa","prompt":"Run an explicit multi-agent QA review of this branch diff and consolidate the findings.","expected":"qa-team"},
+  {"id":"simplification-audit-full-swarm-pr-review","prompt":"Give this pull request a full multi-perspective swarm review.","expected":"review-swarm"},
+  {"id":"simplification-audit-broad-risk-roadmap-none","prompt":"Audit the whole repository for bugs, security vulnerabilities, dependency risk, and roadmap priorities, then produce implementation plans.","expected":"NONE","note":"The routing catalog does not track improve; simplification-audit's general-risk behavior eval owns the explicit improve handoff."},
   {"id":"none-greeting","prompt":"What is the weather in São Paulo?","expected":"NONE"},
   {"id":"none-general-code","prompt":"What does a Python list comprehension do?","expected":"NONE"}
 ]
