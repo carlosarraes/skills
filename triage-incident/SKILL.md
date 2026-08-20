@@ -1,6 +1,6 @@
 ---
 name: triage-incident
-description: Use when a Acme production or homolog symptom, alert, or stakeholder report needs a read-only evidence-backed bug-versus-expected-behavior verdict.
+description: Use when a production or staging symptom, alert, or stakeholder report needs a read-only evidence-backed bug-versus-expected-behavior verdict.
 ---
 
 # Triage Incident
@@ -9,7 +9,7 @@ Turn a pasted symptom into a verdict the developer can forward: **bug** or **exp
 
 ## Done means
 
-A short report containing: (1) the verdict — bug / expected / needs-more-data, stated first; (2) the evidence behind it — the Metabase rows, the Datadog log lines, and the code path (`file:line`) that explain the behavior; (3) affected entities (company ids, subscription ids); (4) suggested next step — including, when it's a bug, a proposed card (title + story points + brief PT-BR description) **offered, not created**.
+A short report containing: (1) the verdict — bug / expected / needs-more-data, stated first; (2) the evidence behind it — the Metabase rows, the Datadog log lines, and the code path (`file:line`) that explain the behavior; (3) affected entities (company ids, subscription ids); (4) suggested next step — including, when it's a bug, a proposed card (title + story points + brief description in the team's working language) **offered, not created**.
 
 ## Hard constraints
 
@@ -19,14 +19,15 @@ A short report containing: (1) the verdict — bug / expected / needs-more-data,
 
 ## Flow
 
-Investigate however the symptom demands — typical spine: reproduce the number the PM saw (Metabase) → find the code's own account of why (Datadog events) → read the code path that emitted it → verdict. Real identifiers, DB ids, query tags, and CLI gotchas: [references/acme-facts.md](references/acme-facts.md) — read it before the first query; the default-window and env-tag gotchas silently return empty results otherwise.
+Investigate however the symptom demands — typical spine: reproduce the number the PM saw (Metabase) → find the code's own account of why (Datadog events) → read the code path that emitted it → verdict. Query tags, discovery commands, and CLI gotchas: [references/triage-facts.md](references/triage-facts.md) — read it before the first query; the default-window and env-tag gotchas silently return empty results otherwise. Environment ids and backoffice hostnames are not hardcoded anywhere in this skill: ask the user, or check memory for a previous session's answer.
 
 ## Common mistakes
 
 | Mistake | Reality |
 |---|---|
 | `dog logs` with no `--since` | Default window is 15 minutes — you'll miss the incident and conclude "no logs". |
-| `env:hml` in a dog query | The tag is `env:homolog`. Empty result ≠ no events. |
+| Guessing the staging `env:` tag | The literal tag rarely matches the informal name. Confirm it; an empty result ≠ no events. |
 | Filing the follow-up card right away | Cards are proposed in the report and created only on explicit approval. |
+| Inventing a database id or backoffice host | Discover them (`mb databases`) or ask the user. A wrong id returns plausible, unrelated rows. |
 | Stating an inference as fact | If it isn't backed by a row, a log line, or file:line, it's a hypothesis — say so. |
-| Querying prod by reflex | Homolog (37) reproduces most symptoms; touch prod (2) when the symptom is prod. |
+| Querying prod by reflex | Staging reproduces most symptoms; touch prod when the symptom is prod. |
