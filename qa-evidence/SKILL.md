@@ -1,6 +1,6 @@
 ---
 name: qa-evidence
-description: Use when completed Acme QA results for a ZEX or ZUP ticket must be recorded in the team QA spreadsheet.
+description: Use when completed QA results for a ticket must be recorded in the team QA spreadsheet.
 ---
 
 # QA Evidence
@@ -15,12 +15,12 @@ The ticket's tab has, from row 10 down, one row per scenario: CENÁRIO + RESULTA
 
 - **Only evidence.** Rows come from the actual QA run being recorded. A test that was skipped or failed is never marked `Sucesso` — leave its TESTE DEV blank (optionally note why in OBSERVAÇÕES). Never invent scenarios.
 - **Never touch TESTE PM / TESTE TL** (columns D–E) — those belong to the PM and tech lead.
-- **One atomic write.** Compose all rows, write once with `values update` to an explicit `'PROJ-nnn'!A10:F...` range. Never use `+append` without `--range` (it targets cell A1 of the FIRST sheet — the TEMPLATE). Never re-send rows because a read-back looks stale; trust the update response.
+- **One atomic write.** Compose all rows, write once with `values update` to an explicit `'{TICKET}'!A10:F...` range. Never use `+append` without `--range` (it targets cell A1 of the FIRST sheet — the TEMPLATE). Never re-send rows because a read-back looks stale; trust the update response.
 - The pass marker is the literal word `Sucesso` — not PASS, not OK, not ✅.
 
 ## Flow
 
-1. Locate the tab: list tabs and match by ticket-id **prefix** (approved tabs get renamed like `PROJ-761 - APROVADO`, spacing varies). Sheet id, layout, and gws commands: [references/sheet-facts.md](references/sheet-facts.md).
+1. Locate the tab: list tabs and match by ticket-id **prefix** (approved tabs get renamed with an approval suffix, spacing varies). Layout and gws commands: [references/sheet-facts.md](references/sheet-facts.md). The spreadsheet id is not stored in this skill — ask the user for it, or check memory for a previous session's answer.
    Completion: you know the exact tab name, or that none exists.
 2. No tab? Create one from the TEMPLATE structure (addSheet via batchUpdate, then fill the header block rows 2–3).
 3. Read the tab first (rows 1–20): confirm the header row is at row 9 and check for existing scenario rows — append below them, don't overwrite.
