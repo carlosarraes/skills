@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": "pr1414",
-      "prompt": "Inspect Acme PR #1414 and produce a concise reviewer-oriented diff brief grounded in the code as shipped.",
+      "prompt": "Inspect PR #1414 and produce a concise reviewer-oriented diff brief grounded in the code as shipped.",
       "expected_output": "A behavior-first triage report with evidence-backed per-file risk, important review hunks, verification gaps, reuse findings, and higher-level design concerns.",
       "expectations": [
         "Stays within 600 words and leads with a clear verdict.",
