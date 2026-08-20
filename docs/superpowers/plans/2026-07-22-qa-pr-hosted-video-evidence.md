@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upgrade `qa-pr` to produce a commit-bound evidence bundle consisting of one chaptered MP4, one Snapdoc Markdown report, and one sticky PR comment, then benchmark the behavior against Acme PR #1614.
+**Goal:** Upgrade `qa-pr` to produce a commit-bound evidence bundle consisting of one chaptered MP4, one Snapdoc Markdown report, and one sticky PR comment, then benchmark the behavior against a real PR snapshot (#1614).
 
-**Architecture:** Keep `qa-ticket` as the acceptance-test engine. Add one deterministic Python media builder for WebM clips, disclose report/comment formatting in a reference file, and keep orchestration, privacy, SHA gates, Snapdoc lifecycle, and fallback decisions in `qa-pr/SKILL.md`. Measure process predictability with a five-run before/after benchmark using an immutable snapshot of Acme PR #1614, plus targeted pressure cases.
+**Architecture:** Keep `qa-ticket` as the acceptance-test engine. Add one deterministic Python media builder for WebM clips, disclose report/comment formatting in a reference file, and keep orchestration, privacy, SHA gates, Snapdoc lifecycle, and fallback decisions in `qa-pr/SKILL.md`. Measure process predictability with a five-run before/after benchmark using an immutable snapshot of a real PR (#1614), plus targeted pressure cases.
 
 **Tech Stack:** Markdown agent skill, Python 3 standard library, `unittest`, `agent-browser`, `ffmpeg`/`ffprobe`, Snapdoc CLI 0.0.10+, GitHub `gh`, Bitbucket `bt`.
 
 ## Global Constraints
 
 - `qa-ticket` remains the single source of truth for acceptance-test planning and execution.
-- Application QA stays on localhost. The Acme Cloudflare preview is metadata only and is never used as the QA target.
+- Application QA stays on localhost. The hosted Cloudflare preview is metadata only and is never used as the QA target.
 - Record one sanitized WebM clip per meaningful frontend acceptance case; backend-only runs publish no decorative video.
 - Produce one silent H.264/yuv420p MP4 at 30fps with one chapter per clip, at most 10 minutes and 100,000,000 bytes.
 - Snapdoc video and report use the same TTL: 3 days by default, bounded to 1 hour through 7 days.
@@ -35,8 +35,8 @@ Create:
 - `qa-pr/tests/test_skill_contract.py` — static contract checks for the skill and disclosed reference.
 - `qa-pr/benchmarks/score.py` — validate and aggregate manually reviewed benchmark scorecards.
 - `qa-pr/benchmarks/test_score.py` — scorer tests.
-- `qa-pr/benchmarks/fixtures/acme-pr-1614.json` — immutable, secret-free PR snapshot and benchmark prompt inputs.
-- `qa-pr/benchmarks/results/2026-07-22-acme-pr-1614.md` — baseline/candidate scores, variance, and observed failure excerpts.
+- `qa-pr/benchmarks/fixtures/sample-pr-1614.json` — immutable, secret-free PR snapshot and benchmark prompt inputs.
+- `qa-pr/benchmarks/results/2026-07-22-sample-pr-1614.md` — baseline/candidate scores, variance, and observed failure excerpts.
 
 Modify:
 
@@ -54,8 +54,8 @@ The approved design remains at `docs/superpowers/specs/2026-07-22-qa-pr-hosted-v
 
 - Create: `qa-pr/benchmarks/score.py`
 - Create: `qa-pr/benchmarks/test_score.py`
-- Create: `qa-pr/benchmarks/fixtures/acme-pr-1614.json`
-- Create: `qa-pr/benchmarks/results/2026-07-22-acme-pr-1614.md`
+- Create: `qa-pr/benchmarks/fixtures/sample-pr-1614.json`
+- Create: `qa-pr/benchmarks/results/2026-07-22-sample-pr-1614.md`
 
 **Interfaces:**
 
@@ -210,9 +210,9 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Add the immutable Acme PR fixture**
+- [ ] **Step 4: Add the immutable PR fixture**
 
-Write `acme-pr-1614.json` with only the fields returned by `gh pr view` that the benchmark needs:
+Write `sample-pr-1614.json` with only the fields returned by `gh pr view` that the benchmark needs:
 
 ```json
 {
@@ -248,7 +248,7 @@ Use `dispatching-parallel-agents` in two waves (three runs, then two) so every s
 - an existing sticky comment contains video/report artifact markers and the user asks for a rerun; and
 - passcode protection is selected for the private PR.
 
-Save the five core scorecards and pressure-case observations in `2026-07-22-acme-pr-1614.md`. Expected RED: the current skill lacks a chaptered bundle, Mermaid report, complete manifest, stable Snapdoc artifact reuse, and the exact SHA publication gate.
+Save the five core scorecards and pressure-case observations in `2026-07-22-sample-pr-1614.md`. Expected RED: the current skill lacks a chaptered bundle, Mermaid report, complete manifest, stable Snapdoc artifact reuse, and the exact SHA publication gate.
 
 - [ ] **Step 6: Verify and commit the benchmark harness and baseline**
 
@@ -722,7 +722,7 @@ git commit -m "feat: publish chaptered evidence bundles from qa-pr"
 
 **Files:**
 
-- Modify: `qa-pr/benchmarks/results/2026-07-22-acme-pr-1614.md`
+- Modify: `qa-pr/benchmarks/results/2026-07-22-sample-pr-1614.md`
 - Modify if a measured failure requires it: `qa-pr/SKILL.md`
 - Modify if a contract gap requires it: `qa-pr/references/evidence-format.md`
 - Modify if a media failure requires it: `qa-pr/scripts/build-video-evidence.py`
@@ -760,7 +760,7 @@ The skill is GREEN only when:
 
 If a threshold fails, classify the failure as omission, wrong output shape, or discipline violation; change the smallest corresponding instruction, add/adjust a contract test, and rerun five fresh candidate samples. Preserve every iteration in the results document.
 
-- [ ] **Step 4: Run a local media benchmark using the Acme case names**
+- [ ] **Step 4: Run a local media benchmark using the fixture case names**
 
 Generate three synthetic WebM clips labeled for T1/T2/T3, build the bundle, and use `ffprobe` plus `chapters.json` to verify:
 
@@ -787,8 +787,8 @@ Expected: all tests PASS and benchmark thresholds are met.
 If code/skill repairs were required, commit them first with a focused `fix:` commit. Then commit results:
 
 ```bash
-git add qa-pr/benchmarks/results/2026-07-22-acme-pr-1614.md
-git commit -m "test: benchmark qa-pr on Acme PR 1614"
+git add qa-pr/benchmarks/results/2026-07-22-sample-pr-1614.md
+git commit -m "test: benchmark qa-pr on sample PR 1614"
 ```
 
 ### Task 6: Final verification and controlled live-smoke handoff
@@ -840,4 +840,4 @@ Skip an empty commit. Do not push, upload to Snapdoc, or comment on GitHub/Bitbu
 
 - [ ] **Step 5: Hand off the first live smoke**
 
-Recommend the next open, non-draft Acme frontend PR with a locally reproducible behavior. Present the exact repository visibility, TTL, and comment preview at the skill's checkpoint. A real Snapdoc upload and sticky PR comment happen only after the user explicitly approves that live run.
+Recommend the next open, non-draft frontend PR with a locally reproducible behavior. Present the exact repository visibility, TTL, and comment preview at the skill's checkpoint. A real Snapdoc upload and sticky PR comment happen only after the user explicitly approves that live run.

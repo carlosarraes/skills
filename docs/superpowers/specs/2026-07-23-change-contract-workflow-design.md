@@ -448,7 +448,7 @@ and time-to-understanding against the baseline.
 3. Create and verify `check-contract`.
 4. Create and verify `diff-brief`.
 5. Update `orchestrate`, `README.md`, and focused handoff references.
-6. Run an end-to-end benchmark on a historical Acme PR with a reconstructed
+6. Run an end-to-end benchmark on a historical real-world PR with a reconstructed
    pre-implementation contract, then test `diff-brief` on a PR from another
    author.
 
