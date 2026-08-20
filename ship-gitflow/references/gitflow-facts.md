@@ -1,6 +1,8 @@
 # Gitflow facts (volatile — verify against the repo's CLAUDE.md when in doubt)
 
-Source of truth: `~/acme/api/CLAUDE.md` (Repository tooling + Commits sections) and `bt --llm`.
+Source of truth: the repo's own `CLAUDE.md` (Repository tooling + Commits sections) and `bt --llm`.
+Read them before relying on anything below; if the repo has no such file, ask the user for the
+team's branch/PR convention (or check memory for a previous session's answer) rather than assuming.
 
 ## Branch naming
 

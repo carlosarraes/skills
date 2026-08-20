@@ -1,6 +1,6 @@
 ---
 name: ship-gitflow
-description: Use when a completed Acme ticket must ship through the twin production and homolog Bitbucket branch, PR, and pipeline flow, or one leg needs completion.
+description: Use when a completed ticket must ship through the twin production and staging Bitbucket branch, PR, and pipeline flow, or one leg needs completion.
 ---
 
 # Ship Gitflow
