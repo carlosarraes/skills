@@ -10,8 +10,13 @@ A frontend run publishes one logical bundle:
 
 1. One silent H.264 MP4, or the smallest number of MP4 parts when the ten-minute
    or 100 MB limit requires splitting at an acceptance-case boundary.
-2. One Snapdoc Markdown report that is the durable evidence index.
+2. One Snapdoc Markdown report that is the durable evidence index, carrying a
+   verbatim observation for every case.
 3. One sticky PR comment that links the current report and video watch pages.
+
+Items 1 and 2 are both required — the video shows that the behavior happens, the
+report states what was asserted. Ship a bundle without one of them only in the
+cases named in `SKILL.md`, and label it.
 
 A backend-only run publishes the report and sticky comment without a decorative
 video. PNG screenshots may supplement a case, but they do not replace a
@@ -41,10 +46,40 @@ flowchart LR
 
 ## Acceptance cases
 
+Each frontend row links its chapter and its observation. A case with no motion to
+record links its observation alone.
+
 | Case | Category | Result | Evidence | Notes |
 | --- | --- | --- | --- | --- |
-| T1 — <title> | happy | ✅ PASS | [00:12 — T1](<version_url>?t=12.000) | <observation> |
-| T2 — <title> | edge | ✅ PASS | [request/response](#t2-request-and-response) | <observation> |
+| T1 — <title> | happy | ✅ PASS | [00:12](<version_url>?t=12.000) · [DOM](#t1-observation) | <one-line finding> |
+| T2 — <title> | edge | ✅ PASS | [request/response](#t2-request-and-response) | <one-line finding> |
+| T3 — <title> | edge | ✅ PASS | [DOM](#t3-observation) | attribute check, no chapter |
+
+### Fixtures
+
+Include when seeded data shaped the run, so a reader can tell which fixture each
+case exercised:
+
+| Fixture | Settings | Contents |
+| --- | --- | --- |
+| S1 "<name>" | <the setting under test> | <rows/among> |
+
+### T1 observation
+
+The verbatim post-action assertion, quoted exactly as the page returned it:
+
+```json
+{"<asserted key>": "<literal observed value>"}
+```
+
+For a negative claim, show both sides of the action so "unchanged" is visible:
+
+```json
+{"before": "<value>", "after": "<same value>", "actionThatShouldNotHaveChangedIt": "<key>"}
+```
+
+State in one sentence what the value proves, and — when it matters — what it
+looked like before the change under test.
 
 ### T2 request and response
 
@@ -63,6 +98,13 @@ flowchart LR
 | <description> | [`<short_sha>`](<commit_url>) | T1 ✅ |
 
 <!-- Use “None.” when no bugs were found. -->
+
+## Capture note
+
+<!-- Include ONLY when the clips came from something other than the default
+recorder, or when part of the bundle is missing. Say what failed, what was used
+instead, and what that does or does not change about the evidence. Omit this
+section entirely on an ordinary run. -->
 
 ## Commit and environment manifest
 
@@ -116,6 +158,7 @@ terminal newline before hashing it. Render these rows in this order:
 | Fixture / data set | Reproducible label or `none` |
 | qa-pr revision | Skill repository commit SHA |
 | agent-browser | Version |
+| Recorder | Tool and version that produced the clips, when not the default one |
 | ffmpeg | Version |
 | Snapdoc | Version |
 | Video SHA-256 | Hash from `chapters.json`, or `not applicable` |
@@ -180,6 +223,13 @@ Previous runs.
 | --- | --- | --- | --- |
 | T1 — <title> | happy | ✅ | [00:12](<version_url>?t=12.000) |
 | T2 — <title> | edge | ✅ | [00:48](<version_url>?t=48.000) |
+| T3 — <title> | edge | ✅ | [DOM](<version-pinned-report-url>#t3-observation) |
+
+A case with no chapter links its observation in the version-pinned report instead,
+so every row on the PR resolves to evidence.
+
+<one or two sentences naming what the change was proven to do, in the reviewer's
+terms — the reason they opened this comment>
 
 <bugs found and fixed, with linked SHAs, or “No bugs found.”>
 

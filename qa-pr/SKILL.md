@@ -11,6 +11,19 @@ adds PR checkout, deterministic evidence capture, hosted video/report lifecycle,
 and exactly one upserted PR comment. Do not duplicate `qa-ticket`'s planning or
 testing logic.
 
+Every frontend run publishes **both** forms of evidence, because they prove
+different things and neither substitutes for the other:
+
+- The **video** shows a reviewer that the behavior really happens, in order, in a
+  real browser.
+- The **report** states what was asserted, in machine-checkable terms: the exact
+  post-action text, attributes, or payload each case turned on, quoted verbatim.
+
+A video alone leaves a reviewer squinting at pixels to guess the assertion, and
+is especially weak for negative claims — "the slide did *not* move" looks like
+nothing happening. A report alone leaves them trusting a transcription. Publish
+both, and make each case's row link to both.
+
 All testing is localhost-only. Never test staging or production. Never publish
 evidence unless the user asked to place it on that PR.
 
@@ -54,13 +67,24 @@ Complete this gate in order:
    or data setup. Record sanitized labels for the manifest.
 5. Verify the local app and auth/session endpoint before opening the feature.
 6. Record browser, viewport, tool versions, UTC time, clean state, and local HEAD.
+7. **Prove capture works before running the test pass.** Record one throwaway
+   clip of any page — start, interact once, stop — and require a playable file
+   whose `ffprobe` duration is greater than zero. Discard it.
+
+Step 7 is not ceremony. Capture can fail long after `record start` reports
+success, and discovering that only at the end means the whole pass was run
+un-recorded and has to be replayed. Prove it on a throwaway clip, not on evidence.
 
 If Snapdoc authentication/API is unavailable, stop before capture: neither the
-video nor the hosted report can be completed. If video prerequisites are missing,
-offer the user a choice to stop or continue with screenshots plus a report-only
-bundle. This degraded path must be labeled in the report; never imply it contains
-video. If Snapdoc is older than `0.0.10` or lacks `--poster`, state the installed
-version and stop with an instruction to upgrade before capturing anything.
+video nor the hosted report can be completed. If Snapdoc is older than `0.0.10`
+or lacks `--poster`, state the installed version and stop with an instruction to
+upgrade before capturing anything.
+
+If the capture smoke test fails, switch recorders before considering any degraded
+path — see the fallback recorder in section 3. Report-only is correct for a
+backend-only run, and is otherwise a last resort that requires telling the user
+what broke and getting their choice. It must be labeled in the report; never
+imply a bundle contains video when it does not.
 
 Get past authentication with the app's test/dev bypass or browser state supplied
 by the user. Never request a password or drive a real login. Forward remote dev
@@ -86,7 +110,10 @@ For each meaningful frontend case:
 2. Start one recording named for its stable case ID.
 3. Replay only the known deterministic actions.
 4. Stop when the observable assertion is visibly settled.
-5. Capture a key-state screenshot when it helps scanning or becomes the poster.
+5. Capture the case's **verbatim assertion** — the exact post-action text,
+   attribute, or state object the case turned on — for the report's observation
+   section. Quote what the page actually returned; never paraphrase it.
+6. Capture a key-state screenshot when it helps scanning or becomes the poster.
 
 ```bash
 agent-browser record start <scratch>/<case-id>.webm
@@ -94,10 +121,44 @@ agent-browser record start <scratch>/<case-id>.webm
 agent-browser record stop
 ```
 
+Step 5 is what makes the report worth reading on its own. Prefer an assertion a
+reviewer can check against the code: the rendered indicator text, the element's
+`aria-*`/`inert` attributes, the number of matching nodes, an `innerHTML` showing
+that hostile content stayed escaped, the request that did or did not fire. For a
+negative claim, capture the value on both sides of the action so "unchanged" is
+visible rather than asserted.
+
 Do not record setup, waiting, unrelated navigation, or duplicate cases. Inspect
 the clips, screenshots/frames, visible inputs, and browser chrome before hosting.
 Reject and recapture evidence containing secrets, credentials, cookies, personal
 or private tenant data, incorrect tenant context, or unrelated windows/tabs.
+
+### Fallback recorder
+
+When the capture smoke test fails, do not spend the run debugging the recorder.
+Check whether the repository already depends on Playwright, and if it does, record
+with it instead — one browser context per acceptance case, which yields one clean
+clip per case and finalizes on close:
+
+```js
+const context = await browser.newContext({
+  viewport: { width: 1280, height: 720 },
+  recordVideo: { dir: tmp, size: { width: 1280, height: 720 } },
+});
+// deterministic actions and visible assertion
+await context.close(); // writes the .webm; rename it to <case-id>.webm
+```
+
+Import Playwright from the repository's own install rather than adding a
+dependency, and keep the script in scratch so the worktree stays clean:
+`createRequire("<worktree>/frontend/package.json")`. A fresh context per case also
+gives each case isolated storage, so a prior case's saved answers cannot leak in.
+Scope every locator to the visible subtree when the UI keeps offscreen copies in
+the DOM, or strict mode matches the hidden ones.
+
+Whichever recorder produced the clips, name it in the report's manifest, and add a
+short capture note when it was not the default one. A reviewer who later cannot
+reproduce a clip needs to know what made it.
 
 Backend evidence is the exact sanitized request and response text. A screenshot
 or decorative video never replaces request/response evidence. When every case is
@@ -135,12 +196,21 @@ Render the report from `references/evidence-format.md` with:
 
 - a Mermaid requirement → acceptance case → observed result graph using
   accessible `accTitle` and `accDescr`;
-- a concise acceptance-case table;
+- a concise acceptance-case table whose every frontend row links **both** its
+  video chapter and its observation section;
 - timestamp links of the form `version_url?t=<seconds.milliseconds>` for
   every video chapter;
+- one observation section per case holding the verbatim assertion from step 5,
+  in a fenced block, plus a fixtures table when seeded data shaped the run;
 - sanitized backend request/response sections;
 - fix commits and retests; and
 - the complete commit/environment/publication manifest from the reference.
+
+A case that has a chapter but no observation is unfinished: the reviewer can see
+it happen but cannot check what it was supposed to prove. A case whose behavior
+has no motion to record — a pure attribute or payload check — carries its
+observation alone, and the table says so rather than linking a chapter that does
+not exist.
 
 The report table is the browser-visible chapter navigator. Snapdoc's watch page
 does not provide one, but it does honor `?t=`, so every chapter link opens the
@@ -328,9 +398,15 @@ Return all of the following:
 - stable video watch URL(s), report URL, and sticky-comment URL;
 - privacy, expiry, artifact IDs, and artifact versions;
 - MP4 and test-plan SHA-256 values;
-- bugs fixed and their commit SHAs; and
+- bugs fixed and their commit SHAs;
+- which recorder produced the clips, when it was not the default one; and
 - whether the run was video+report, multipart, or backend-only report.
 
 Do not claim completion unless preflight passed, every capture was inspected,
-the publication manifest is complete, the clean three-way SHA gate passed twice,
-and exactly one marked PR comment exists.
+every case carries its verbatim observation, the publication manifest is complete,
+the clean three-way SHA gate passed twice, and exactly one marked PR comment
+exists.
+
+Findings outside the tested change are worth surfacing, but not silently: report
+them to the user rather than folding them into the PR's verdict, say plainly
+whether the PR caused them, and let the user decide whether they become a ticket.
