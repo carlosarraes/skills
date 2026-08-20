@@ -1,10 +1,10 @@
-# Acme Size-Gate Policy
+# Size-Gate Policy
 
 Read this file on a size-check failure before any label, comment, source edit, or split decision. This is repository- and provider-specific: inspect the current workflow and repository policy first. The values below preserve the audited policy but must not override newer authoritative configuration.
 
 ## Current audited policy
 
-`example-platform` uses `.github/workflows/pr-size.yml`, historically exposed as `PR Size Gate` / `Diff size (excl. generated)`. Its audited hard cap is 1,000 effective LOC with an aim near 400. Effective LOC is additions plus deletions after workflow exclusions; tests are not excluded.
+The audited repository exposes the gate through `.github/workflows/pr-size.yml`, surfaced as a check named like `PR Size Gate` / `Diff size (excl. generated)`. Its audited hard cap is 1,000 effective LOC with an aim near 400. Effective LOC is additions plus deletions after workflow exclusions; tests are not excluded. If the current repository's workflow, cap, or check name differs, that workflow wins — read it, and ask the user (or check memory) when the policy is not discoverable from the repo.
 
 The `size/override` label is an exception and must have one honest rationale explaining why the PR cannot split into independently mergeable changes. Adding the label re-runs the check on the `labeled` event.
 

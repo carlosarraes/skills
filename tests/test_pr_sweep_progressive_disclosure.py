@@ -15,7 +15,7 @@ EXPECTED_REFERENCES = {
     "collection-and-matrix.md",
     "conflict-resolution.md",
     "fix-protocol.md",
-    "acme-size-gate.md",
+    "size-gate.md",
     "review-convergence.md",
 }
 
@@ -92,7 +92,7 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "collection-and-matrix.md": ("before collecting", "classifying"),
             "approval-triage.md": ("approved", "avoidable"),
             "fix-protocol.md": ("before dispatch", "needs fix"),
-            "acme-size-gate.md": ("size gate", "before"),
+            "size-gate.md": ("size gate", "before"),
             "conflict-resolution.md": ("conflict", "before"),
             "review-convergence.md": ("later cycle", "green"),
             "cadence.md": ("before scheduling", "wakeup"),
@@ -144,7 +144,7 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(phrase, fix)
 
-        size = contents["acme-size-gate.md"]
+        size = contents["size-gate.md"]
         for phrase in (
             "idempotent",
             "effective loc",

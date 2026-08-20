@@ -67,7 +67,7 @@ Read the selected reference in full **before** the action it governs. Each is co
 - Before collecting or classifying any non-quiet PR, read [collection and matrix](references/collection-and-matrix.md). It defines provider queries, bot detection, state, L1/L2/L3, latest-state rules, Greptile de-duplication, and dispositions.
 - When an approved PR contains avoidable work, read [approval triage](references/approval-triage.md) before presenting the batched per-PR gate.
 - Before dispatch on any `NEEDS FIX` PR, read [fix protocol](references/fix-protocol.md). Give its one agent the exact worktree, full findings and identifiers, tracker, origin ticket, and decisions.
-- On any size gate failure, read [Acme size gate](references/acme-size-gate.md) before labeling, commenting, editing code, or recommending a split. Validate repository-specific policy against the current workflow first.
+- On any size gate failure, read [Size gate](references/size-gate.md) before labeling, commenting, editing code, or recommending a split. Validate repository-specific policy against the current workflow first.
 - On any conflict, read [conflict resolution](references/conflict-resolution.md) before resolution, staging, rebase continuation, or push.
 - On a later cycle after fixes, read [review convergence](references/review-convergence.md) and require new-head green CI before re-requesting a blocking reviewer or posting the handoff.
 - Before scheduling a wakeup or choosing an interval, read [cadence](references/cadence.md). Its timing is environment-sensitive; validate the available scheduler and current CI/bot latency.

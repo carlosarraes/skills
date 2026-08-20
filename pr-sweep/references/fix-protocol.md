@@ -19,7 +19,7 @@ Never dispatch two agents for one PR. Separate PR worktrees may run in parallel.
 
 Stay in the assigned worktree. A supplied map wins; otherwise derive from branch and create a fresh worktree at the remote tip if absent. Never reuse a path on another branch.
 
-Pull with rebase. Acme worktrees historically use `example-platform-mon-<NUM>-<slug>`; validate the current convention. Also validate whether the historic LFS fixture workaround is still needed before using `git update-index --assume-unchanged backend/tests/fixtures/surveys/*.json`; restore it afterward. A rebase conflict exits this protocol into conflict investigation before any resolution.
+Pull with rebase. Worktree directory names follow a per-repo convention (typically `<repo>-<ticket>-<slug>`); read the existing worktrees to confirm it, or ask the user. Also validate whether the historic LFS fixture workaround is still needed before using `git update-index --assume-unchanged backend/tests/fixtures/surveys/*.json`; restore it afterward. A rebase conflict exits this protocol into conflict investigation before any resolution.
 
 ## Fix order
 
@@ -76,7 +76,7 @@ Human pushback requires stronger evidence: explicit repository/ticket policy, a 
 
 ## Verification and push safety
 
-Run repository-prescribed targeted tests plus type/lint checks. Current Acme defaults are `tsc --noEmit` for frontend or `uv run pyright && uv run ruff check .` for backend; validate current project commands. Never bypass hooks. Never use `git add -A`/broad staging when user work may coexist. Never push a base branch.
+Run repository-prescribed targeted tests plus type/lint checks. Typical defaults are `tsc --noEmit` for a TypeScript frontend or `uv run pyright && uv run ruff check .` for a Python backend; validate the actual project commands against the repo's own config, and ask the user if they are not discoverable. Never bypass hooks. Never use `git add -A`/broad staging when user work may coexist. Never push a base branch.
 
 Push feature-branch commits once with plain `git push`. A clean, safe rebase of the same upstream may require `--force-with-lease` under the conflict rules; never plain `--force`.
 
