@@ -1,6 +1,6 @@
-# Real review examples — Carlos Arraes (example-org/example-platform)
+# Real review examples — Carlos Arraes
 
-Mined verbatim from 129 review comments across 43 teammate PRs (2026-06-30 → 2026-07-10). Do not paraphrase these when adapting the voice — they are the ground truth.
+Mined verbatim from 129 review comments across 43 teammate PRs on a GitHub monorepo (2026-06-30 → 2026-07-10). Do not paraphrase these when adapting the voice — they are the ground truth.
 
 ## Review-body openers (the summary comment on a review)
 
@@ -56,9 +56,9 @@ Mined verbatim from 129 review comments across 43 teammate PRs (2026-06-30 → 2
 
 ---
 
-# Acme / Bitbucket corpus (Portuguese-English, casual register)
+# Bitbucket corpus (Portuguese-English, casual register)
 
-Mined verbatim via `bt pr review-history` (30 comments, `acme/api`, 2026). Same reviewer, different register: bilingual PT-BR/EN and far more conversational than the Acme corpus. Substance is the same — regressions, N+1s, swallowed errors, type/signature mismatches, validation bypasses, defensive nil-handling, observability/support-friendliness — but the tone is a teammate thinking out loud, often hedged with "might be intentional" / "is this intended?".
+Mined verbatim via `bt pr review-history` (30 comments from a Django billing/payments API, 2026). Same reviewer, different register: bilingual PT-BR/EN and far more conversational than the GitHub corpus. Substance is the same — regressions, N+1s, swallowed errors, type/signature mismatches, validation bypasses, defensive nil-handling, observability/support-friendliness — but the tone is a teammate thinking out loud, often hedged with "might be intentional" / "is this intended?".
 
 ## Reviewing others — substance findings
 

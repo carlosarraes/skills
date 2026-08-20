@@ -20,12 +20,12 @@ them; they are the ground truth). Match that, don't approximate it.
 **Register adapts to the repo/team — match what the surrounding comments use.** Two
 observed modes (see `references/real-review-examples.md`):
 
-- **Formal English** (e.g. Acme): full sentences, precise, near-incident-report
+- **Formal English** (English-first team, GitHub): full sentences, precise, near-incident-report
   tone. Ticket-anchored — name the ticket and measure against its acceptance
   criteria, signature shape *"This [does X], but TICKET requires [Z], so [the gap].
   [fix]."* Separate blocking from non-blocking; say "before merge"; occasional
   `[P2]`-style tag. Short verdict-first review summaries.
-- **Casual, bilingual PT-BR/EN** (e.g. acme): a teammate thinking out loud.
+- **Casual, bilingual PT-BR/EN** (PT-BR-speaking team, Bitbucket): a teammate thinking out loud.
   "Hmmm", "Cara,", "afaik/iirc", contractions ("vc", "qnd", "msm"), and whole
   comments in Portuguese when the team speaks it. Lowercase-ish, relaxed
   punctuation. Still precise about the actual bug.
@@ -107,12 +107,13 @@ posting. Either way, nothing lands in Carlos's name unseen.
 - `review-swarm` includes this reviewer when installed and skips it gracefully when
   not.
 
-## Extending to Bitbucket (acme/api)
+## Extending the corpus on Bitbucket
 
-The mined corpus is from GitHub/Acme. Carlos also reviews on Bitbucket
-(acme/api), where the same lens applies (his stack there is Django + Postgres/
-Supabase + Redis + Celery, billing/payments domain — expect extra weight on
-`timezone.now()` correctness, migration safety, and money-path regressions). To fold
-that history in: `bt pr comments <id> -o json` filtered to `Carlos Arraes` on PRs he
-reviewed (needs a bt reviewer/participant filter to enumerate non-authored PRs);
-append verbatim examples to the references file.
+The primary mined corpus is from GitHub. Carlos also reviews on Bitbucket, where the
+same lens applies (that stack is Django + Postgres/Supabase + Redis + Celery in a
+billing/payments domain — expect extra weight on `timezone.now()` correctness,
+migration safety, and money-path regressions). To fold more of that history in:
+`bt pr comments <id> -o json` filtered to `Carlos Arraes` on PRs he reviewed (needs a
+bt reviewer/participant filter to enumerate non-authored PRs); append verbatim
+examples to the references file. Ask the user which repository to mine — it is not
+recorded here.
