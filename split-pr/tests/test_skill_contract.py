@@ -65,6 +65,36 @@ class SplitPrSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), self.flat_body)
 
+    def test_layer_materialization_stages_selected_changes_before_commit(self):
+        restore = self.body.index("git restore --source=<original-branch>")
+        commit_command = 'git commit -m "<type>(<scope>): <layer 1 description>"'
+        commit = self.body.index(commit_command, restore) + len(commit_command)
+        materialization = normalized(self.body[restore:commit])
+
+        self.assertIn("git restore --source=<original-branch> --staged --worktree -p", materialization)
+        self.assertIn("git diff --cached --check", materialization)
+        self.assertIn("git diff --cached --name-only", materialization)
+        self.assertLess(materialization.index("--staged --worktree"), materialization.index("git diff --cached"))
+        self.assertLess(materialization.index("git diff --cached"), materialization.index("git commit"))
+
+    def test_each_layer_checks_non_mutating_mergeability_against_intended_parent(self):
+        start = self.body.index("### Step 5: Verify every layer independently")
+        end = self.body.index("### Step 6: Publish and open the stack", start)
+        verification = normalized(self.body[start:end])
+
+        for phrase in (
+            "mergeability",
+            "intended parent",
+            "git merge-tree --write-tree <intended-parent> <layer-commit>",
+            "non-mutating",
+            "conflict",
+            "build",
+            "tests",
+            "runtime",
+        ):
+            self.assertIn(normalized(phrase), verification)
+        self.assertLess(verification.index("git merge-tree"), verification.index("repository build"))
+
     def test_each_layer_is_verified_independently(self):
         for phrase in (
             "verify every layer independently",
@@ -90,7 +120,11 @@ class SplitPrSkillTests(unittest.TestCase):
         self.assertEqual(payload["skill_name"], "split-pr")
         self.assertEqual(
             {case["id"] for case in payload["evals"]},
-            {"mondrio-automatic-separable", "cohesive-no-safe-seam-stop"},
+            {
+                "mondrio-automatic-separable",
+                "cohesive-no-safe-seam-stop",
+                "mondrio-exact-cap-near-miss",
+            },
         )
         for case in payload["evals"]:
             self.assertTrue(case["prompt"].strip())
@@ -126,6 +160,32 @@ class SplitPrSkillTests(unittest.TestCase):
             "rather than artificial splitting",
         ):
             self.assertIn(normalized(phrase), cohesive_text)
+
+        near_miss = next(
+            case for case in payload["evals"] if case["id"] == "mondrio-exact-cap-near-miss"
+        )
+        near_miss_prompt = normalized(near_miss["prompt"])
+        for forbidden in (
+            "must not auto-trigger",
+            "does not auto-trigger",
+            "no automatic split",
+            "not an automatic trigger",
+            "near-miss",
+            "expect no automatic",
+        ):
+            self.assertNotIn(normalized(forbidden), near_miss_prompt)
+
+        near_miss_text = normalized(
+            " ".join([near_miss["prompt"], near_miss["expected_output"]] + near_miss["expectations"])
+        )
+        for phrase in (
+            "mondrio",
+            "exactly 1,000 changed lines",
+            "not an automatic trigger",
+            "does not automatically invoke split-pr",
+            "leaves the branch and refs unchanged",
+        ):
+            self.assertIn(normalized(phrase), near_miss_text)
 
 
 if __name__ == "__main__":

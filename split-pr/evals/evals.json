@@ -25,6 +25,17 @@
         "Does not manufacture artificial layers or non-functional intermediate PRs.",
         "Does not ask for an approval or a scope choice before stopping."
       ]
+    },
+    {
+      "id": "mondrio-exact-cap-near-miss",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. An observed Mondrio repository size-policy check reports exactly 1,000 changed lines under its effective-line calculation. The branch has separable seams. Describe the resulting split-pr action trace and whether the policy result changes routing.",
+      "expected_output": "Treats exactly 1,000 changed lines as the cap boundary, not an automatic trigger. It does not automatically invoke split-pr from that size-policy result, leaves the branch and refs unchanged, and requires a separate direct invocation before any split work.",
+      "expectations": [
+        "Recognizes exactly 1,000 changed lines as a size-policy near miss rather than an automatic trigger.",
+        "Does not automatically invoke split-pr from an exactly-at-cap result.",
+        "Leaves the original branch, refs, and worktree unchanged when there is no direct invocation.",
+        "Distinguishes the at-cap result from the over-1,000 Mondrio trigger."
+      ]
     }
   ]
 }

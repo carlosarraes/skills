@@ -116,16 +116,20 @@ this operation:
 git switch <base>
 git switch -c <feature>-1-<slug>
 # bring in only layer 1 from <original-branch>
-git restore --source=<original-branch> -p -- <path> ...
+git restore --source=<original-branch> --staged --worktree -p -- <path> ...
+git diff --cached --check
+test -n "$(git diff --cached --name-only)"
 git commit -m "<type>(<scope>): <layer 1 description>"
 git switch -c <feature>-2-<slug>
 # bring in only layer 2, then commit it
 ```
 
 Branch each subsequent layer from the preceding new stack branch. Use explicit
-paths or carefully selected hunks; cherry-pick an already cohesive source commit
-only when it maps exactly to one layer. Record every new branch name, parent,
-commit SHA, and source paths.
+paths or carefully selected hunks; `--staged --worktree` keeps the selected
+changes in both the index and worktree. Confirm the cached diff is non-empty
+before committing so a layer cannot silently become an empty commit. Cherry-pick
+an already cohesive source commit only when it maps exactly to one layer. Record
+every new branch name, parent, commit SHA, and source paths.
 
 Never rewrite the original branch. Never reset the original branch. Never
 force-push the original branch. Do not amend, rebase, or delete the original ref.
@@ -135,16 +139,30 @@ SHA.
 
 ### Step 5: Verify every layer independently
 
-For each new branch, before moving to the next layer, run the repository build
-and the tests touched by that layer. Where it has a runtime surface, exercise
-that surface as well (for example, call the endpoint or load the page). A layer
-is not valid because a later layer is expected to make it pass.
+For each new layer, first verify mergeability against its intended parent without
+changing the index, worktree, or refs:
+
+```bash
+git merge-tree --write-tree <intended-parent> <layer-commit>
+```
+
+Use the base as the intended parent for the first layer and the preceding new
+stack branch for every later layer. Record the command, exit status, output, and
+whether any conflict was reported. `git merge-tree --write-tree` is a
+non-mutating mergeability check for the working state: it does not merge, reset,
+or rewrite the branches being evaluated. A conflict or non-zero result invalidates
+that seam; stop before publishing it and preserve the original branch.
+
+After the mergeability check is clean, run the repository build and the tests
+touched by that layer. Where it has a runtime surface, exercise that surface as
+well (for example, call the endpoint or load the page). A layer is not valid
+because a later layer is expected to make it pass.
 
 Record the branch and commit SHA, exact verification commands, observed output or
-exit status, and any runtime evidence for every layer. If any layer is not green
-on its own, stop before advancing, fold the dependent changes into a safer seam
-or return to the no-safe-seam explanation, and keep the original branch
-unchanged.
+exit status, mergeability evidence, and any runtime evidence for every layer. If
+any layer is not mergeable or green on its own, stop before advancing, fold the
+dependent changes into a safer seam or return to the no-safe-seam explanation,
+and keep the original branch unchanged.
 
 ### Step 6: Publish and open the stack
 
@@ -180,7 +198,8 @@ Return one compact report with:
 - the original branch and exact SHA, plus confirmation that it was not rewritten,
   reset, or force-pushed;
 - each new branch, parent/base, commit SHA, files, and PR number;
-- independent build, test, and runtime verification with observed outcomes;
+- independent mergeability, build, test, and runtime verification with observed
+  outcomes;
 - stack merge order and any retargeting needed after lower layers merge; and
 - remaining scope, failed layers, or a bounded no-safe-seam size-policy
   explanation when the stack could not be completed.
