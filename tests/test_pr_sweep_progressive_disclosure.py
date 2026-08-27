@@ -97,6 +97,30 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, normalized)
 
+    def test_router_and_fix_references_use_autonomous_finding_actions(self):
+        contents = {
+            path.name: " ".join(path.read_text(encoding="utf-8").lower().split())
+            for path in REFERENCES.glob("*.md")
+        }
+        routed = " ".join((self.body.lower(), contents["fix-protocol.md"], contents["collection-and-matrix.md"]))
+
+        for required in (
+            "fix-here",
+            "follow-up",
+            "evidenced pushback",
+            "no-file",
+            "approval invalidation",
+            "reporting",
+            "reviewer re-request",
+        ):
+            self.assertIn(required, routed)
+
+        for forbidden in ("approved triage decisions", "approved triage", "approval-risk", "avoidable", "permission gate"):
+            self.assertNotIn(forbidden, routed)
+
+        for reference in (contents["fix-protocol.md"], contents["collection-and-matrix.md"]):
+            self.assertNotIn("permission", reference)
+
     def test_every_reference_is_linked_directly_and_references_do_not_chain(self):
         actual = {path.name for path in REFERENCES.glob("*.md")}
         self.assertEqual(actual, EXPECTED_REFERENCES)

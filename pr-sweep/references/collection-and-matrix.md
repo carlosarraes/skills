@@ -111,23 +111,23 @@ A human reply in the thread makes it human. Ambiguity defaults to human.
 
 ## Form × state matrix
 
-| Form | Current condition | Action class | Reply form | Approval risk |
+| Form | Current condition | Action class | Reply form | Review state / reporting |
 |---|---|---|---|---|
 | L1 real CI | failing | code fix + feasible regression test | none | merge-required |
 | L1 flake | unrelated to diff | rerun failed job | none | no commit |
 | L1 title | title-only convention failure | edit title | none | no commit |
 | L1 size | policy check | existing override wait, cohesive override, or split STOP | one rationale only for new override | policy action |
 | L1 conflict | `CONFLICTING`/rebase conflict | investigate, resolve safely, or STOP | none | merge-required if safe |
-| L2 bot | unresolved | smallest fix or evidenced pushback | reply via comment `databaseId`; resolve review thread ID | avoidable on approved PR |
-| L2 human blocking | latest verdict `CHANGES_REQUESTED` | fix or high-bar evidenced pushback | reply + resolve | autonomous on non-approved PR |
-| L2 human nonblocking | `APPROVED`/`COMMENTED` | approved triage: fix-here/follow-up/no-file | reply + resolve | avoidable |
-| L3 Greptile | latest summary | summary-only fix/pushback; de-duplicate L2 | **never reply** or resolve summary | avoidable on approved PR |
-| L3 human blocking | `CHANGES_REQUESTED` body | discrete commits | no direct reply | autonomous on non-approved PR |
-| L3 human nonblocking | `APPROVED`/`COMMENTED` body | approved triage | no reply for fix; one PR-level follow-up acknowledgment | avoidable |
+| L2 bot | unresolved | smallest fix or evidenced pushback | reply via comment `databaseId`; resolve review thread ID | report approval invalidation if pushed |
+| L2 human blocking | latest verdict `CHANGES_REQUESTED` | fix or high-bar evidenced pushback | reply + resolve | report current reviewer state |
+| L2 human nonblocking | `APPROVED`/`COMMENTED` | fix-here/follow-up/no-file | reply + resolve | report current reviewer state |
+| L3 Greptile | latest summary | summary-only fix/pushback; de-duplicate L2 | **never reply** or resolve summary | report approval invalidation if pushed |
+| L3 human blocking | `CHANGES_REQUESTED` body | discrete commits | no direct reply | report current reviewer state |
+| L3 human nonblocking | `APPROVED`/`COMMENTED` body | fix-here/follow-up/no-file | no reply for fix; one PR-level follow-up acknowledgment | report current reviewer state |
 
 ## Greptile de-duplication and accounting
 
-The summary contains context, a confidence score, and possibly T-Rex runtime observations. Confidence is a triage signal, never an independent merge gate.
+The summary contains context, a confidence score, and possibly T-Rex runtime observations. Confidence is a triage signal, never an independent merge condition.
 
 Build a stable finding ledger before dispatch:
 
@@ -144,6 +144,6 @@ Report the current score, but judge completion by underlying findings.
 
 - **DONE:** newest-per-name CI is green; mergeable; zero unresolved inline threads; no open summary-only finding; every latest blocking human verdict has been turned around/re-requested or all its findings were filed as follow-ups. A size override already present is not instantly DONE: wait/recheck the labeled-event check until its latest run is terminal-good.
 - **WAITING:** current feedback is clean and the only incomplete state is live CI/bot/review processing, including a pending size-override rerun. Dispatch nothing and re-arm.
-- **NEEDS FIX:** any failure, conflict, unresolved thread, summary-only finding, unaddressed blocking review, approved triage, or STOP/user decision remains.
+- **NEEDS FIX:** any failure, conflict, unresolved thread, summary-only finding, unaddressed review finding, or STOP/user decision remains.
 
 Only all selected PRs simultaneously `DONE` terminates the sweep.

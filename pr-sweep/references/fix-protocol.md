@@ -9,7 +9,7 @@ Give the agent:
 - exact independent worktree path and feature branch;
 - full L1/L2/L3 ledger with stable finding keys;
 - for every inline thread, author/state plus reply comment `databaseId` and review thread ID;
-- approved triage decisions;
+- per-finding action classifications (`fix-here`, `follow-up`, evidenced pushback, or no-file) and any approval invalidation to report;
 - follow-up tracker (`linear` default or `jira`) and origin ticket from the branch;
 - conflict/size decisions already made by their policy branches.
 
