@@ -104,7 +104,7 @@ beginning implementation.
 
 ## Routing boundary
 
-Use `clean-up` for fixing a branch. Use `qa-team` or `review-swarm` for branch
-or diff QA. Use `improve` for broad bug, security, dependency, risk, or roadmap
-audits and implementation plans. This skill audits whole-codebase simplification
-opportunities only.
+Use `clean-up` for fixing a branch. Use `qa-team` for branch or diff QA only when
+explicitly invoked. Use `improve` for broad bug, security, dependency, risk, or
+roadmap audits and implementation plans. This skill audits whole-codebase
+simplification opportunities only.

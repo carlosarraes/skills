@@ -15,7 +15,7 @@ EXPECTED_FRONTMATTER = {
     "description": "Use only when explicitly invoked for a whole-codebase simplification audit.",
     "disable-model-invocation": True,
 }
-EXPECTED_BODY_SHA256 = "2f051ff3cfd14af8baa2211bd2db8d3441d21851eed21810d11944e5925ab125"
+EXPECTED_BODY_SHA256 = "12ec753caed637eae38520a22f1c65bffc8d7f892a4354d5bd5dadd9bca35dc9"
 
 
 def split_frontmatter(document):
@@ -319,6 +319,12 @@ class SimplificationAuditSkillTests(unittest.TestCase):
             "broad bug, security, dependency, risk, or roadmap audits",
             self.flat_skill,
         )
+
+    def test_branch_review_routes_only_to_retained_manual_qa_team(self):
+        routing = self.skill[self.skill.index("## Routing boundary") :]
+        self.assertNotIn("review-swarm", self.skill)
+        self.assertIn("Use `qa-team` for branch or diff QA", routing)
+        self.assertIn("only when explicitly invoked", normalized(routing))
 
     def test_reviewer_makes_skip_a_row_result_and_opportunities_provisional_recommendations(self):
         return_schema = self.reviewer[self.reviewer.index("## Return schema") :]
