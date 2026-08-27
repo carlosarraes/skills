@@ -1,6 +1,6 @@
 # Opening Informative Pull Requests — Skill Design
 
-**Date:** 2026-08-26  
+**Date:** 2026-08-26
 **Status:** Approved design; awaiting written-spec review
 
 ## Purpose
