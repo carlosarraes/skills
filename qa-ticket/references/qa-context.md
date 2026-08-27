@@ -18,9 +18,9 @@ Health-check discovered backend and frontend surfaces in parallel before functio
 In the same parallel context-gathering turn:
 
 1. Read the current branch.
-2. Extract `[A-Za-z]{2,5}-\d+` case-insensitively and normalize it to uppercase. If absent, ask the user for the ticket ID before continuing.
+2. Extract `[A-Za-z]{2,5}-\d+` case-insensitively and normalize it to uppercase. If absent, treat this as missing ticket context: continue with diff-only planning without prompting and retain affected evidence as `SKIP/INCONCLUSIVE`.
 3. Use explicit `linear` or `jira`; default an omitted or unknown platform to Linear and disclose an unknown-value fallback.
-4. Fetch the ticket with `linear issue view <ID>` or `jira issue view <ID> --plain`.
+4. When an ID is available, fetch the ticket with `linear issue view <ID>` or `jira issue view <ID> --plain`.
 5. Gather both `git diff develop...HEAD --stat` and `git diff develop...HEAD` regardless of provider success.
 
 Extract ticket title, description, acceptance criteria, labels, and priority. Parse the diff for changed backend/frontend surfaces, endpoints, schemas, routes, models, and functional behavior.
@@ -34,6 +34,6 @@ If the diff is empty, report exactly `No changes found relative to develop` and 
 - Backend-only diff: plan/run backend; mark frontend not applicable.
 - Frontend-only diff: plan/run frontend; mark backend not applicable.
 - Full-stack diff: plan both; execute only healthy surfaces.
-- Missing data: recommend `/check-data` then `/seed-data`; affected tests remain `SKIP/INCONCLUSIVE`, never PASS.
+- Missing data: recommend or invoke `/check-data` in its default plan, seed, and verify run; affected tests remain `SKIP/INCONCLUSIVE`, never PASS.
 
 Validate provider syntax, project URLs/auth, base branch, and health assumptions against the current project before relying on them.

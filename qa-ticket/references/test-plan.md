@@ -42,6 +42,6 @@ Exclude unchanged modules, infrastructure, code style, generated files, lockfile
 
 ## Data readiness
 
-This skill does not provision fixtures. Plan unique values and cleanup. If required data is missing, keep the case visible as `SKIP/INCONCLUSIVE`, state why, and recommend `/check-data` then `/seed-data`.
+This skill does not provision fixtures. Plan unique values and cleanup. If required data is missing, keep the affected case visible as `SKIP/INCONCLUSIVE`, state why, and recommend or invoke `/check-data` in its default plan, seed, and verify run before retrying.
 
 Print the complete plan before execution. The report must later contain the same IDs; none may disappear.

@@ -34,7 +34,7 @@ Normal runs are unchanged: “smoke test,” “read-only tests,” or a request
 
 Read [QA context](references/qa-context.md) in full **before preflight** and **before gathering** ticket/diff context. In a normal run, discover project-local URLs/auth/setup and health-check backend/frontend before functional tests. Resolve the selected platform (`linear` default; `jira` accepted), normalize the ticket ID, and gather the `develop...HEAD` diff independently.
 
-If the ticket provider fails, continue with disclosed **diff-only** planning; never invent requirements. If a surface is unavailable, keep its planned cases as `SKIP/INCONCLUSIVE`, never PASS. If no diff exists, report that and stop. Ask for the ticket ID when the branch has none.
+If the ticket provider fails, continue with disclosed **diff-only** planning; never invent requirements. If ticket context is missing, continue in diff-only mode without prompting and retain affected evidence as `SKIP/INCONCLUSIVE`. If a surface is unavailable, keep its planned cases as `SKIP/INCONCLUSIVE`, never PASS. If no diff exists, report that and stop.
 
 ### Complete targeted plan before execution
 
@@ -79,5 +79,5 @@ State whether the acceptance criteria are satisfied. Any required FAIL or unexec
 
 ## Related skills
 
-- Run `/check-data` then `/seed-data` when local rows are missing; this skill tests behavior rather than provisioning fixtures.
+- Run `/check-data` in its default plan, seed, and verify mode when local rows are missing; this skill tests behavior rather than provisioning fixtures.
 - Load `agent-browser` before frontend execution.

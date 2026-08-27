@@ -162,6 +162,60 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(phrase, normalized)
 
+    def test_missing_fixtures_use_the_combined_check_data_default(self):
+        sources = [
+            self.body,
+            (REFERENCES / "qa-context.md").read_text(encoding="utf-8"),
+            (REFERENCES / "test-plan.md").read_text(encoding="utf-8"),
+        ]
+        for source in sources:
+            normalized = " ".join(source.lower().split())
+            self.assertIn("/check-data", normalized)
+            self.assertNotIn("/seed-data", normalized)
+
+        router = " ".join(self.body.lower().split())
+        self.assertIn("default", router)
+        self.assertIn("plan, seed, and verify", router)
+
+    def test_missing_ticket_context_stays_diff_only_without_a_question_loop(self):
+        sources = [
+            self.body,
+            (REFERENCES / "qa-context.md").read_text(encoding="utf-8"),
+        ]
+        normalized = " ".join(" ".join(sources).lower().split())
+        for phrase in (
+            "missing ticket context",
+            "diff-only",
+            "skip/inconclusive",
+            "without prompting",
+        ):
+            self.assertIn(phrase, normalized)
+
+        for forbidden in (
+            "ask for the ticket id",
+            "ask the user for the ticket id",
+            "what's the ticket id",
+        ):
+            self.assertNotIn(forbidden, normalized)
+
+    def test_eval_fixture_covers_ticketless_diff_only_and_combined_data(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        prompt = next(
+            case["prompt"]
+            for case in payload["evals"]
+            if case["id"] == "degraded-local-preflight"
+        ).lower()
+        for phrase in (
+            "no ticket pattern",
+            "diff-only",
+            "without asking for a ticket id",
+            "/check-data",
+            "default plan, seed, and verify",
+            "skip/inconclusive",
+        ):
+            self.assertIn(phrase, prompt)
+        self.assertNotIn("/seed-data", prompt)
+
     def test_references_preserve_load_bearing_contracts(self):
         contents = {
             path.name: " ".join(path.read_text(encoding="utf-8").lower().split())
