@@ -181,6 +181,17 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(phrase, router)
 
+        report_start = self.body.index("### Complete report and truthful verdict")
+        report_end = self.body.index("## Never rules", report_start)
+        final_report = " ".join(self.body[report_start:report_end].lower().split())
+        for phrase in (
+            "repeat the explicit **fixture setup** field",
+            "/check-data` default `plan → seed → verify",
+            "`not needed` with evidence",
+            "never `/seed-data`",
+        ):
+            self.assertIn(phrase, final_report)
+
     def test_unavailable_surfaces_keep_the_complete_coverage_floor(self):
         sources = [
             self.body,
@@ -216,7 +227,7 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, normalized)
 
-    def test_eval_fixture_covers_ticketless_diff_only_and_combined_data(self):
+    def test_degraded_preflight_prompt_is_neutral_while_rubric_keeps_behavior(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
         case = next(
             case
@@ -225,14 +236,57 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         )
         prompt = case["prompt"].lower()
         for phrase in (
-            "no ticket pattern",
+            "branch feature/catalog-filter has no ticket pattern",
+            "default linear cli fails",
+            "docs/config expose backend http://localhost:8000 and frontend http://127.0.0.1:3000 with auth bypass",
+            "backend health is 503",
+            "frontend health is 200",
+            "develop...head changes a backend filter endpoint and frontend filter component",
+            "acceptance text and local fixtures are unavailable",
+            "user asks for a green-looking report",
+            "infer backend from code and just test ui",
+            "what handling follows?",
+        ):
+            self.assertIn(phrase, prompt)
+
+        self.assertTrue(prompt.endswith("what handling follows?"))
+        for forbidden in (
             "diff-only",
             "without asking for a ticket id",
             "/check-data",
-            "default plan, seed, and verify",
+            "/seed-data",
+            "plan, seed, and verify",
             "skip/inconclusive",
+            "complete plan",
+            "happy/error/edge",
+            "full coverage",
+            "coverage",
+            "verdict",
+            "ordered qa action trace",
+            "truthful final report",
         ):
-            self.assertIn(phrase, prompt)
+            self.assertNotIn(forbidden, prompt)
+
+    def test_seed_data_mentions_are_prohibition_only_in_runtime_docs(self):
+        runtime_docs = [SKILL, *sorted(REFERENCES.glob("*.md"))]
+        occurrences = []
+        for path in runtime_docs:
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                normalized_line = " ".join(line.lower().split())
+                if "/seed-data" not in normalized_line:
+                    continue
+                occurrences.append((path, line_number, normalized_line))
+                self.assertRegex(
+                    normalized_line,
+                    r"\bnever\b[^.]*[`]?/seed-data[`]?",
+                )
+                self.assertNotRegex(
+                    normalized_line,
+                    r"\b(?:run|invoke|call|execute|recommend|use)\b[^.]*[`]?/seed-data",
+                )
+        self.assertTrue(occurrences)
 
     def test_degraded_preflight_eval_has_the_complete_evidence_rubric(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
