@@ -1,6 +1,7 @@
 ---
 name: video-extract
-description: Use when the user needs clean transcripts from one or more YouTube videos, including captionless videos that may require transcription.
+description: Use only when explicitly invoked to extract clean transcripts from YouTube videos.
+disable-model-invocation: true
 ---
 
 # Video Extract: YouTube → clean transcript
