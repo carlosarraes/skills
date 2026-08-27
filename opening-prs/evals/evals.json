@@ -15,9 +15,9 @@
     },
     {
       "id": "mixed-change-without-template",
-      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean branch changes a UI, API endpoint, environment setting, and dependency in a repository with no PR template. The remote may be GitHub or Bitbucket. Explain the complete PR-opening workflow and draft shape.",
-      "expected_output": "Uses the portable fallback schema, combines all applicable impact branches, and discovers forge tooling instead of assuming GitHub.",
-      "expectations": ["use the fallback PR body only because no repository template exists", "cover UI, API, configuration, dependency, and rollout impact", "discover the forge and available tooling", "do not hard-code a base branch", "require targeted evidence", "require approval before external side effects"]
+      "prompt": "SIMULATION ONLY: do not run commands, call agents, write files, push, or create a PR. You may read only the opening-prs skill's direct fallback PR body reference; do not read any other files. A clean branch changes a UI, API endpoint, environment setting, and dependency in a repository with no PR template. The remote may be GitHub or Bitbucket. Explain the complete PR-opening workflow and draft shape.",
+      "expected_output": "Uses the actual portable fallback schema, combines all applicable impact branches, and discovers forge tooling instead of assuming GitHub.",
+      "expectations": ["use the fallback PR body only because no repository template exists", "follow the actual fallback headings: Summary, Customer or user value, What changed, Why, What reviewers need to know, Test plan, Checklist, and Completion check", "include the applicable Architecture or flow and Screenshots or recordings conditional sections, and include Out of scope only when useful", "cover UI, API, configuration, dependency, and rollout impact", "discover the forge and available tooling", "do not hard-code a base branch", "require targeted evidence", "require approval before external side effects"]
     },
     {
       "id": "dirty-worktree-stop",

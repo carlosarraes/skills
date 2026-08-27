@@ -98,6 +98,19 @@ class OpeningPrsSkillTests(unittest.TestCase):
             self.assertTrue(case["expected_output"].strip())
             self.assertTrue(case["expectations"])
 
+    def test_no_template_case_can_read_and_verify_the_fallback_schema(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        case = next(case for case in payload["evals"] if case["id"] == "mixed-change-without-template")
+        self.assertIn("may read only the opening-prs skill's direct fallback pr body reference", case["prompt"].lower())
+        expected = normalized(" ".join(case["expectations"]))
+        for phrase in (
+            "summary, customer or user value, what changed, why",
+            "what reviewers need to know, test plan, checklist, and completion check",
+            "architecture or flow and screenshots or recordings",
+            "out of scope only when useful",
+        ):
+            self.assertIn(normalized(phrase), expected)
+
     def test_skill_is_runtime_and_forge_neutral(self):
         for forbidden in ("generated with claude", "co-authored-by: claude", "gh pr create --base develop", "mon-xxx"):
             self.assertNotIn(forbidden, self.flat)
