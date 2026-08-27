@@ -211,6 +211,77 @@ class SplitPrSkillTests(unittest.TestCase):
             normalized(near_miss["expected_output"]),
         )
 
+    def test_behavior_prompts_are_neutral_while_rubrics_keep_required_actions(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        separable = next(
+            case for case in payload["evals"] if case["id"] == "mondrio-automatic-separable"
+        )
+        separable_prompt = normalized(separable["prompt"])
+        for phrase in (
+            "mondrio",
+            "1,001 changed lines",
+            "repository size-policy check",
+            "separable seams",
+        ):
+            self.assertIn(normalized(phrase), separable_prompt)
+        for forbidden in (
+            "expect automatic use",
+            "without a second approval",
+            "visible plan before mutation",
+            "original branch and exact sha recorded",
+            "only new stack branches",
+            "independent verification of every layer",
+            "mergeability",
+            "complete split-pr action trace",
+        ):
+            self.assertNotIn(normalized(forbidden), separable_prompt)
+
+        separable_rubric = normalized(
+            " ".join([separable["expected_output"]] + separable["expectations"])
+        )
+        for phrase in (
+            "split automatically",
+            "without a second approval",
+            "original branch and exact sha",
+            "only new stack branches",
+            "for each layer",
+            "non-mutating merge-tree",
+            "intended parent",
+            "conflict evidence",
+        ):
+            self.assertIn(normalized(phrase), separable_rubric)
+
+        cohesive = next(
+            case for case in payload["evals"] if case["id"] == "cohesive-no-safe-seam-stop"
+        )
+        cohesive_prompt = normalized(cohesive["prompt"])
+        for phrase in (
+            "cohesive mondrio",
+            "1,001 changed lines",
+            "enforced 1,000-line repository size limit",
+            "no independently runnable safe seam",
+        ):
+            self.assertIn(normalized(phrase), cohesive_prompt)
+        for forbidden in (
+            "expect a bounded stop",
+            "bounded size-policy explanation",
+            "no artificial split",
+            "no new branches",
+            "before any mutation",
+        ):
+            self.assertNotIn(normalized(forbidden), cohesive_prompt)
+
+        cohesive_rubric = normalized(
+            " ".join([cohesive["expected_output"]] + cohesive["expectations"])
+        )
+        for phrase in (
+            "stops before mutation",
+            "bounded size-policy explanation",
+            "no safe seam",
+            "does not manufacture artificial layers",
+        ):
+            self.assertIn(normalized(phrase), cohesive_rubric)
+
 
 if __name__ == "__main__":
     unittest.main()

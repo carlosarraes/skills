@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": "mondrio-automatic-separable",
-      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. An observed Mondrio repository size-policy check reports 1,001 changed lines, exceeding its enforced 1,000-line limit. The branch has separable seams for a schema/model layer, backend behavior, API wiring, and frontend integration. Describe the complete split-pr action trace. Expect automatic use of split-pr from the observed violation without a second approval, a visible plan before mutation, the original branch and exact SHA recorded, only new stack branches, and independent verification of every layer.",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. An observed Mondrio repository size-policy check reports 1,001 changed lines, exceeding its enforced 1,000-line limit. The branch has separable seams for a schema/model layer, backend behavior, API wiring, and frontend integration. What handling follows from these repository facts?",
       "expected_output": "Uses the observed enforced Mondrio size-policy violation as authority to split automatically. It presents the ordered seam plan, records the original branch and exact SHA, creates only new stack branches without rewriting or force-pushing the original, verifies each layer independently, and reports the resulting stack and evidence without asking for another approval.",
       "expectations": [
         "Treats 1,001 changed lines as an enforced Mondrio repository size-policy violation.",
@@ -17,7 +17,7 @@
     },
     {
       "id": "cohesive-no-safe-seam-stop",
-      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. A direct split-pr invocation targets a cohesive Mondrio change with 1,001 changed lines over the enforced 1,000-line repository size limit. Every file is required for one behavior and no independently runnable safe seam exists. Describe the response before any mutation. Expect a bounded stop with the size-policy facts and explanation, no artificial split, and no new branches.",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. A direct split-pr invocation targets a cohesive Mondrio change with 1,001 changed lines over the enforced 1,000-line repository size limit. Every file is required for one behavior and no independently runnable safe seam exists. What handling follows from these repository facts?",
       "expected_output": "Stops before mutation because the 1,001-line change is cohesive and has no safe seam. It reports a bounded size-policy explanation with the observed count, enforced limit, and reason intermediate layers would be non-functional, and routes the exception through the repository's size-policy path rather than artificial splitting.",
       "expectations": [
         "Recognizes the cohesive 1,001-line change as having no safe independently runnable seam.",
