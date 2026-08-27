@@ -171,11 +171,29 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         for source in sources:
             normalized = " ".join(source.lower().split())
             self.assertIn("/check-data", normalized)
-            self.assertNotIn("/seed-data", normalized)
 
         router = " ".join(self.body.lower().split())
-        self.assertIn("default", router)
-        self.assertIn("plan, seed, and verify", router)
+        for phrase in (
+            "fixture setup",
+            "/check-data` default `plan → seed → verify",
+            "`not needed` with evidence",
+            "never `/seed-data`",
+        ):
+            self.assertIn(phrase, router)
+
+    def test_unavailable_surfaces_keep_the_complete_coverage_floor(self):
+        sources = [
+            self.body,
+            (REFERENCES / "test-plan.md").read_text(encoding="utf-8"),
+        ]
+        for source in sources:
+            normalized = " ".join(source.lower().split())
+            self.assertIn(
+                "complete backend and frontend happy-path/error/edge-case coverage floor",
+                normalized,
+            )
+            self.assertIn("surface is unavailable", normalized)
+            self.assertIn("mark each such result as `skip/inconclusive`", normalized)
 
     def test_missing_ticket_context_stays_diff_only_without_a_question_loop(self):
         sources = [
@@ -200,11 +218,12 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
 
     def test_eval_fixture_covers_ticketless_diff_only_and_combined_data(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
-        prompt = next(
-            case["prompt"]
+        case = next(
+            case
             for case in payload["evals"]
             if case["id"] == "degraded-local-preflight"
-        ).lower()
+        )
+        prompt = case["prompt"].lower()
         for phrase in (
             "no ticket pattern",
             "diff-only",
@@ -214,7 +233,29 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
             "skip/inconclusive",
         ):
             self.assertIn(phrase, prompt)
-        self.assertNotIn("/seed-data", prompt)
+
+    def test_degraded_preflight_eval_has_the_complete_evidence_rubric(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        case = next(
+            case
+            for case in payload["evals"]
+            if case["id"] == "degraded-local-preflight"
+        )
+        self.assertEqual(len(case.get("expectations", [])), 7)
+        rubric = " ".join(
+            [case.get("expected_output", ""), *case.get("expectations", [])]
+        ).lower()
+        for phrase in (
+            "fixture setup",
+            "/check-data default plan → seed → verify",
+            "not needed with evidence",
+            "never uses /seed-data",
+            "complete backend and frontend happy-path/error/edge-case coverage",
+            "surface is unavailable",
+            "skip/inconclusive",
+            "final report",
+        ):
+            self.assertIn(phrase, rubric)
 
     def test_references_preserve_load_bearing_contracts(self):
         contents = {

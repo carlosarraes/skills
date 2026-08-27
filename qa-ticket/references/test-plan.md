@@ -13,7 +13,9 @@ Every case includes:
 - concrete **steps**;
 - **expected result** with observable status/content/URL/state.
 
-Group the printed checklist by surface and category so gaps are visible. Never accept “happy path only” when changed behavior requires error or edge coverage.
+Group the printed checklist by surface and category so gaps are visible. Never accept “happy path only” when changed behavior requires error or edge coverage. Keep the complete backend and frontend happy-path/error/edge-case coverage floor enumerated even when a surface is unavailable; mark each such result as `SKIP/INCONCLUSIVE`.
+
+The printed plan and final report each include an explicit **Fixture setup** field: `/check-data` default `plan → seed → verify`, or `not needed` with evidence; never `/seed-data`.
 
 ## Coverage floor
 

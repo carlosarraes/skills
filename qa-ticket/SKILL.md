@@ -42,6 +42,8 @@ Read [test planning](references/test-plan.md) in full **before drafting** and **
 
 Every case has ID, surface, description, concrete steps, and expected result; its category is exactly `happy-path`, `error`, or `edge-case`. Include every changed endpoint success path. When CRUD applies, preserve **create → read → update → list → delete → verify delete**. Include all validator boundaries on both sides, missing/wrong fields, permission, not-found, conflict, and every relevant frontend error/state/special-input case. Document a changed rate limit but do not stress-hit it merely to prove the annotation. User pressure cannot remove required coverage. Print the complete plan grouped by surface/category before any functional test.
 
+The printed plan must include an explicit **Fixture setup** field: `/check-data` default `plan → seed → verify`, or `not needed` with evidence; never `/seed-data`. Keep the complete backend and frontend happy-path/error/edge-case coverage floor enumerated even when a surface is unavailable; mark each such result as `SKIP/INCONCLUSIVE`.
+
 ### Evidence, not intention
 
 Discover routes authoritatively; a user guess never overrides OpenAPI, router, source, or diff evidence.
@@ -62,7 +64,7 @@ Write one complete ledger row per frontend edit: `Edit: <file> | HMR: observed |
 
 ### Complete report and truthful verdict
 
-Read [fix, retry, and report](references/fix-retry-and-report.md) again **before the final report**. Include every planned test, result, attempts, expected/actual evidence, skip or failure, diagnosis, fix, and every changed file. Keep PASS notes concise; preserve complete unsuccessful histories.
+Read [fix, retry, and report](references/fix-retry-and-report.md) again **before the final report**. Include every planned test, result, attempts, expected/actual evidence, skip or failure, diagnosis, fix, and every changed file. Repeat the explicit **Fixture setup** field: `/check-data` default `plan → seed → verify`, or `not needed` with evidence; never `/seed-data`. Preserve the complete backend and frontend happy-path/error/edge-case coverage floor in the report even when a surface is unavailable, marking each such result as `SKIP/INCONCLUSIVE`. Keep PASS notes concise; preserve complete unsuccessful histories.
 
 State whether the acceptance criteria are satisfied. Any required FAIL or unexecuted case prevents an unqualified satisfied verdict. Separate product failures from environment limitations and provide a concrete recovery next step for each unresolved product or environment issue.
 
