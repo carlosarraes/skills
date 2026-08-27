@@ -1,171 +1,131 @@
 ---
 name: exec-ticket
-description: Use when the user wants an agreed ticket design or approved change contract implemented on the current branch.
+description: Use when the user wants an agreed ticket plan implemented on the current branch with test-driven, minimal changes.
 ---
 
 # Exec Ticket
 
-Implement the settled ticket test-first with the least code that satisfies it.
-This is the build step after `prep-ticket → brainstorm → grill-me`, not a new
-design round.
+Implement the settled ticket intent with the smallest change that fully satisfies
+it. This is the build step after the approach has been designed and stress-tested;
+do not reopen design unless new information changes the requested outcome.
 
-**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development for every
-RED → GREEN → REFACTOR loop.
+**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development for every RED →
+GREEN → REFACTOR loop.
 
-## Non-negotiables
+## Phase 1: Resolve context
 
-Watch each required behavior's test fail for the right reason before writing its
-implementation. If implementation came first, delete it and restart from RED.
+Gather ticket and branch context from the invocation, Git, and the ticket
+provider when available.
 
-For GREEN, prefer existing helper/module → native or platform feature →
-installed dependency → a few lines → new structure. Add no speculative
-abstraction or future hook. Validation, security, error handling, and required
-behavior remain correctness, not optional complexity.
+- Parse an optional `<TICKET-ID>` and platform (`linear` by default, `jira` when
+  supplied). Use an explicit ticket first; otherwise run
+  `git rev-parse --abbrev-ref HEAD`, extract `[a-zA-Z]{2,5}-\d+` from the
+  branch case-insensitively, and uppercase it.
+- Ask for a ticket only when neither the invocation nor the branch supplies one.
+- On `main`, `master`, or `develop`, create
+  `feature/<ticket-id>-<short-desc>`; otherwise stay on the current feature
+  branch. Resolve the full branch name.
+- Read repository instructions and discover the relevant test, lint, and build
+  commands before implementation.
+- If the ticket provider is unavailable, record the lookup gap. Continue from
+  sufficient repository, diff, and plan evidence; do not start a question loop
+  when local evidence identifies the requested behavior. Record the provider gap
+  in the report. Stop only when the missing evidence prevents a safe
+  implementation and report that gap.
 
-## Steps
+**Complete when:** the repository, platform, ticket (or a reported missing
+ticket), and full branch are known, with enough local evidence to proceed.
 
-### Step 1: Resolve the ticket and branch
+## Phase 2: Load authority
 
-Parse the optional platform (`linear` default, `jira`). Run
-`git rev-parse --abbrev-ref HEAD`, extract `[a-zA-Z]{2,5}-\d+`
-case-insensitively, and uppercase it. Ask for a ticket only when neither branch
-nor arguments supply one.
+Load the settled prep-ticket evidence and available plan from the session or
+repository. Read the root and relevant module instructions, then re-check the
+plan's behaviors, non-goals, and tactics against the current repository.
 
-On `main`, `master`, or `develop`, create
-`feature/<ticket-id>-<short-desc>`; otherwise stay on the feature branch. Then
-resolve its full name.
+Repository and current user intent outrank stale plans. Use the plan for
+settled behavior and scope, not as permission to ignore repository
+rules or to invent a new user-visible outcome. If there is no plan or prior
+design, return to the normal design process; a genuinely trivial ticket may
+proceed after its one-line approach is confirmed.
 
-**Complete when:** platform, normalized ticket, and full feature branch are
-known.
+**Complete when:** each requested behavior, non-goal, and available proof is
+named, and the source of authority for this run is clear.
 
-### Step 2: Resolve and verify contract state
+## Phase 3: Record reuse decisions
 
-Do this before implementation writes. Resolve `<exec-ticket-skill-dir>` as the
-absolute directory containing this loaded `SKILL.md`; resolve its sibling
-`<change-contract-skill-dir>` independently of the consumer working directory.
-Read the sibling protocol completely at
-`<change-contract-skill-dir>/references/contract-protocol.md`.
+Before the first RED, identify one reuse decision per implementation
+responsibility. Search each responsibility in this order:
 
-Sanitize the full branch using that protocol's exact algorithm. Apply that
-protocol's two-root resolver: inspect both candidate roots,
-`.notes/<branch-dir>/contract` and
-`ai_docs/<branch-dir>/contract`. Exactly one active `current.json` selects that
-root. Active pointers in both roots are ambiguous and a hard stop. No active
-pointer with published/non-staging contract state such as `vN/` in either root
-is partial or orphaned state and a hard stop. Ignore hidden staging artifacts
-`.vN-*` and `.current.json-*`. Only when both roots have neither an active
-pointer nor published/non-staging contract state, use legacy mode and do not
-create or request contract state.
+1. existing helper/module
+2. native / stdlib / platform feature
+3. already-installed dependency
+4. few lines of new code
+5. new structure
 
-For the selected `<contract-root>`, run the actual absolute helper:
+For every responsibility, record exactly one decision in working notes or the
+transcript. Name each candidate with a `file:line` anchor, cite the search
+evidence, and mark it compatible or incompatible with evidence. Reuse every compatible
+existing helper; when none fits, record the searches and the selected next
+option. Do not create a repository file for these decisions. Do not begin RED
+until every responsibility has a decision.
 
-```bash
-python <change-contract-skill-dir>/scripts/contract_state.py verify \
-  --root <contract-root>
-```
+**Complete when:** every responsibility has one evidence-backed decision and no
+selected tactic skips a compatible existing solution.
 
-Require `"valid": true`. Read `current.json` and the returned `approval_path`;
-require helper version equals active version, approval version equals the active
-version, approval branch equals the full current branch, and approval ticket
-equals the normalized ticket. Run
-`git merge-base --is-ancestor <base-sha> HEAD` using the approval base SHA.
+## Phase 4: Implement one behavior at a time
 
-A present but malformed, incomplete, or unverifiable `current.json` is a hard
-stop—never legacy fallback. The same applies to missing artifacts, invalid
-helper output, identity mismatch, hash failure, or non-ancestor base. Report the
-failed gate without implementation or contract writes.
+Implement one observable behavior at a time through a RED → GREEN → REFACTOR
+loop:
 
-**Complete when:** legacy mode is explicit, or contract path/hash/version,
-branch, ticket, base ancestry, and ledger path all verify.
+- **RED:** write its behavior test; run it and confirm the expected failure in
+  the focused test suite before writing its implementation.
+- **GREEN:** make the smallest change that passes, following the reuse decision
+  and retaining required validation, error handling, security, and accessibility.
+- **REFACTOR:** refactor only while green: simplify the implementation and keep
+  the diff focused; add no
+  speculative abstraction or dependency.
 
-### Step 3: Load the authority
+If a discovery materially changes the requested user-visible outcome, stop before
+writing tests or source that encode the changed outcome. Report the discovery
+and the decision required alongside the original intent and conflict, then return
+to the normal design process. Do not quietly alter the requested behavior. An
+implementation-detail discovery that leaves the outcome unchanged may update
+the working notes and continue through the loop.
 
-In contract mode, the approved contract outranks session memory, older plans,
-summaries, and user pressure. Drive work from its Required behaviors and
-Acceptance evidence; respect its non-goals, interfaces, invariants, risks, reuse
-evidence, and complexity budget. Plans may supply only compatible tactics.
+**Complete when:** every behavior has observed RED and GREEN evidence, with
+refactoring performed only under green tests.
 
-In legacy mode, use the settled session or written plan only for behaviors and
-non-goals. Revalidate every implementation tactic against the lazy order. With
-neither, return to `prep-ticket → brainstorm → grill-me`, except that a
-genuinely trivial ticket may proceed after a one-line approach is confirmed.
+## Phase 5: Verify and report
 
-Before the first RED, write one reuse decision for each implementation
-responsibility. Name each matching candidate with a `file:line` anchor and mark
-it compatible or incompatible with evidence. Reuse every compatible existing
-helper. A compatible existing helper is mandatory even when the plan says
-local, manual, or new; when none fit, record the searches. State these decisions
-in working notes or the transcript; do not create a repository file for them.
-Do not begin RED until every responsibility has this decision.
+Run the focused test suite after each loop and, after all behaviors are green,
+run the full test suite. Discover commands from repository instructions; if no
+framework exists, find or add the smallest in-scope runner before proceeding.
+All green is the bar. Preserve the exact command and result for each suite;
+report the focused and full suite results.
 
-**Complete when:** each behavior and its proof are named, with no tactic that
-conflicts with an approved clause.
+The final report includes:
 
-### Step 4: Implement one behavior at a time
+- ticket and branch (and any provider lookup gap);
+- behaviors implemented, with the test that pins each;
+- files changed;
+- focused test suite result; and
+- full test suite result.
 
-For each behavior:
+If execution stops for missing evidence or a material outcome change, report the
+observed facts and decision required instead of claiming implementation or
+verification. Then stop. Recommend `/qa-ticket`, `/clean-up`, or `/pr-sweep`
+when appropriate; do not chain automatically.
 
-- **RED:** write and run its behavior test; confirm the expected failure.
-- **GREEN:** make it pass with the lazy order above.
-- **REFACTOR:** simplify only while green.
-
-In contract mode, classify discoveries using the shared protocol. Implementation
-details proceed without entries. Read-only tests and commands may discover and
-prove a deviation.
-
-For a bounded deviation, form the complete protocol entry. The parent
-independently verifies its evidence and appends the complete `D<n>` before
-implementation relies on the changed path. Discovery tests may run first.
-
-For a contract deviation, stop before writing tests or source that encode the
-changed agreement; existing or read-only tests are allowed. Show the conflict,
-never put a contract deviation in the ledger, and route to `/change-contract`
-for a displayed, human-approved version.
-
-Subagents receive the verified contract path, approved hash, ledger path, and
-drift rules as read-only context. They return proposed entries; the parent
-independently verifies them and appends serially before reliance.
-
-**Complete when:** every behavior has observed RED and green evidence, code is
-minimal, bounded entries precede reliance, and no contract deviation was
-implemented.
-
-### Step 5: Verify and report
-
-Run focused and full suites, discovering commands from project instructions.
-All green is the bar. In contract mode, rerun helper verification and count
-canonical ledger entries.
-
-In contract mode, report:
-
-- Ticket and branch
-- Behaviors implemented, with the test that pins each
-- Files changed
-- Suite result
-- Contract version
-- Ledger entry count
-
-In legacy mode, report:
-
-- Ticket and branch
-- Behaviors implemented, with the test that pins each
-- Files changed
-- Suite result
-
-Do not invent contract metadata in legacy mode.
-Then stop. Recommend `/qa-ticket`, `/clean-up`, or `/pr-sweep` when appropriate;
-do not chain automatically.
-
-**Complete when:** suites pass, approved state re-verifies when present, and the
-mode-correct report is delivered.
+**Complete when:** the required suites are green and the behavior-to-test,
+changed-file, and suite evidence is delivered, or a precise stop report explains
+why implementation could not proceed.
 
 ## Edge cases
 
 - Not in a Git repository: report and stop.
-- No runnable test framework: discover or add the minimum in-scope runner;
-  otherwise report and stop.
-- Config or wiring: use the thinnest real check; do not skip RED by default.
-- A plan fails mid-build: classify it in contract mode; in legacy mode return to
-  brainstorming/grilling.
-- Platform CLI unavailable: proceed from the settled intent and report the gap.
-- Trivial ticket: still test-first.
+- No ticket from arguments or branch: ask for the ticket.
+- Platform CLI unavailable: use sufficient local evidence and report the gap.
+- A plan fails without changing the requested outcome: re-check the tactic
+  against repository rules and reuse decisions before continuing.
+- A material outcome change: stop before encoding it and return to design.
+- A trivial ticket: still test-first.

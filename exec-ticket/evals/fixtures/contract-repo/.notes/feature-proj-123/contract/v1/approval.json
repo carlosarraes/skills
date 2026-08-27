@@ -1,9 +1,0 @@
-{
-  "approved_at": "2026-07-23T12:05:00Z",
-  "approved_by": "fixture-human",
-  "base_sha": "SET_BY_FIXTURE_SETUP",
-  "branch": "feature/proj-123",
-  "contract_sha256": "SET_BY_FIXTURE_SETUP",
-  "ticket": "PROJ-123",
-  "version": 1
-}
