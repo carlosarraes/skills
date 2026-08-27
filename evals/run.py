@@ -19,6 +19,8 @@ def catalog_from_ref(root, ref):
     catalog = []
     for path in sorted(item for item in paths if item.endswith("/SKILL.md")):
         metadata = frontmatter_metadata(git_show(root, ref, path))
+        if metadata.get("disable-model-invocation", "").lower() == "true":
+            continue
         catalog.append({"name": metadata["name"], "description": metadata["description"]})
     return catalog
 

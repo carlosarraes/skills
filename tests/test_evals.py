@@ -150,6 +150,30 @@ class EvalRunnerTests(unittest.TestCase):
         self.assertIn("one: Use when one applies", command[-1])
         self.assertNotIn("claude", " ".join(command).lower())
 
+    def test_routing_catalog_excludes_user_only_skills(self):
+        temp, root = fixture_repo()
+        self.addCleanup(temp.cleanup)
+        (root / "manual" / "SKILL.md").parent.mkdir()
+        (root / "manual" / "SKILL.md").write_text(
+            "---\n"
+            "name: manual\n"
+            "description: Use only when explicitly invoked to do manual work.\n"
+            "disable-model-invocation: true\n"
+            "---\n"
+            "# Manual\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", "manual/SKILL.md"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-qm", "manual skill"],
+            cwd=root,
+            check=True,
+        )
+
+        catalog = load_runner().catalog_from_ref(root, "HEAD")
+
+        self.assertEqual([skill["name"] for skill in catalog], ["one"])
+
     def test_behavior_dry_run_reads_evals_at_ref_and_materializes_temporary_tree(self):
         temp, root = fixture_repo()
         self.addCleanup(temp.cleanup)

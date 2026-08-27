@@ -127,8 +127,12 @@ def check(root):
                  "description_characters": len(description), **metrics}
         skills.append(skill)
         names.setdefault(name, []).append(relative_path)
-        if not description.startswith("Use when"):
-            errors.append(f"{relative_path}: description must start with 'Use when'")
+        valid_prefixes = ("Use when", "Use only when explicitly invoked")
+        if not description.startswith(valid_prefixes):
+            errors.append(
+                f"{relative_path}: description must start with 'Use when' or "
+                "'Use only when explicitly invoked'"
+            )
         if len(description) > DESCRIPTION_LIMIT:
             errors.append(f"{relative_path}: description exceeds 320 characters ({len(description)})")
         if any(re.search(pattern, description, re.I) for pattern in LEAK_PATTERNS):

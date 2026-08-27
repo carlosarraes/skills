@@ -65,6 +65,22 @@ class SkillQualityTests(unittest.TestCase):
         self.assertEqual(quoted["description"], "Use when quoted applies")
         self.assertEqual(folded["description"], "Use when folded text applies")
 
+    def test_accepts_user_only_description_after_syncing_catalog(self):
+        temp, root = init_repo({
+            "manual/SKILL.md": (
+                "---\nname: manual\n"
+                "description: Use only when explicitly invoked to inspect one thing.\n"
+                "---\n# Manual\n"
+            ),
+            "README.md": README,
+        })
+        self.addCleanup(temp.cleanup)
+        quality = load_module()
+
+        quality.sync_readme(root)
+
+        self.assertEqual(quality.check(root)["errors"], [])
+
     def test_reports_duplicate_long_and_implementation_heavy_descriptions(self):
         long_description = "Use when " + ("x" * 321) + " then run `git status` with 3 agents and write output to report.md"
         temp, root = init_repo({
