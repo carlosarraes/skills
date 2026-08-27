@@ -23,13 +23,13 @@ Inspect the complete base/head diff, surrounding code, and history relevant to i
 
 ## 3. Verify the changed behavior
 
-Select the smallest repository-defined checks covering the highest-risk behavior, then run them. Preserve exact commands and observed outcomes; unrun checks remain unverified. For visible UI, require a screenshot or recording of the changed behavior. If evidence cannot be captured, state that it is missing, do not invent verification, and ask the user to supply or unblock it; missing UI evidence pauses PR creation. For backend/API changes, include concrete executed tests or reproducible request evidence when useful.
+Select the smallest repository-defined checks covering the highest-risk behavior, then run them. Preserve exact commands and observed outcomes; unrun checks remain unverified. For visible UI, require a screenshot or recording of the changed behavior. If evidence cannot be captured, state that it is missing, do not invent verification, and ask the user to supply or unblock it; missing UI evidence pauses PR creation. End that response with a direct request for the user to supply or unblock the screenshot or recording, rather than merely reporting the blocker. For backend/API changes, include concrete executed tests or reproducible request evidence when useful.
 
 **Complete when:** The record truthfully covers the highest-risk behavior, or states the blocker that prevents creation.
 
 ## 4. Draft the reviewer brief
 
-Use the repository template as the schema, filling every applicable section and removing comments, examples, placeholders, and unused optional sections. Read the [fallback PR body](references/fallback-pr-body.md) only when no canonical template exists. Explain customer/user value, implementation, rationale, risks, compatibility, data/infra effects, and exact verification. Use Mermaid only for at least three material interactions or transitions. Do not include runtime-specific attribution.
+Use the repository template as the schema, filling every applicable section and removing comments, examples, placeholders, and unused optional sections. Never output an illustrative or fill-in-the-blank draft: if facts are unavailable, say the draft is incomplete rather than showing placeholders. Read the [fallback PR body](references/fallback-pr-body.md) only when no canonical template exists. Explain customer/user value, implementation, rationale, risks, compatibility, data/infra effects, and exact verification. Use Mermaid only for at least three material interactions or transitions. Do not include runtime-specific attribution.
 
 **Complete when:** A cold reviewer can understand value, load-bearing changes, impact, and observed verification without reconstructing the diff.
 
