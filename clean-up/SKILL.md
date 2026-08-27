@@ -18,7 +18,7 @@ Trigger when:
 Do NOT use for:
 - Pure feature implementation (use TDD directly)
 - One-line typo fixes (just edit and commit)
-- Operations that need a different skill — `/qa-ticket` for runtime testing, `/be-pr` or `/frontend-pr` for opening PRs, `/pi-review` for handling Pi findings
+- Runtime acceptance testing (use `/qa-ticket`); use `opening-prs` only when a separate pull-request workflow is explicitly requested
 
 ## Step 1: Resolve the input
 
@@ -39,15 +39,15 @@ Resolution order:
 
 3. If no argument, use `git branch --show-current`.
 
-Confirm the resolved branch with the user before continuing if you had to disambiguate.
+If target evidence is ambiguous, stop before review or mutation and report the candidate facts: each candidate branch or ticket, its source, head, base, associated PR metadata, and the exact conflicting evidence. Do not silently choose a candidate; do not ask the user to select one during this run. Continue only after a later explicit invocation supplies an unambiguous target.
 
 ## Step 2: Identify the diff
 
 The base branch is what the diff compares against. Detect it in this order:
 
-1. If there's an open PR, read its `baseRefName`: `gh pr list --head <branch> --json baseRefName | jq -r '.[0].baseRefName'`.
+1. If there's an open PR, resolve its PR metadata (number, forge, state, head, and `baseRefName`) with the available forge tooling; for GitHub, read `baseRefName` with `gh pr list --head <branch> --json baseRefName | jq -r '.[0].baseRefName'`.
 2. Otherwise, fall back to the merge-base with the project's default branch (`develop` or `main`).
-3. For stacked PRs, the base is the parent branch's head (e.g., `proj-709/backend-schemas`), NOT `develop`. Always confirm with `gh pr view <PR> --json baseRefName` when a stack is in play.
+3. For stacked PRs, the base is the parent branch's head (e.g., `proj-709/backend-schemas`), NOT `develop`. Read the parent PR metadata with the available forge tooling when a stack is in play, including `baseRefName`; do not infer a stacked base from `develop`.
 
 Print the resolved diff stats so the user sees the scope:
 ```bash
@@ -55,7 +55,7 @@ git log --oneline <base>..<head>
 git diff --stat <base>..<head>
 ```
 
-If the diff is enormous (>2000 LOC), warn the user and offer to scope to a subset before continuing.
+If the diff exceeds 2,000 changed lines, retain the full scope in the review ledger and partition it automatically into coherent slices by ownership and risk. Process the highest-risk slice first, then continue through the remaining slices without pausing for routine scope selection. Record every unprocessed file and finding as remaining scope for the final handoff.
 
 ## Step 3: Dispatch parallel review agents
 
@@ -74,19 +74,21 @@ Word cap each agent at ~600 words so the synthesis stays scannable.
 
 ## Step 4: Triage findings
 
-Aggregate all four agent reports. Apply the same priority rules as `/pi-review`:
+Aggregate all four agent reports. Apply these priority rules consistently:
 
 - **[P0] and [P1]**: Always fix if valid. These block merge.
 - **[P2] and [P3]**: Fix if straightforward. Skip if it would balloon scope into a separate refactor.
 
-Think critically before accepting any finding. The agents can be wrong. If you disagree, skip the finding and explain why in the user-facing summary.
+Think critically before accepting any finding. The agents can be wrong. If you disagree, skip the finding and explain why in the final summary.
+
+The invocation is authority for valid in-scope fixes and focused commits. Decide each finding immediately as a fix, follow-up, or skip, and record the reason in the triage ledger. Do not pause for routine approval or ask the user to choose a scope; stop only for a genuine blocker such as destructive recovery, missing authority, or work outside the invoked branch or ticket.
 
 For each accepted finding, decide:
 - **Fix in this skill run** (P0/P1 + small P2/P3)
 - **File a follow-up ticket** (large P2/P3 refactors, cross-module changes the user should approve separately)
 - **Skip** (false positive or out of scope)
 
-Show the triage to the user before fixing if the list is non-trivial (>3 items). Let them adjust.
+For a large diff, execute accepted findings in risk-first coherent slices and retain the complete accepted, skipped, follow-up, and unprocessed-scope record for handoff.
 
 ## Step 5: Apply fixes using TDD
 
@@ -145,13 +147,13 @@ Apply only the in-scope `/simplify` recommendations (P0/P1 + small P2). File the
 
 ## Step 10: Stop and hand back
 
-The skill MUST NOT push, force-push, open a PR, or merge. End by:
+The skill must not push, must not open a pull request, and must not merge. End by:
 - Printing the commit log: `git log --oneline <base>..HEAD`
 - Printing the test status (last `pytest` / `npm test` summary)
-- Listing skipped findings + filed follow-up tickets (if any)
+- Listing skipped findings, filed follow-up tickets, and remaining or unprocessed scope (if any)
 - Saying which branch the user should `git switch` to in order to review
 
-The user runs `/be-pr`, `/frontend-pr`, or their preferred PR command when they're satisfied.
+When the branch is ready, hand it back to the human with `opening-prs` as the retained pull-request workflow; this skill itself never creates the pull request.
 
 ## Common pitfalls
 

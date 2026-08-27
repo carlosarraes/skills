@@ -1,0 +1,28 @@
+{
+  "skill_name": "clean-up",
+  "evals": [
+    {
+      "id": "large-diff-risk-first",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, or mutate git. The explicit clean-up invocation targets the current branch. It is a 2,500-line branch spanning an API, persistence, frontend state, tests, and documentation. The four review lenses agree on five valid findings with severities P1, P1, P2, P2, and P3; each finding has a coherent implementation seam, while the remaining changed files have no accepted finding yet. Describe the exact action trace. Expect automatic risk-first coherent slices, no scope-choice prompt, test-first repairs in focused commits, and a final record of unprocessed scope. Do not push or create a pull request.",
+      "expected_output": "Treats the invocation as authority for valid in-scope fixes, ranks the five findings by risk, repairs them in coherent risk-first slices with a RED/GREEN test-first loop and one focused commit per finding, and records the remaining unprocessed scope. It does not ask the user to choose a subset, push, or create a pull request; it hands the clean branch to opening-prs when ready.",
+      "expectations": [
+        "Process all five valid findings automatically in risk-first order without offering a scope choice.",
+        "Keep the four review lenses and apply a RED/GREEN test-first repair loop with focused commits.",
+        "Account for all 2,500 changed lines and record files or findings left in unprocessed/remaining scope.",
+        "Treat the invocation as authority for valid in-scope fixes while preserving no-push and no-pull-request boundaries.",
+        "Hand a completed clean branch to opening-prs rather than using a deleted PR route."
+      ]
+    },
+    {
+      "id": "ambiguous-target-candidate-facts",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, or mutate git. The user invoked clean-up for ticket PROJ-42, but repository metadata yields two local branch candidates and two matching open pull requests with different base/head metadata. Describe the response before any review or repair begins.",
+      "expected_output": "Stops on the ambiguous target and reports candidate facts, including each branch/PR and its base/head metadata plus the reason they conflict. It does not choose a candidate and does not ask the user to select one inside the run; no review, edit, commit, push, or pull-request creation occurs.",
+      "expectations": [
+        "Stop before review or mutation when target evidence is ambiguous.",
+        "Report candidate facts and the conflicting PR metadata needed for a later explicit invocation.",
+        "Do not ask the user to select a candidate during the run and do not silently choose one.",
+        "Preserve the no-edit, no-commit, no-push, and no-pull-request boundary."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+import json
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).parents[1]
+SKILL = ROOT / "SKILL.md"
+EVALS = ROOT / "evals" / "evals.json"
+
+
+def normalized(text):
+    return " ".join(text.lower().split())
+
+
+class CleanUpSkillTests(unittest.TestCase):
+    def setUp(self):
+        self.skill = SKILL.read_text(encoding="utf-8")
+        self.body = self.skill.split("\n---\n", 1)[1]
+        self.flat_body = normalized(self.body)
+
+    def test_invocation_authorizes_in_scope_repairs_without_routine_pauses(self):
+        for phrase in (
+            "invocation is authority",
+            "valid in-scope fixes",
+            "focused commits",
+            "risk-first",
+            "remaining scope",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+        for forbidden in (
+            "confirm the resolved branch",
+            "offer to scope",
+            "show the triage to the user",
+            "/pi-review",
+            "/be-pr",
+            "/frontend-pr",
+        ):
+            self.assertNotIn(normalized(forbidden), self.flat_body)
+
+    def test_target_resolution_records_pr_metadata_and_ambiguous_candidate_facts(self):
+        for phrase in (
+            "pr metadata",
+            "baseRefName",
+            "candidate facts",
+            "ambiguous target",
+            "do not ask the user to select",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_large_diffs_are_sliced_automatically_and_remaining_scope_is_reported(self):
+        for phrase in (
+            "2,000 changed lines",
+            "coherent slices",
+            "risk-first",
+            "unprocessed scope",
+            "remaining scope",
+            "do not pause",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_four_review_lenses_and_test_first_repair_loop_remain(self):
+        for phrase in (
+            "Code reuse",
+            "Code quality",
+            "Efficiency",
+            "Coverage",
+            "RED",
+            "GREEN",
+            "TDD",
+            "one focused commit per finding",
+            "final pass",
+            "/simplify",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_handoff_uses_opening_prs_and_keeps_no_push_no_pr_boundary(self):
+        self.assertIn("opening-prs", self.flat_body)
+        for phrase in (
+            "must not push",
+            "must not open a pull request",
+            "hand back to the human",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_behavior_cases_cover_large_diff_and_ambiguous_target(self):
+        payload = json.loads(EVALS.read_text(encoding="utf-8"))
+        self.assertEqual(payload["skill_name"], "clean-up")
+        self.assertEqual(
+            {case["id"] for case in payload["evals"]},
+            {"large-diff-risk-first", "ambiguous-target-candidate-facts"},
+        )
+
+        for case in payload["evals"]:
+            self.assertTrue(case["prompt"].strip())
+            self.assertTrue(case["expected_output"].strip())
+            self.assertTrue(case["expectations"])
+
+        large_diff = next(
+            case for case in payload["evals"] if case["id"] == "large-diff-risk-first"
+        )
+        large_diff_text = normalized(
+            " ".join([large_diff["prompt"], large_diff["expected_output"]] + large_diff["expectations"])
+        )
+        for phrase in (
+            "2,500-line branch",
+            "five valid findings",
+            "risk-first coherent slices",
+            "no scope-choice prompt",
+            "unprocessed scope",
+        ):
+            self.assertIn(normalized(phrase), large_diff_text)
+
+        ambiguous = next(
+            case
+            for case in payload["evals"]
+            if case["id"] == "ambiguous-target-candidate-facts"
+        )
+        ambiguous_text = normalized(
+            " ".join([ambiguous["prompt"], ambiguous["expected_output"]] + ambiguous["expectations"])
+        )
+        self.assertIn("candidate facts", ambiguous_text)
+        self.assertIn("do not ask the user to select", ambiguous_text)
+
+
+if __name__ == "__main__":
+    unittest.main()
