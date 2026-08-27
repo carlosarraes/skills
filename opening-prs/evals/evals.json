@@ -3,21 +3,21 @@
   "evals": [
     {
       "id": "visible-frontend-change",
-      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean feature branch changes a visible responsive checkout flow. The repository has its own PR template and test commands. Explain exactly how you would prepare and open the PR, including what the draft and approval checkpoint contain.",
-      "expected_output": "Uses repository authority, complete diff evidence, targeted verification, required UI evidence, and a pre-creation approval gate.",
-      "expectations": ["repository instructions and canonical template win", "inspect the complete base/head diff", "run targeted repository-defined checks", "require screenshot or recording evidence", "show forge, base, title, body, verification, and missing evidence before external side effects", "do not create commits"]
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean feature branch changes a visible responsive checkout flow. The repository has its own PR template and test commands. Explain exactly how you would prepare and open the PR, including what the draft and creation sequence contain.",
+      "expected_output": "Uses repository authority, complete diff evidence, targeted verification, required UI evidence, and invocation-authorized creation after a complete preview.",
+      "expectations": ["repository instructions and canonical template win", "inspect the complete base/head diff", "run targeted repository-defined checks", "require screenshot or recording evidence", "preview forge, base, title, body, verification, and missing evidence before normal push or PR creation", "do not create commits"]
     },
     {
       "id": "backend-data-change",
       "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean feature branch changes an API route, service, MongoDB index specification, and tests. The repository has a canonical PR template. Explain exactly how you would prepare and open an informative PR.",
-      "expected_output": "Surfaces API compatibility and data/index consequences with observed backend verification and a pre-creation approval gate.",
-      "expectations": ["account for every changed file", "identify API compatibility", "identify migration or index impact", "report only observed verification", "include concrete reproducible backend evidence when useful", "require approval before push or PR creation"]
+      "expected_output": "Surfaces API compatibility and data/index consequences with observed backend verification and preview-before-creation routing.",
+      "expectations": ["account for every changed file", "identify API compatibility", "identify migration or index impact", "report only observed verification", "include concrete reproducible backend evidence when useful", "create only after preview using a normal push"]
     },
     {
       "id": "mixed-change-without-template",
       "prompt": "SIMULATION ONLY: do not run commands, call agents, write files, push, or create a PR. You may read only the opening-prs skill's direct fallback PR body reference; do not read any other files. You must read that reference before answering and use every exact section heading in the draft shape, explaining when each conditional section applies. A clean branch changes a UI, API endpoint, environment setting, and dependency in a repository with no PR template. The remote may be GitHub or Bitbucket. Explain the complete PR-opening workflow and draft shape.",
       "expected_output": "Uses the actual portable fallback schema, combines all applicable impact branches, and discovers forge tooling instead of assuming GitHub.",
-      "expectations": ["use the fallback PR body only because no repository template exists", "follow the actual fallback headings: Summary, Customer or user value, What changed, Why, What reviewers need to know, Test plan, Checklist, and Completion check", "include the applicable Architecture or flow and Screenshots or recordings conditional sections, and include Out of scope only when useful", "cover UI, API, configuration, dependency, and rollout impact", "discover the forge and available tooling", "do not hard-code a base branch", "require targeted evidence", "require approval before external side effects"]
+      "expectations": ["use the fallback PR body only because no repository template exists", "follow the actual fallback headings: Summary, Customer or user value, What changed, Why, What reviewers need to know, Test plan, Checklist, and Completion check", "include the applicable Architecture or flow and Screenshots or recordings conditional sections, and include Out of scope only when useful", "cover UI, API, configuration, dependency, and rollout impact", "discover the forge and available tooling", "do not hard-code a base branch", "require targeted evidence", "preview before external side effects"]
     },
     {
       "id": "dirty-worktree-stop",
@@ -30,6 +30,12 @@
       "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. The branch is clean and changes visible UI behavior, but no screenshot or recording can be captured. Explain what appears in the draft and whether you create the PR.",
       "expected_output": "States the missing evidence and pauses creation for the user rather than weakening or inventing proof.",
       "expectations": ["visible UI requires screenshot or recording evidence", "state that evidence is missing", "pause PR creation", "do not invent verification", "ask the user to supply or unblock evidence"]
+    },
+    {
+      "id": "gitflow-twin-release",
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. The invocation includes the exact optional gitflow argument for a completed Zapsign Bitbucket ticket branch. Repository metadata identifies ticket ABC-123, fresh main and homolog bases, a clean worktree, and available pipelines; one twin branch or PR may already exist. Explain the complete route while preserving the common target, change, verification, and reviewer-brief phases.",
+      "expected_output": "Uses the exact gitflow branch to prepare or reuse {TICKET}-prd from main and {TICKET}-hml from homolog, carries equivalent patches with bt pick, creates two informative PRs after preview, and watches both pipelines to terminal results.",
+      "expectations": ["the exact gitflow argument selects the Zapsign Bitbucket Gitflow branch", "{TICKET}-prd from main and targets main", "{TICKET}-hml from homolog and targets homolog", "cherry-picked equivalent patches with bt pick and never merge between the bases", "check and reuse existing branches or pull requests idempotently through existing-resource reuse", "no force push", "create two informative PRs with the exact team invocation", "watch both pipelines to terminal results and report failures"]
     }
   ]
 }

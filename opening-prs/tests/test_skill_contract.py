@@ -8,6 +8,8 @@ ROOT = Path(__file__).parents[1]
 SKILL = ROOT / "SKILL.md"
 FALLBACK = ROOT / "references" / "fallback-pr-body.md"
 EVALS = ROOT / "evals" / "evals.json"
+FACTS = ROOT / "references" / "gitflow-facts.md"
+SOURCE_FACTS = ROOT.parent / "ship-gitflow" / "references" / "gitflow-facts.md"
 
 
 def normalized(text):
@@ -33,7 +35,7 @@ class OpeningPrsSkillTests(unittest.TestCase):
             "## 2. Reconstruct the change",
             "## 3. Verify the changed behavior",
             "## 4. Draft the reviewer brief",
-            "## 5. Approve and create",
+            "## 5. Preview and create",
         )
         positions = [self.body.index(heading) for heading in headings]
         self.assertEqual(positions, sorted(positions))
@@ -62,18 +64,47 @@ class OpeningPrsSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), self.flat)
 
-    def test_verification_and_approval_are_evidence_bound(self):
+    def test_preview_authorizes_creation_without_a_second_confirmation(self):
         for phrase in (
             "smallest repository-defined checks",
             "exact commands and observed outcomes",
             "unrun checks remain unverified",
             "missing ui evidence pauses pr creation",
             "forge, base, title, body, verification, and missing evidence",
-            "explicit approval",
             "normal non-force push",
+            "invocation authorizes normal non-force push and forge creation after preview",
         ):
             self.assertIn(normalized(phrase), self.flat)
-        self.assertLess(self.flat.index("explicit approval"), self.flat.index("normal non-force push"))
+        self.assertLess(
+            self.flat.index("preview all of the forge, base, title, body, verification, and missing evidence"),
+            self.flat.index("normal non-force push"),
+        )
+        for forbidden in ("explicit approval", "ask for approval", "approval checkpoint", "require approval"):
+            self.assertNotIn(forbidden, self.flat)
+
+    def test_gitflow_mode_uses_canonical_facts_and_two_leg_pipeline_lifecycle(self):
+        for phrase in (
+            "exact `gitflow` argument",
+            "one portable pr by default",
+            "[gitflow facts](references/gitflow-facts.md)",
+            "Zapsign/Bitbucket Gitflow",
+            "{TICKET}-prd",
+            "main",
+            "{TICKET}-hml",
+            "homolog",
+            "cherry-picked equivalent patches",
+            "idempotent existing-resource reuse",
+            "bt pick",
+            "never merge between bases",
+            "no force push",
+            "two informative prs",
+            "terminal pipeline monitoring",
+        ):
+            self.assertIn(normalized(phrase), self.flat)
+
+    def test_gitflow_facts_are_preserved_under_opening_prs(self):
+        self.assertTrue(FACTS.is_file())
+        self.assertEqual(FACTS.read_text(encoding="utf-8"), SOURCE_FACTS.read_text(encoding="utf-8"))
 
     def test_fallback_is_loaded_only_when_repository_has_no_template(self):
         self.assertIn("[fallback pr body](references/fallback-pr-body.md)", self.body.lower())
@@ -91,12 +122,35 @@ class OpeningPrsSkillTests(unittest.TestCase):
         self.assertEqual(payload["skill_name"], "opening-prs")
         self.assertEqual(
             {case["id"] for case in payload["evals"]},
-            {"visible-frontend-change", "backend-data-change", "mixed-change-without-template", "dirty-worktree-stop", "missing-ui-evidence-stop"},
+            {
+                "visible-frontend-change",
+                "backend-data-change",
+                "mixed-change-without-template",
+                "dirty-worktree-stop",
+                "missing-ui-evidence-stop",
+                "gitflow-twin-release",
+            },
         )
         for case in payload["evals"]:
             self.assertTrue(case["prompt"].strip())
             self.assertTrue(case["expected_output"].strip())
             self.assertTrue(case["expectations"])
+            case_text = normalized(" ".join([case["prompt"], case["expected_output"]] + case["expectations"]))
+            self.assertNotIn("approval checkpoint", case_text)
+            self.assertNotIn("require approval", case_text)
+
+        gitflow = next(case for case in payload["evals"] if case["id"] == "gitflow-twin-release")
+        gitflow_text = normalized(" ".join([gitflow["prompt"], gitflow["expected_output"]] + gitflow["expectations"]))
+        for phrase in (
+            "exact gitflow argument",
+            "{ticket}-prd from main",
+            "{ticket}-hml from homolog",
+            "cherry-picked equivalent patches",
+            "existing-resource reuse",
+            "two informative prs",
+            "both pipelines",
+        ):
+            self.assertIn(normalized(phrase), gitflow_text)
 
     def test_no_template_case_can_read_and_verify_the_fallback_schema(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
