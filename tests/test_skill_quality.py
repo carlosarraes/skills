@@ -42,10 +42,24 @@ class SkillQualityTests(unittest.TestCase):
     def test_first_party_descriptions_fit_the_routing_metadata_budget(self):
         result = load_module().check(ROOT)
 
-        self.assertEqual(result["inventory_count"], 30)
+        self.assertEqual(result["inventory_count"], 14)
+        self.assertEqual(
+            {skill["name"] for skill in result["skills"]},
+            {
+                "atomic-commit", "carraes-reviewer", "check-data", "clean-up",
+                "exec-ticket", "opening-prs", "pr-sweep", "prep-ticket",
+                "qa-team", "qa-ticket", "simplification-audit", "split-pr",
+                "triage-incident", "video-extract",
+            },
+        )
         self.assertLessEqual(result["description_characters"], 8_360)
         self.assertTrue(
-            all(skill["description"].startswith("Use when") for skill in result["skills"])
+            all(
+                skill["description"].startswith(
+                    ("Use when", "Use only when explicitly invoked")
+                )
+                for skill in result["skills"]
+            )
         )
 
     def test_discovers_only_tracked_skill_files(self):
