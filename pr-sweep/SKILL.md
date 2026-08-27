@@ -25,8 +25,8 @@ Run these steps in order:
 1. Read sweep state, establish scope, and mark eligible quiet PRs.
 2. For every non-quiet PR, collect current CI, mergeability, unresolved threads, latest reviews, issue comments, and the latest Greptile summary in parallel.
 3. Classify findings by form and current review state, then assign each PR `DONE`, `WAITING`, or `NEEDS FIX`.
-4. Dispatch autonomous PRs immediately. Present one batched approval-risk decision for gated PRs; after approval, dispatch those PRs.
-5. Use exactly **one fix agent per PR per cycle**, in an independent worktree, with the complete finding set. Allow at most **one commit push per PR per cycle**. Non-push API actions may remain separate.
+4. Dispatch every selected `NEEDS FIX` PR immediately when its policy branch permits a safe fix; the explicit list or authored-PR default is authority inside the selected scope. Approval state is recorded for reporting and reviewer re-request only, never for permission or routing.
+5. Use exactly **one fix agent per PR per cycle**, in an independent worktree, with the complete finding set. Allow at most **one commit push per PR per cycle**, using a normal push. Non-push API actions may remain separate. A valid safe bot or human fix is in scope; after a push on an approved PR, report that approval is invalidated.
 6. Persist and prune state. If the cycle is nonterminal, re-arm the loop **before** composing its report. Then report status and next ETA.
 7. On later cycles, re-fetch the new head. Converge blocking reviewers only after new-head CI is green.
 
@@ -44,28 +44,25 @@ Classify every finding on both axes:
 - **L2:** unresolved inline thread, tagged bot/human and blocking/nonblocking.
 - **L3:** top-level human review body or Greptile summary.
 
-Only the **latest run per check name** and **latest verdict per reviewer** count. Ambiguous reviewers are human. Greptile confidence is a triage signal, not a gate. Cross-check its summary with L2: act only on summary-only findings, never reply/resolve the summary, and never double-fix a duplicate.
+Only the **latest run per check name** and **latest verdict per reviewer** count. Ambiguous reviewers are human. Greptile confidence is a triage signal, not a merge condition. Cross-check its summary with L2: act only on summary-only findings, never reply/resolve the summary, and never double-fix a duplicate.
 
 | Disposition | Exact predicate |
 |---|---|
 | `DONE` | Latest CI is green; PR is mergeable; no unresolved thread or unaddressed summary-only finding remains; every blocking human review was turned around/re-requested or entirely filed as follow-ups. |
 | `WAITING` | Feedback is clean and current checks are only in progress/running. Dispatch nothing, but recheck next cycle. |
-| `NEEDS FIX` | Any current failure, conflict, unresolved thread, summary-only finding, unaddressed blocking review, or approved-PR triage remains. |
+| `NEEDS FIX` | Any current failure, conflict, unresolved thread, summary-only finding, or unaddressed review finding remains. |
 
 All selected PRs must be `DONE` to stop.
 
-## Approval gate and parallel progress
+## Autonomous progress
 
-An approved PR is gated when this cycle would make any **avoidable** approval-invalidating push. Avoidable includes nonblocking human nits and bot/Greptile code fixes. A real CI fix or conflict is merge-required and autonomous only when it is the approved PR’s sole work.
-
-Gating is **per PR**: one avoidable item makes its full finding set wait for one push. Batch confirmation across gated PRs, allow edits, then re-confirm. Autonomous PRs proceed while gated PRs wait.
+The selected-scope invocation authorizes valid safe fixes on every selected `NEEDS FIX` PR, including approved PRs and bot/Greptile findings. No approval classification or extra confirmation delays dispatch. Classify current review state as usual; approval state is recorded for reporting and reviewer re-request only, never for permission or routing. The single per-PR agent owns the complete finding set and reports approval invalidation when its one push changes an approved PR.
 
 ## Required routing
 
 Read the selected reference in full **before** the action it governs. Each is complete; do not search for a second prerequisite reference.
 
 - Before collecting or classifying any non-quiet PR, read [collection and matrix](references/collection-and-matrix.md). It defines provider queries, bot detection, state, L1/L2/L3, latest-state rules, Greptile de-duplication, and dispositions.
-- When an approved PR contains avoidable work, read [approval triage](references/approval-triage.md) before presenting the batched per-PR gate.
 - Before dispatch on any `NEEDS FIX` PR, read [fix protocol](references/fix-protocol.md). Give its one agent the exact worktree, full findings and identifiers, tracker, origin ticket, and decisions.
 - On any size gate failure, read [Size gate](references/size-gate.md) before labeling, commenting, editing code, or recommending a split. Validate repository-specific policy against the current workflow first.
 - On any conflict, read [conflict resolution](references/conflict-resolution.md) before resolution, staging, rebase continuation, or push.
@@ -84,8 +81,8 @@ Read the selected reference in full **before** the action it governs. Each is co
 
 ## Liveness and reports
 
-Every nonterminal cycle re-arms, including quiet, all-`WAITING`, gated/no-dispatch, STOP, and user-adjudication cycles. Schedule before writing the report. The sole no-wakeup case is a fresh terminal refresh where all selected PRs are `DONE`.
+Every nonterminal cycle re-arms, including quiet, all-`WAITING`, no-dispatch, STOP, and user-adjudication cycles. Schedule before writing the report. The sole no-wakeup case is a fresh terminal refresh where all selected PRs are `DONE`.
 
-Keep each iteration report under 300 words. Per PR, show disposition (`quiet — skipped` when applicable), Greptile score if present, fixes/follow-ups, approval or size decisions, STOPs, and next wakeup ETA or `DONE`. Persist state even when no work dispatched.
+Keep each iteration report under 300 words. Per PR, show disposition (`quiet — skipped` when applicable), Greptile score if present, fixes/follow-ups, review state and approval invalidation, size decisions, STOPs, and next wakeup ETA or `DONE`. Persist state even when no work dispatched.
 
 The final report lists per-PR commits, bot/human thread replies and resolutions, follow-up links, re-request status, deferrals, stacked-PR retargets, STOPs, and every size override or split recommendation. A STOP report includes affected files, both sides’ intent/commits when relevant, and a concrete decision path back into the loop.

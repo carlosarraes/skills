@@ -9,8 +9,8 @@ Schedule the next firing **before** composing the report on **every nonterminal 
 - all PRs quiet;
 - all PRs `WAITING`;
 - no agent dispatched;
-- autonomous work running while an approval batch waits;
-- a gated/no-dispatch user checkpoint;
+- autonomous work running while another selected PR remains in progress;
+- a no-dispatch user checkpoint;
 - conflict/size/finding STOP requiring adjudication.
 
 The sole terminal condition is **all selected PRs are DONE** after a fresh refresh. Only then omit the wakeup. “No code left” and “nothing changed” do not terminate the loop.
@@ -31,7 +31,7 @@ Keep under 300 words. Include:
 |---|---|
 | each selected PR | `DONE` / `WAITING` / `NEEDS FIX`; mark `quiet — skipped` where applicable |
 | review | current Greptile score if present; threads/review turnaround |
-| work | fixes, reruns, follow-ups, approval invalidation/decision |
+| work | fixes, reruns, follow-ups, approval invalidation |
 | policy | size override/split or conflict STOP evidence |
 | liveness | next wakeup ETA, or `DONE` only for terminal refresh |
 

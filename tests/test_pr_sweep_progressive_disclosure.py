@@ -10,7 +10,6 @@ REFERENCES = ROOT / "pr-sweep" / "references"
 EVALS = ROOT / "pr-sweep" / "evals" / "evals.json"
 
 EXPECTED_REFERENCES = {
-    "approval-triage.md",
     "cadence.md",
     "collection-and-matrix.md",
     "conflict-resolution.md",
@@ -48,6 +47,9 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "done",
             "waiting",
             "needs fix",
+            "explicit list",
+            "authored-pr default",
+            "authority",
             "l1",
             "l2",
             "l3",
@@ -55,8 +57,6 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "latest verdict per reviewer",
             "quiet",
             "approval",
-            "avoidable",
-            "batched",
             "per pr",
             "one fix agent",
             "one commit push",
@@ -75,6 +75,28 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
         ):
             self.assertIn(hard_rule, normalized)
 
+    def test_selected_needs_fix_prs_dispatch_without_approval_gate(self):
+        normalized = " ".join(self.body.lower().split())
+
+        for required in (
+            "dispatch every selected `needs fix` pr immediately",
+            "approval state is recorded for reporting and reviewer re-request only",
+            "never for permission or routing",
+            "one fix agent per pr per cycle",
+            "one commit push per pr per cycle",
+            "approval is invalidated",
+        ):
+            self.assertIn(required, normalized)
+
+        for forbidden in (
+            "approval-triage",
+            "approval-risk",
+            "avoidable",
+            "batched",
+            "re-confirm",
+        ):
+            self.assertNotIn(forbidden, normalized)
+
     def test_every_reference_is_linked_directly_and_references_do_not_chain(self):
         actual = {path.name for path in REFERENCES.glob("*.md")}
         self.assertEqual(actual, EXPECTED_REFERENCES)
@@ -90,7 +112,6 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
         normalized = " ".join(self.body.lower().split())
         routes = {
             "collection-and-matrix.md": ("before collecting", "classifying"),
-            "approval-triage.md": ("approved", "avoidable"),
             "fix-protocol.md": ("before dispatch", "needs fix"),
             "size-gate.md": ("size gate", "before"),
             "conflict-resolution.md": ("conflict", "before"),
@@ -122,10 +143,6 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             "exactly one terminal action",
         ):
             self.assertIn(phrase, collection)
-
-        approval = contents["approval-triage.md"]
-        for phrase in ("one batched", "per pr", "avoidable", "merge-required", "re-confirm"):
-            self.assertIn(phrase, approval)
 
         fix = contents["fix-protocol.md"]
         for phrase in (
@@ -196,7 +213,7 @@ class PrSweepProgressiveDisclosureTests(unittest.TestCase):
             [case["id"] for case in cases],
             [
                 "quiet-latest-state",
-                "approval-gate-per-pr",
+                "approved-bot-fix-autonomous",
                 "feedback-dedup-and-replies",
                 "size-policy",
                 "conflict-stop-safety",
