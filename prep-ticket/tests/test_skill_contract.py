@@ -42,13 +42,24 @@ class PrepTicketSkillTests(unittest.TestCase):
     def test_repository_only_probes_provider_and_preserves_exact_failure_metadata(self):
         for phrase in (
             "provider availability probe",
+            "command -v <provider>",
             "linear --version",
+            "jira version",
             "capture and report the exact probe command, stdout, stderr, and exit status as separate fields",
+            "normalized missing error",
             "linear: command not found",
             "without attempting a ticket lookup",
             "ticket lookup: not attempted — no ticket id",
         ):
             self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_repository_only_report_separates_provider_probe_and_ticket_lookup(self):
+        for phrase in (
+            "**provider probe**",
+            "**ticket lookup**",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+        self.assertNotIn(normalized("**lookup**"), self.flat_body)
 
     def test_repository_only_discovers_committed_staged_and_unstaged_changes(self):
         for phrase in (

@@ -45,15 +45,13 @@ In ticket-backed mode, run independent lookups in the same turn (parallel Bash c
 
 Only run the following ticket lookup when a ticket ID was resolved. A provider availability probe is separate from a ticket lookup and is safe to run without an ID.
 
-**Repository-only provider availability probe:** use the selected platform (default `linear`) and run its version/help probe without any ticket ID or query:
+**Repository-only provider availability probe:** use the selected platform (default `linear`) and first run the portable availability probe `command -v <provider>` without any ticket ID or query:
 
 ```bash
-linear --version
-# or, when platform is jira:
-jira --version
+command -v <provider>
 ```
 
-Capture and report the exact probe command, stdout, stderr, and exit status as separate fields. This probe runs without attempting a ticket lookup. Preserve a supplied or observed failure verbatim, including `linear: command not found`; do not turn a probe into a ticket lookup, pass a placeholder ID, or retry it in a loop.
+Capture and report the exact probe command, stdout, stderr, and exit status as separate fields. This probe runs without attempting a ticket lookup. When the provider is present, use its provider-correct version syntax (`linear --version` for Linear; `jira version` for Jira) and capture that command's result separately. When `command -v` reports a missing provider, preserve the normalized missing error `<provider>: command not found` (for example, `linear: command not found`) alongside the raw stderr and nonzero status. Do not turn a probe into a ticket lookup, pass a placeholder ID, or retry it in a loop.
 
 **Linear** (default):
 
@@ -186,7 +184,8 @@ For repository-only mode (omit the ticket-backed heading and sections below that
 
 ## Ticket Context
 - **Ticket ID**: <supplied but unavailable, or "Unavailable — no ticket ID was supplied or inferred from the branch">
-- **Lookup**: <exact lookup failure, including command/output/status, or "not attempted — no ticket ID">
+- **Provider probe**: <exact `command -v <provider>` and, when present, version command; stdout; stderr; exit status; normalized missing error when applicable>
+- **Ticket lookup**: <exact lookup failure, including command/output/status, or "not attempted — no ticket ID">
 - **Requirements / acceptance criteria**: Unavailable — do not invent them
 
 ## Ticket Overview (ticket-backed mode only; otherwise mark every field unavailable or omit)
