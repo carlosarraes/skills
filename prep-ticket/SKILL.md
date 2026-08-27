@@ -5,7 +5,7 @@ description: Use when preparing to implement a Linear or Jira ticket by gatherin
 
 # Prep Ticket
 
-Gather all context for a Linear ticket, check if it's unblocked, identify missing information, scan the codebase for related code, and produce a structured readiness summary in chat with a suggested implementation approach.
+Gather ticket context when an ID is available; otherwise, use repository and diff evidence to produce a structured readiness summary in chat without inventing ticket requirements. In either mode, identify missing information, scan the codebase for related code, and give one suggested implementation approach.
 
 > Plan-mode compatible. The Step 5 output is a chat reply, not a file. Do not call Write/Edit. If dispatched as a subagent, return the summary as your final message, not as a file write.
 
@@ -18,9 +18,9 @@ reuse an existing helper/module from the 3b scan → a native / stdlib / platfor
 
 **Recommend one approach, not a menu.** No "option A vs B", no fallbacks, no "flag the heavier design as opt-in", no scaffolding for a speculative future need — those alternatives are the bloat this skill exists to prevent; `/grill-me` is where heavier designs get surfaced if the simple one cracks. **Never lazy about:** validation at trust boundaries, error handling that prevents data loss, security, accessibility, or anything the ticket explicitly requires — lazy means less code, not a flimsier solution.
 
-## Step 1: Extract ticket ID and platform
+## Step 1: Resolve optional ticket context and platform
 
-**Parse arguments:** The skill accepts `<TICKET-ID>` (required) and an optional `<platform>` (default: `linear`).
+**Parse arguments:** The ticket ID is optional. The skill accepts an optional `<TICKET-ID>` and an optional `<platform>` (default: `linear` when ticket lookup is needed).
 
 - `/prep-ticket ABC-123` → ticket = `ABC-123`, platform = `linear`
 - `/prep-ticket ABC-123 jira` → ticket = `ABC-123`, platform = `jira`
@@ -35,13 +35,15 @@ git rev-parse --abbrev-ref HEAD
 
 Match the pattern `[a-zA-Z]{2,5}-\d+` (case-insensitive) and uppercase the result (e.g., `ABC-123`, `XYZ-456`).
 
-If no ticket ID found in either the argument or branch name, ask the user: "Could not determine the ticket ID. What's the ticket ID (e.g., ABC-123, XYZ-456)?"
+If no ticket ID is found in either the argument or branch name, enter **repository-only mode**. Record `Ticket context: unavailable — no ticket ID was supplied or inferred from the branch`. Do not ask for an ID, invent a placeholder, or stop discovery.
 
-## Step 2: Gather context
+## Step 2: Gather available context
 
-Run both in the **same turn** (parallel Bash calls) — they are independent.
+In ticket-backed mode, run independent lookups in the same turn (parallel Bash calls). In repository-only mode, skip ticket-specific queries and continue with repository, branch, and diff evidence.
 
 ### 2a. Ticket details, relations, and comments
+
+Only run the following ticket lookup when a ticket ID was resolved.
 
 **Linear** (default):
 
@@ -69,7 +71,13 @@ jira issue view <TICKET-ID> --raw
 ```
 This returns JSON — extract the same fields: title, description, priority, status, labels, linked issues with their states, and comments.
 
+If the provider CLI or lookup fails, preserve the exact command, stdout/stderr, and exit status as the **exact lookup failure** in the report. Do not paraphrase an error into ticket facts, retry a failed lookup in a loop, or ask for a replacement ID. A failed ticket lookup falls back to repository-only mode when a repository is available.
+
+In repository-only mode, record `Ticket context: unavailable` and the exact lookup outcome. If no provider command could be run because no ticket ID existed, say `lookup not attempted — no ticket ID`; if an environment probe was attempted and failed, copy its exact command/error (for example, `linear: command not found`). Never fabricate ticket title, description, blockers, comments, requirements, or acceptance criteria.
+
 ### 2b. Existing branches and PRs
+
+**Ticket-backed mode:**
 
 ```bash
 git branch -a 2>/dev/null | grep -i "<ticket-id>"
@@ -77,6 +85,18 @@ gh pr list --search "<TICKET-ID>" --state all --json number,title,state,headRefN
 ```
 
 Replace `<ticket-id>` / `<TICKET-ID>` with the actual ticket ID (lowercase for branch grep, uppercase for PR search).
+
+**Repository-only mode:** inspect the current branch, worktree status, recent commits, changed-file list, and diff summary instead of filtering by a ticket ID:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+git status --short
+git diff --stat
+git diff --name-only
+git log --oneline -10
+```
+
+Use those observed paths and changes as the scope for discovery. Do not invent ticket references or requirements from filenames, commit messages, or code patterns.
 
 ## Step 3: Codebase scan
 
@@ -91,7 +111,7 @@ Summarize the rules relevant to this ticket's area; you'll turn them into concre
 
 ### 3b. Related files
 
-Based on the ticket description, labels, and any module/route/component names mentioned — search for likely related files. Keep it lightweight: find 3-10 entry points the developer would start from, not an exhaustive list. Look for:
+In ticket-backed mode, use the ticket description, labels, and any module/route/component names mentioned. In repository-only mode, use only the current branch, changed paths, recent diff, and repository documentation. Keep it lightweight: find 3-10 entry points the developer would start from, not an exhaustive list. Look for:
 - Implementation files matching keywords from the ticket
 - Test files adjacent to likely implementation files
 - Similar past implementations that could serve as reference patterns
@@ -100,17 +120,21 @@ Based on the ticket description, labels, and any module/route/component names me
 
 ### 3c. Ticket references in code
 
+Only when a ticket ID exists:
+
 ```bash
 grep -r "<TICKET-ID>" --include="*.ts" --include="*.tsx" --include="*.py" --include="*.md" -l . 2>/dev/null | head -10
 ```
 
-This catches TODOs, workarounds, or references already in the codebase.
+This catches TODOs, workarounds, or references already in the codebase. Without an ID, state that ticket-reference lookup is unavailable and rely on observed repository/diff evidence.
 
 ## Step 4: Readiness assessment
 
+Keep ticket-backed facts separate from repository-only evidence. In repository-only mode, explicitly mark ticket context unavailable and do not infer ticket requirements, acceptance criteria, blockers, status, or comments from the codebase.
+
 ### 4a. Blockers
 
-A ticket is **blocked** if `inverseRelations` contains any entry where `type` is `"blocks"` and the blocking issue's state type is NOT `"completed"` or `"canceled"`.
+A ticket-backed report is **blocked** if `inverseRelations` contains any entry where `type` is `"blocks"` and the blocking issue's state type is NOT `"completed"` or `"canceled"`. A repository-only report must say `Blocking status: unavailable — no ticket context`; do not infer blockers from code or branch state.
 
 For each blocker, note: ticket ID, title, current state, and whether it looks close to done (In Review, In QA) or far away (Backlog, Unstarted).
 
@@ -118,7 +142,7 @@ For each blocker, note: ticket ID, title, current state, and whether it looks cl
 
 ### 4b. Missing information
 
-Flag if any of these are true:
+In ticket-backed mode, flag if any of these are true:
 - Description is empty or very short (< 50 chars)
 - No acceptance criteria visible in description or comments
 - Priority is 0 (No priority)
@@ -126,18 +150,31 @@ Flag if any of these are true:
 - Labels are missing
 - No project context
 
+In repository-only mode, list ticket context and ticket-specific requirements/acceptance criteria as unavailable. Do not invent acceptance criteria to fill the gap.
+
 ### 4c. Open questions
 
-Scan comments for unanswered questions — messages ending with `?` that have no follow-up response. Note any unresolved design decisions.
+In ticket-backed mode, scan comments for unanswered questions — messages ending with `?` that have no follow-up response. Note any unresolved design decisions. In repository-only mode, report only questions evidenced by the repository/diff scan; do not create a ticket lookup question or a user question.
 
 ## Step 5: Reply to the user
 
-Send the following directly as your chat message. Do not create a file. Do not call Write/Edit. The fenced block below is the *shape of the reply*, not a document to save.
+Send the following directly as your chat message. Do not create a file. Do not call Write/Edit. The fenced block below is the *shape of the reply*, not a document to save. The report must contain one evidence-backed Suggested Approach; in repository-only mode, ground it only in observed repository/diff evidence and do not invent requirements or acceptance criteria.
 
 ```markdown
+For ticket-backed mode:
+
 # Prep Report: <TICKET-ID> — <title>
 
-## Ticket Overview
+For repository-only mode (omit the ticket-backed heading and sections below that have no repository evidence):
+
+# Prep Report: Repository-only — <branch>
+
+## Ticket Context
+- **Ticket ID**: <supplied but unavailable, or "Unavailable — no ticket ID was supplied or inferred from the branch">
+- **Lookup**: <exact lookup failure, including command/output/status, or "not attempted — no ticket ID">
+- **Requirements / acceptance criteria**: Unavailable — do not invent them
+
+## Ticket Overview (ticket-backed mode only; otherwise mark every field unavailable or omit)
 - **Status**: <state> | **Priority**: <priorityLabel> | **Estimate**: <estimate or "Unestimated">
 - **Labels**: <labels>
 - **Project**: <project or "None">
@@ -179,10 +216,11 @@ Send the following directly as your chat message. Do not create a file. Do not c
 - **Simplicity / YAGNI** — the simplest workable solution that satisfies the ticket: no abstraction with one caller, no config for a constant, no new dependency for what a few lines do, no code for a speculative need. Shortest diff, fewest files, reuse the helpers from 3b before adding new ones. *(General YAGNI guideline — see the Guiding principle; not a repo-documented standard.)*
 
 ## Suggested Approach
-<**Exactly one** approach — the laziest that fully satisfies the ticket — as 3-5 concrete bullets: a starting hypothesis for `/grill-me` to stress-test, not a final plan. Apply the laziest-first priority from the Guiding principle: reuse a helper/module from 3b → native/stdlib → an already-installed dependency → a few lines → only then new structure. Don't present alternatives, fallbacks, or "for later" options. Keep whatever the ticket requires — validation, error handling, security.>
+<**Exactly one** approach — the laziest that fully satisfies the ticket, or the observed repository scope in repository-only mode — as 3-5 concrete bullets: a starting hypothesis for `/grill-me` to stress-test, not a final plan. In repository-only mode, use exactly one lazy evidence-backed suggested approach and ground every bullet in observed repository/diff evidence. Apply the laziest-first priority from the Guiding principle: reuse a helper/module from 3b → native/stdlib → an already-installed dependency → a few lines → only then new structure. Don't present alternatives, fallbacks, or "for later" options. Keep whatever the ticket requires when requirements are available; when they are not, do not invent requirements or acceptance criteria.>
 
 ### Getting Started
-1. **Create a feature branch** from `develop`: `git checkout develop && git pull && git checkout -b feature/<ticket-id>-<short-desc>`
+1. **Ticket-backed mode**: create a feature branch from `develop` when needed: `git checkout develop && git pull && git checkout -b feature/<ticket-id>-<short-desc>`
+2. **Repository-only mode**: keep the current branch and report its exact name; do not create a ticket-named branch without an ID.
 
 ### Next step
 Run `/grill-me` on the Suggested Approach above — it will interrogate the open questions and design decisions one at a time. (Use `/grill-with-docs` if you also want CONTEXT.md/ADRs updated as decisions land.)
@@ -190,11 +228,10 @@ Run `/grill-me` on the Suggested Approach above — it will interrogate the open
 
 ## Edge cases
 
-- **Ticket not found**: Report the error, ask user to verify the ticket ID
-- **Platform CLI fails**: Note which platform CLI is unavailable; proceed with codebase scan only if a branch exists
-- **Jira CLI not installed**: If platform is jira but `jira` not found, report error and suggest: `brew install ankitpokhrel/jira-cli/jira-cli`
+- **Ticket not found or platform CLI fails**: Preserve the exact lookup command, output, and exit status; mark ticket context unavailable and continue repository-only discovery when a repository exists. Do not retry in a question loop.
+- **Jira CLI not installed**: If platform is jira but `jira` is not found, record the exact failure and continue repository-only discovery when possible.
 - **Unknown platform**: If platform argument is not `linear` or `jira`, default to Linear with a note
-- **Not in a git repo**: Skip branch extraction and codebase scan; fetch ticket from the platform only
+- **Not in a git repo**: Without a ticket ID, report that repository evidence is unavailable and stop without inventing requirements. With a ticket ID, fetch ticket context from the platform only.
 - **Ticket already Done/Canceled**: Note prominently — user may be prepping the wrong ticket
 - **No CLAUDE.md or README.md**: Skip project rules section, note "No project rules files found"
 - **Repo documents none of the standards** (no CLAUDE.md / architecture anchor): emit the five Code-Review Readiness lenses with their generic defaults + a one-line nudge to document standards; don't invent repo-specific rules
