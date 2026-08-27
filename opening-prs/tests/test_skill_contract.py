@@ -101,7 +101,10 @@ class OpeningPrsSkillTests(unittest.TestCase):
     def test_no_template_case_can_read_and_verify_the_fallback_schema(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
         case = next(case for case in payload["evals"] if case["id"] == "mixed-change-without-template")
-        self.assertIn("may read only the opening-prs skill's direct fallback pr body reference", case["prompt"].lower())
+        prompt = case["prompt"].lower()
+        self.assertIn("may read only the opening-prs skill's direct fallback pr body reference", prompt)
+        self.assertIn("must read that reference before answering", prompt)
+        self.assertIn("use every exact section heading", prompt)
         expected = normalized(" ".join(case["expectations"]))
         for phrase in (
             "summary, customer or user value, what changed, why",
