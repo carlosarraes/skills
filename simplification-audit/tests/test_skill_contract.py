@@ -3,10 +3,6 @@ import json
 import unittest
 from pathlib import Path
 
-import yaml
-from yaml.constructor import ConstructorError
-from yaml.resolver import BaseResolver
-
 
 ROOT = Path(__file__).parents[1]
 SKILL = ROOT / "SKILL.md"
@@ -22,45 +18,54 @@ EXPECTED_FRONTMATTER = {
 EXPECTED_BODY_SHA256 = "2f051ff3cfd14af8baa2211bd2db8d3441d21851eed21810d11944e5925ab125"
 
 
-class UniqueKeyLoader(yaml.SafeLoader):
-    pass
-
-
-def construct_unique_mapping(loader, node, deep=False):
-    mapping = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key ({key!r})",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-UniqueKeyLoader.add_constructor(
-    BaseResolver.DEFAULT_MAPPING_TAG,
-    construct_unique_mapping,
-)
-
-
-def parse_frontmatter(text):
-    if not text.startswith("---\n"):
+def split_frontmatter(document):
+    if not document.startswith(b"---\n"):
         raise ValueError("missing YAML frontmatter")
-    raw, _body = text[4:].split("\n---\n", 1)
-    metadata = yaml.load(raw, Loader=UniqueKeyLoader)
-    if not isinstance(metadata, dict):
-        raise ValueError("frontmatter must be a mapping")
+    try:
+        raw, body = document[4:].split(b"\n---\n", 1)
+    except ValueError as error:
+        raise ValueError("missing closing YAML frontmatter delimiter") from error
+    return raw, body
+
+
+def parse_frontmatter(document):
+    raw, _body = split_frontmatter(document)
+    metadata = {}
+    for line in raw.split(b"\n"):
+        key_bytes, separator, value = line.partition(b":")
+        if not separator:
+            raise ValueError(f"invalid frontmatter line: {line!r}")
+        try:
+            key = key_bytes.decode("ascii")
+        except UnicodeDecodeError as error:
+            raise ValueError("frontmatter keys must be ASCII") from error
+        if key not in EXPECTED_FRONTMATTER:
+            raise ValueError(f"unexpected frontmatter key: {key!r}")
+        if key in metadata:
+            raise ValueError(f"duplicate frontmatter key: {key!r}")
+        expected = (
+            b" true"
+            if key == "disable-model-invocation"
+            else b" " + EXPECTED_FRONTMATTER[key].encode("utf-8")
+        )
+        if value != expected:
+            raise ValueError(f"invalid exact value for frontmatter key: {key!r}")
+        metadata[key] = (
+            True
+            if key == "disable-model-invocation"
+            else value[1:].decode("utf-8")
+        )
+    if set(metadata) != set(EXPECTED_FRONTMATTER):
+        raise ValueError("frontmatter keys are incomplete")
     return metadata
 
 
-def post_frontmatter_body(text):
-    if not text.startswith("---\n"):
-        raise ValueError("missing YAML frontmatter")
-    return text[4:].split("\n---\n", 1)[1]
+def frontmatter_document(*lines):
+    return ("---\n" + "\n".join(lines) + "\n---\nbody").encode("utf-8")
+
+
+def post_frontmatter_body(document):
+    return split_frontmatter(document)[1]
 
 
 def normalized(text):
@@ -69,43 +74,63 @@ def normalized(text):
 
 class SimplificationAuditSkillTests(unittest.TestCase):
     def setUp(self):
+        self.skill_bytes = SKILL.read_bytes()
         self.skill = SKILL.read_text(encoding="utf-8")
         self.reviewer = REVIEWER.read_text(encoding="utf-8")
         self.report = REPORT.read_text(encoding="utf-8")
         self.flat_skill = normalized(self.skill)
 
     def test_user_invoked_frontmatter_has_exact_boundary(self):
-        metadata = parse_frontmatter(self.skill)
+        metadata = parse_frontmatter(self.skill_bytes)
         self.assertEqual(metadata, EXPECTED_FRONTMATTER)
         self.assertIs(metadata["disable-model-invocation"], True)
 
-    def test_frontmatter_parser_rejects_duplicate_keys_and_string_flags(self):
-        duplicate = (
-            "---\n"
-            "name: simplification-audit\n"
-            "name: duplicate\n"
-            "description: Use only when explicitly invoked for a whole-codebase simplification audit.\n"
-            "disable-model-invocation: true\n"
-            "---\nbody"
+    def test_frontmatter_parser_rejects_duplicate_extra_and_non_literal_metadata(self):
+        duplicate = frontmatter_document(
+            "name: simplification-audit",
+            "name: simplification-audit",
+            "description: Use only when explicitly invoked for a whole-codebase simplification audit.",
+            "disable-model-invocation: true",
         )
-        with self.assertRaises(ConstructorError):
+        with self.assertRaises(ValueError):
             parse_frontmatter(duplicate)
 
-        quoted_flag = (
-            "---\n"
-            "name: simplification-audit\n"
-            "description: Use only when explicitly invoked for a whole-codebase simplification audit.\n"
-            'disable-model-invocation: "true"\n'
-            "---\nbody"
+        extra = frontmatter_document(
+            "name: simplification-audit",
+            "description: Use only when explicitly invoked for a whole-codebase simplification audit.",
+            "disable-model-invocation: true",
+            "unexpected: value",
         )
-        parsed = parse_frontmatter(quoted_flag)
-        self.assertIsInstance(parsed["disable-model-invocation"], str)
-        self.assertNotEqual(parsed, EXPECTED_FRONTMATTER)
+        with self.assertRaises(ValueError):
+            parse_frontmatter(extra)
+
+        for value in ("yes", "on", "True", "TRUE", '"true"', "true # comment"):
+            with self.subTest(value=value):
+                malformed_flag = frontmatter_document(
+                    "name: simplification-audit",
+                    "description: Use only when explicitly invoked for a whole-codebase simplification audit.",
+                    f"disable-model-invocation: {value}",
+                )
+                with self.assertRaises(ValueError):
+                    parse_frontmatter(malformed_flag)
+
+        for description in (
+            "Use only when explicitly invoked for a whole-codebase simplification audit. # comment",
+            '"Use only when explicitly invoked for a whole-codebase simplification audit."',
+        ):
+            with self.subTest(description=description):
+                malformed_description = frontmatter_document(
+                    "name: simplification-audit",
+                    f"description: {description}",
+                    "disable-model-invocation: true",
+                )
+                with self.assertRaises(ValueError):
+                    parse_frontmatter(malformed_description)
 
     def test_skill_body_matches_pinned_pre_task_baseline(self):
-        body = post_frontmatter_body(self.skill)
+        body = post_frontmatter_body(self.skill_bytes)
         self.assertEqual(
-            hashlib.sha256(body.encode("utf-8")).hexdigest(),
+            hashlib.sha256(body).hexdigest(),
             EXPECTED_BODY_SHA256,
         )
 
