@@ -1,0 +1,35 @@
+{
+  "skill_name": "opening-prs",
+  "evals": [
+    {
+      "id": "visible-frontend-change",
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean feature branch changes a visible responsive checkout flow. The repository has its own PR template and test commands. Explain exactly how you would prepare and open the PR, including what the draft and approval checkpoint contain.",
+      "expected_output": "Uses repository authority, complete diff evidence, targeted verification, required UI evidence, and a pre-creation approval gate.",
+      "expectations": ["repository instructions and canonical template win", "inspect the complete base/head diff", "run targeted repository-defined checks", "require screenshot or recording evidence", "show forge, base, title, body, verification, and missing evidence before external side effects", "do not create commits"]
+    },
+    {
+      "id": "backend-data-change",
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean feature branch changes an API route, service, MongoDB index specification, and tests. The repository has a canonical PR template. Explain exactly how you would prepare and open an informative PR.",
+      "expected_output": "Surfaces API compatibility and data/index consequences with observed backend verification and a pre-creation approval gate.",
+      "expectations": ["account for every changed file", "identify API compatibility", "identify migration or index impact", "report only observed verification", "include concrete reproducible backend evidence when useful", "require approval before push or PR creation"]
+    },
+    {
+      "id": "mixed-change-without-template",
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. A clean branch changes a UI, API endpoint, environment setting, and dependency in a repository with no PR template. The remote may be GitHub or Bitbucket. Explain the complete PR-opening workflow and draft shape.",
+      "expected_output": "Uses the portable fallback schema, combines all applicable impact branches, and discovers forge tooling instead of assuming GitHub.",
+      "expectations": ["use the fallback PR body only because no repository template exists", "cover UI, API, configuration, dependency, and rollout impact", "discover the forge and available tooling", "do not hard-code a base branch", "require targeted evidence", "require approval before external side effects"]
+    },
+    {
+      "id": "dirty-worktree-stop",
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. The requested PR branch has staged, unstaged, and untracked changes. Explain what you do.",
+      "expected_output": "Stops before drafting, pushing, or creating a PR and hands commit preparation to the appropriate workflow.",
+      "expectations": ["stop on a dirty worktree", "do not create or rewrite commits", "point to atomic-commit when appropriate", "perform no push or PR creation"]
+    },
+    {
+      "id": "missing-ui-evidence-stop",
+      "prompt": "SIMULATION ONLY: do not run commands, read files, call agents, write files, push, or create a PR. The branch is clean and changes visible UI behavior, but no screenshot or recording can be captured. Explain what appears in the draft and whether you create the PR.",
+      "expected_output": "States the missing evidence and pauses creation for the user rather than weakening or inventing proof.",
+      "expectations": ["visible UI requires screenshot or recording evidence", "state that evidence is missing", "pause PR creation", "do not invent verification", "ask the user to supply or unblock evidence"]
+    }
+  ]
+}
