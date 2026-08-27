@@ -17,7 +17,7 @@ Read repository instructions, forge metadata, the canonical pull-request templat
 
 ## 2. Reconstruct the change
 
-Inspect the complete base/head diff, surrounding code, and history relevant to intent. Account for every changed file and classify each by reviewer impact: visible UI; frontend state, routing, or data flow; API or backend; data, migration, index, or compatibility; configuration, dependency, or rollout; and tests, docs, or refactoring. Derive the title and ticket only from reliable repository or branch evidence; otherwise use a concise outcome-focused title without guessing.
+Inspect the complete base/head diff, surrounding code, and history relevant to intent. Account for every changed file and classify each by reviewer impact: visible UI; frontend state, routing, or data flow; API or backend; data, migration, index, or compatibility; configuration, dependency, or rollout; and tests, docs, or refactoring. Derive the title and ticket only from reliable repository or branch evidence; otherwise use a concise Conventional Commit-style title without guessing.
 
 **Complete when:** Every changed file and material reviewer concern is represented in the draft or explicitly marked immaterial.
 
