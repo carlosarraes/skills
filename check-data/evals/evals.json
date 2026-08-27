@@ -1,0 +1,29 @@
+{
+  "skill_name": "check-data",
+  "evals": [
+    {
+      "id": "default-plan-seed-verify",
+      "prompt": "SIMULATION ONLY: do not inspect a repository, call a database, or mutate files. The current branch changes a products table and its categories FK; a reviewed data plan already identifies three existing products, two category parents, and rows across happy, edge, error, and stupid buckets. Describe the exact default /check-data action trace from discovery through the report.",
+      "expected_output": "Discovers branch, ticket, diff, schema, database, and seed options; writes a schema-aware four-bucket plan; continues from the written plan in the same invocation with FK-ordered, idempotent insertion; performs before/after verification with inserted/skipped/failed accounting; and reports safe evidence without raw credentials.",
+      "expectations": [
+        "discovers the branch, ticket context, diff, schema, database access, and existing project seed mechanism",
+        "writes a schema-aware plan covering happy, edge, error, and stupid rows",
+        "continues from the written plan into FK-ordered idempotent insertion without delegating to another skill",
+        "uses natural-key matching or a branch seed tag and continues after individual row failures",
+        "reports before, inserted, skipped, failed, and after counts and never exposes raw credentials"
+      ]
+    },
+    {
+      "id": "plan-only",
+      "prompt": "SIMULATION ONLY: do not inspect a repository, call a database, or mutate files. The user invokes /check-data plan-only for a branch whose diff touches orders and users. Describe the exact action trace and terminal report behavior.",
+      "expected_output": "Discovers enough context to write a schema-aware four-bucket plan and stops after writing the plan; plan-only performs no database mutation and reports that seeding and verification were intentionally skipped.",
+      "expectations": [
+        "accepts plan-only as an optional argument",
+        "writes the same schema-aware happy, edge, error, and stupid planning output",
+        "branches immediately after writing the plan and stops before any database mutation",
+        "does not run insertion, count verification, or another skill",
+        "keeps credentials out of the report and states the plan-only limitation"
+      ]
+    }
+  ]
+}
