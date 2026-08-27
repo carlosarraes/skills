@@ -48,6 +48,25 @@ class CleanUpSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), self.flat_body)
 
+    def test_pr_resolution_handles_all_candidates_instead_of_first_match(self):
+        start = self.body.index("## Step 2: Identify the diff")
+        end = self.body.index("## Step 3: Dispatch parallel review agents")
+        resolution = normalized(self.body[start:end])
+
+        for phrase in (
+            "full candidate metadata",
+            "number",
+            "url",
+            "head",
+            "base",
+            "candidate count",
+            "all candidate facts",
+            "multiple or conflicting candidates",
+        ):
+            self.assertIn(normalized(phrase), resolution)
+
+        self.assertNotIn(".[0]", resolution)
+
     def test_large_diffs_are_sliced_automatically_and_remaining_scope_is_reported(self):
         for phrase in (
             "2,000 changed lines",

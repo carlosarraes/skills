@@ -45,7 +45,7 @@ If target evidence is ambiguous, stop before review or mutation and report the c
 
 The base branch is what the diff compares against. Detect it in this order:
 
-1. If there's an open PR, resolve its PR metadata (number, forge, state, head, and `baseRefName`) with the available forge tooling; for GitHub, read `baseRefName` with `gh pr list --head <branch> --json baseRefName | jq -r '.[0].baseRefName'`.
+1. If there's an open PR, query full candidate metadata (number, URL, state, head ref/OID, and base ref/OID) with the available forge tooling; for GitHub, use `gh pr list --head <branch> --json number,url,state,headRefName,headRefOid,baseRefName,baseRefOid`. Inspect the candidate count and head/base consistency before choosing. Use the sole unambiguous candidate; when multiple or conflicting candidates exist, stop and report all candidate facts instead of selecting a first result.
 2. Otherwise, fall back to the merge-base with the project's default branch (`develop` or `main`).
 3. For stacked PRs, the base is the parent branch's head (e.g., `proj-709/backend-schemas`), NOT `develop`. Read the parent PR metadata with the available forge tooling when a stack is in play, including `baseRefName`; do not infer a stacked base from `develop`.
 
