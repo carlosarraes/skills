@@ -29,6 +29,15 @@ class CarraesReviewerSkillTests(unittest.TestCase):
         ):
             self.assertIn(phrase, self.body)
 
+    def test_deleted_reviewer_route_is_absent_from_delegated_review_contract(self):
+        self.assertNotIn("review-swarm", self.body)
+        for phrase in (
+            "delegated sub-reviewer",
+            "structured findings",
+            "does **not** post",
+        ):
+            self.assertIn(phrase, self.body)
+
 
 if __name__ == "__main__":
     unittest.main()
