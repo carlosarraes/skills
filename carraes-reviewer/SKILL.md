@@ -1,6 +1,7 @@
 ---
 name: carraes-reviewer
-description: Use when reviewing a PR or diff in Carlos Arraes's voice, applying his evidence-led priorities and team-appropriate register.
+description: Use only when explicitly invoked to review a PR or diff in Carlos Arraes's voice.
+disable-model-invocation: true
 ---
 
 # Carlos's Code Review
