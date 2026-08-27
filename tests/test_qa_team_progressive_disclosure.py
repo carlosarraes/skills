@@ -34,7 +34,8 @@ class QaTeamProgressiveDisclosureTests(unittest.TestCase):
         self.assertEqual(
             frontmatter(self.skill),
             "name: qa-team\n"
-            "description: Use when the user asks for a multi-agent QA review team or comprehensive QA-team code review of a branch or diff, rather than acceptance testing.",
+            "description: Use only when explicitly invoked for a comprehensive multi-agent QA code review.\n"
+            "disable-model-invocation: true",
         )
 
     def test_entrypoint_is_a_compact_decision_complete_router(self):

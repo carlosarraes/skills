@@ -1,6 +1,7 @@
 ---
 name: qa-team
-description: Use when the user asks for a multi-agent QA review team or comprehensive QA-team code review of a branch or diff, rather than acceptance testing.
+description: Use only when explicitly invoked for a comprehensive multi-agent QA code review.
+disable-model-invocation: true
 ---
 
 # QA Team
