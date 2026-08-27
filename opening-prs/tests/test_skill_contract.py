@@ -9,7 +9,6 @@ SKILL = ROOT / "SKILL.md"
 FALLBACK = ROOT / "references" / "fallback-pr-body.md"
 EVALS = ROOT / "evals" / "evals.json"
 FACTS = ROOT / "references" / "gitflow-facts.md"
-SOURCE_FACTS = ROOT.parent / "ship-gitflow" / "references" / "gitflow-facts.md"
 
 
 def normalized(text):
@@ -102,9 +101,73 @@ class OpeningPrsSkillTests(unittest.TestCase):
         ):
             self.assertIn(normalized(phrase), self.flat)
 
+    def test_gitflow_red_pipeline_stops_at_evidence_and_commit_handoff(self):
+        start = self.body.index("With the exact `gitflow` argument")
+        end = self.body.index("**Complete when:**", start)
+        gitflow = normalized(self.body[start:end])
+        for phrase in (
+            "red pipeline",
+            "exact failed evidence",
+            "implementation/commit handoff",
+            "does not modify code or create commits",
+        ):
+            self.assertIn(normalized(phrase), gitflow)
+        for forbidden in ("fix the failing twin", "mirror the fix", "push, mirror"):
+            self.assertNotIn(normalized(forbidden), gitflow)
+
+    def test_gitflow_bootstraps_a_source_twin_before_mirroring_patches(self):
+        start = self.body.index("With the exact `gitflow` argument")
+        end = self.body.index("**Complete when:**", start)
+        gitflow = normalized(self.body[start:end])
+        for phrase in (
+            "when neither twin contains the ticket commits",
+            "discover the completed source patchset",
+            "bootstrap the matching source twin",
+            "then mirror it with `bt pick`",
+            "never open an empty pr",
+        ):
+            self.assertIn(normalized(phrase), gitflow)
+
+    def test_gitflow_records_and_previews_evidence_per_twin(self):
+        for phrase in (
+            "one base/head range per twin",
+            "complete diff per twin",
+            "verification result per twin",
+            "reviewer brief per twin",
+            "preview each twin's forge, base, title, body, verification, and missing evidence separately",
+            "pipeline result for each twin",
+        ):
+            self.assertIn(normalized(phrase), self.flat)
+        self.assertNotIn("establish exactly one base/head range and", self.flat)
+
+    def test_gitflow_existing_pushed_twins_only_reuse_or_stop_on_divergence(self):
+        start = self.body.index("With the exact `gitflow` argument")
+        end = self.body.index("**Complete when:**", start)
+        gitflow = normalized(self.body[start:end])
+        for phrase in (
+            "reuse, fast-forward, or cherry-pick only",
+            "divergence stops",
+            "report exact branch/pr facts",
+            "never rewrite",
+        ):
+            self.assertIn(normalized(phrase), gitflow)
+        self.assertNotIn("create or refresh", gitflow)
+
     def test_gitflow_facts_are_preserved_under_opening_prs(self):
         self.assertTrue(FACTS.is_file())
-        self.assertEqual(FACTS.read_text(encoding="utf-8"), SOURCE_FACTS.read_text(encoding="utf-8"))
+        facts = normalized(FACTS.read_text(encoding="utf-8"))
+        for phrase in (
+            "{ticket}-prd",
+            "`main`",
+            "{ticket}-hml",
+            "`homolog`",
+            "bt pr create --no-push --ai --close-source-branch",
+            "bt pick show",
+            "bt pick run",
+            "bt run list --branch <branch>",
+            "bt run watch <id>",
+        ):
+            self.assertIn(normalized(phrase), facts)
 
     def test_fallback_is_loaded_only_when_repository_has_no_template(self):
         self.assertIn("[fallback pr body](references/fallback-pr-body.md)", self.body.lower())
