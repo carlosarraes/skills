@@ -39,11 +39,21 @@ If no ticket ID is found in either the argument or branch name, enter **reposito
 
 ## Step 2: Gather available context
 
-In ticket-backed mode, run independent lookups in the same turn (parallel Bash calls). In repository-only mode, skip ticket-specific queries and continue with repository, branch, and diff evidence.
+In ticket-backed mode, run independent lookups in the same turn (parallel Bash calls). In repository-only mode, run the non-ticket provider availability probe below, skip ticket-specific queries, and continue with repository, branch, and diff evidence.
 
 ### 2a. Ticket details, relations, and comments
 
-Only run the following ticket lookup when a ticket ID was resolved.
+Only run the following ticket lookup when a ticket ID was resolved. A provider availability probe is separate from a ticket lookup and is safe to run without an ID.
+
+**Repository-only provider availability probe:** use the selected platform (default `linear`) and run its version/help probe without any ticket ID or query:
+
+```bash
+linear --version
+# or, when platform is jira:
+jira --version
+```
+
+Capture and report the exact probe command, stdout, stderr, and exit status as separate fields. This probe runs without attempting a ticket lookup. Preserve a supplied or observed failure verbatim, including `linear: command not found`; do not turn a probe into a ticket lookup, pass a placeholder ID, or retry it in a loop.
 
 **Linear** (default):
 
@@ -73,7 +83,7 @@ This returns JSON — extract the same fields: title, description, priority, sta
 
 If the provider CLI or lookup fails, preserve the exact command, stdout/stderr, and exit status as the **exact lookup failure** in the report. Do not paraphrase an error into ticket facts, retry a failed lookup in a loop, or ask for a replacement ID. A failed ticket lookup falls back to repository-only mode when a repository is available.
 
-In repository-only mode, record `Ticket context: unavailable` and the exact lookup outcome. If no provider command could be run because no ticket ID existed, say `lookup not attempted — no ticket ID`; if an environment probe was attempted and failed, copy its exact command/error (for example, `linear: command not found`). Never fabricate ticket title, description, blockers, comments, requirements, or acceptance criteria.
+In repository-only mode, record `Ticket context: unavailable`, `Ticket lookup: not attempted — no ticket ID`, and the provider probe's exact command/status/stderr separately. If the probe fails, copy its exact command/error (for example, `linear: command not found`) without normalizing it. Never fabricate ticket title, description, blockers, comments, requirements, or acceptance criteria.
 
 ### 2b. Existing branches and PRs
 
@@ -86,17 +96,22 @@ gh pr list --search "<TICKET-ID>" --state all --json number,title,state,headRefN
 
 Replace `<ticket-id>` / `<TICKET-ID>` with the actual ticket ID (lowercase for branch grep, uppercase for PR search).
 
-**Repository-only mode:** inspect the current branch, worktree status, recent commits, changed-file list, and diff summary instead of filtering by a ticket ID:
+**Repository-only mode:** inspect committed branch changes, staged changes, and unstaged changes instead of filtering by a ticket ID. Detect the base/merge-base first, record the chosen base ref, then inspect all three change sets:
 
 ```bash
 git rev-parse --abbrev-ref HEAD
+git merge-base HEAD <base-ref>
+git diff <base>...HEAD --stat
+git diff <base>...HEAD --name-only
 git status --short
+git diff --cached --stat
+git diff --cached --name-only
 git diff --stat
 git diff --name-only
 git log --oneline -10
 ```
 
-Use those observed paths and changes as the scope for discovery. Do not invent ticket references or requirements from filenames, commit messages, or code patterns.
+Use `git diff <base>...HEAD` for committed branch changes, `git diff --cached` for staged changes, and `git status --short` plus `git diff` for unstaged changes. Use all observed paths and changes as the scope for discovery. Do not invent ticket references or requirements from filenames, commit messages, or code patterns.
 
 ## Step 3: Codebase scan
 

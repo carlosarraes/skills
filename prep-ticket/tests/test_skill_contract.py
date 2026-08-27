@@ -39,6 +39,28 @@ class PrepTicketSkillTests(unittest.TestCase):
         ):
             self.assertNotIn(normalized(forbidden), self.flat_body)
 
+    def test_repository_only_probes_provider_and_preserves_exact_failure_metadata(self):
+        for phrase in (
+            "provider availability probe",
+            "linear --version",
+            "capture and report the exact probe command, stdout, stderr, and exit status as separate fields",
+            "linear: command not found",
+            "without attempting a ticket lookup",
+            "ticket lookup: not attempted — no ticket id",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_repository_only_discovers_committed_staged_and_unstaged_changes(self):
+        for phrase in (
+            "committed branch changes",
+            "git merge-base",
+            "git diff <base>...head",
+            "staged changes",
+            "git diff --cached",
+            "unstaged changes",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
     def test_behavior_case_covers_missing_ticket_repository_only_mode(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
         self.assertEqual(payload["skill_name"], "prep-ticket")
@@ -62,6 +84,7 @@ class PrepTicketSkillTests(unittest.TestCase):
             "repository-only mode",
             "ticket context unavailable",
             "exact lookup failure",
+            "linear: command not found",
             "not invent",
             "exactly one",
             "evidence-backed",
