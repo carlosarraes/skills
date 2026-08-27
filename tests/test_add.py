@@ -29,6 +29,7 @@ class AddTests(unittest.TestCase):
             (target_root / "removed").symlink_to(repository / "removed")
             (target_root / "foreign").symlink_to(foreign_target)
             (target_root / "regular").mkdir()
+            self.assertTrue((target_root / "removed").is_symlink())
 
         environment = os.environ.copy()
         environment["HOME"] = str(home)
@@ -43,7 +44,7 @@ class AddTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         for target_root in (home / ".claude" / "skills", home / ".agents" / "skills"):
             self.assertTrue((target_root / "kept").is_symlink())
-            self.assertFalse((target_root / "removed").exists())
+            self.assertFalse((target_root / "removed").is_symlink())
             self.assertTrue((target_root / "foreign").is_symlink())
             self.assertTrue((target_root / "regular").is_dir())
 
