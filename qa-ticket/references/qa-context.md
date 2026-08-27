@@ -34,6 +34,6 @@ If the diff is empty, report exactly `No changes found relative to develop` and 
 - Backend-only diff: plan/run backend; mark frontend not applicable.
 - Frontend-only diff: plan/run frontend; mark backend not applicable.
 - Full-stack diff: plan both; execute only healthy surfaces.
-- Missing data: recommend or invoke `/check-data` in its default plan, seed, and verify run; affected tests remain `SKIP/INCONCLUSIVE`, never PASS.
+- Missing data: use one `/check-data` invocation for its default plan → seed → verify run; affected tests remain `SKIP/INCONCLUSIVE`, never PASS.
 
 Validate provider syntax, project URLs/auth, base branch, and health assumptions against the current project before relying on them.

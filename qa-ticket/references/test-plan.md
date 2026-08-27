@@ -15,7 +15,11 @@ Every case includes:
 
 Group the printed checklist by surface and category so gaps are visible. Never accept “happy path only” when changed behavior requires error or edge coverage. Keep the complete backend and frontend happy-path/error/edge-case coverage floor enumerated even when a surface is unavailable; mark each such result as `SKIP/INCONCLUSIVE`.
 
-The printed plan and final report each include an explicit **Fixture setup** field: `/check-data` default `plan → seed → verify`, or `not needed` with evidence; never `/seed-data`.
+When data is missing or unavailable, the printed plan and final report each contain this exact line:
+Fixture setup: /check-data (default: plan → seed → verify)
+Only with evidence may either artifact use this alternate line:
+Fixture setup: not needed — <evidence>
+A single /check-data invocation owns all three phases; never express them as multiple skills or commands.
 
 ## Coverage floor
 
@@ -44,6 +48,6 @@ Exclude unchanged modules, infrastructure, code style, generated files, lockfile
 
 ## Data readiness
 
-This skill does not provision fixtures. Plan unique values and cleanup. If required data is missing, keep the affected case visible as `SKIP/INCONCLUSIVE`, state why, and recommend or invoke `/check-data` in its default plan, seed, and verify run before retrying.
+This skill does not provision fixtures. Plan unique values and cleanup. If required data is missing, keep the affected case visible as `SKIP/INCONCLUSIVE`, state why, and use one `/check-data` invocation in its default plan → seed → verify run before retrying.
 
 Print the complete plan before execution. The report must later contain the same IDs; none may disappear.

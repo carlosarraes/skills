@@ -175,22 +175,44 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         router = " ".join(self.body.lower().split())
         for phrase in (
             "fixture setup",
-            "/check-data` default `plan → seed → verify",
-            "`not needed` with evidence",
-            "never `/seed-data`",
+            "fixture setup: /check-data (default: plan → seed → verify)",
+            "fixture setup: not needed — <evidence>",
+            "single /check-data invocation owns all three phases",
+            "never express them as multiple skills or commands",
         ):
             self.assertIn(phrase, router)
 
+    def test_fixture_setup_line_is_exact_in_plan_and_final_report(self):
+        plan_start = self.body.index("### Complete targeted plan before execution")
+        plan_end = self.body.index("### Evidence, not intention", plan_start)
         report_start = self.body.index("### Complete report and truthful verdict")
         report_end = self.body.index("## Never rules", report_start)
-        final_report = " ".join(self.body[report_start:report_end].lower().split())
+        artifacts = (
+            " ".join(self.body[plan_start:plan_end].lower().split()),
+            " ".join(self.body[report_start:report_end].lower().split()),
+        )
+        for artifact in artifacts:
+            self.assertIn(
+                "fixture setup: /check-data (default: plan → seed → verify)",
+                artifact,
+            )
+            self.assertIn("fixture setup: not needed — <evidence>", artifact)
+            self.assertIn("only with evidence", artifact)
+
+    def test_pre_output_audit_covers_both_artifacts_simulation_and_deleted_entrypoint(self):
+        audit_start = self.body.index("### Pre-output audit")
+        audit_end = self.body.index("## Never rules", audit_start)
+        audit = " ".join(self.body[audit_start:audit_end].lower().split())
         for phrase in (
-            "repeat the explicit **fixture setup** field",
-            "/check-data` default `plan → seed → verify",
-            "`not needed` with evidence",
-            "never `/seed-data`",
+            "before returning",
+            "including simulation",
+            "both artifacts",
+            "printed plan and final report",
+            "fixture setup field",
+            "rewrite any `/seed-data` occurrence",
+            "entrypoint is deleted",
         ):
-            self.assertIn(phrase, final_report)
+            self.assertIn(phrase, audit)
 
     def test_unavailable_surfaces_keep_the_complete_coverage_floor(self):
         sources = [
@@ -284,7 +306,7 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
                 )
                 self.assertNotRegex(
                     normalized_line,
-                    r"\b(?:run|invoke|call|execute|recommend|use)\b[^.]*[`]?/seed-data",
+                    r"(?<!never )\b(?:run|invoke|call|execute|recommend|use|emit|return)\b[^.]*[`]?/seed-data",
                 )
         self.assertTrue(occurrences)
 
@@ -301,9 +323,14 @@ class QaTicketProgressiveDisclosureTests(unittest.TestCase):
         ).lower()
         for phrase in (
             "fixture setup",
-            "/check-data default plan → seed → verify",
-            "not needed with evidence",
-            "never uses /seed-data",
+            "fixture setup: /check-data (default: plan → seed → verify)",
+            "fixture setup: not needed — <evidence>",
+            "single /check-data invocation owns all three phases",
+            "never express them as multiple skills or commands",
+            "before returning",
+            "both artifacts",
+            "rewrite any /seed-data occurrence",
+            "entrypoint is deleted",
             "complete backend and frontend happy-path/error/edge-case coverage",
             "surface is unavailable",
             "skip/inconclusive",

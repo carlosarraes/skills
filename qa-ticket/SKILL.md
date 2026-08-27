@@ -22,19 +22,19 @@ Do not weaken the coverage floor, evidence requirements, or report because the u
 
 ## Whole-run simulation
 
-Enable simulation only for the exact marker `SIMULATION ONLY` or when the user explicitly makes the **entire run** a no-execution preview. After loading this router, issue **no repository commands, no provider commands, no service commands, no browser commands, and no mutations**. Do not inspect files, read references, call agents, or invent observations. Use only supplied scenario facts to return the ordered would-be trace, plan, evidence classifications, limitations, and report. Label all described actions and fixes as simulated.
+Enable simulation only for exact marker `SIMULATION ONLY` or when the user makes the **entire run** a no-execution preview. After loading, issue **no repository commands, no provider commands, no service commands, no browser commands, and no mutations**; do not inspect files, read references, call agents, or invent observations. Use supplied facts only for the would-be trace, plan, evidence classifications, limitations, and report; label actions and fixes simulated.
 
-For each described frontend edit, emit this simulation ledger: `Edit: <file> | HMR: would wait | network idle: would wait | fresh refs: would acquire | next attempt: <N>`. Classify supplied outcomes separately. Never claim a simulated wait, ref acquisition, edit, or retry was observed or occurred.
+For each frontend edit, emit this simulation ledger: `Edit: <file> | HMR: would wait | network idle: would wait | fresh refs: would acquire | next attempt: <N>`. Classify supplied outcomes separately; never claim a simulated wait, ref acquisition, edit, or retry was observed or occurred.
 
-Normal runs are unchanged: “smoke test,” “read-only tests,” or a request not to edit production code is not simulation and still performs discovery and executable QA.
+Normal runs are unchanged: smoke/read-only/no-edit requests are not simulation; they still perform discovery and executable QA.
 
 ## Hard gates
 
 ### Preflight and context before testing
 
-Read [QA context](references/qa-context.md) in full **before preflight** and **before gathering** ticket/diff context. In a normal run, discover project-local URLs/auth/setup and health-check backend/frontend before functional tests. Resolve the selected platform (`linear` default; `jira` accepted), normalize the ticket ID, and gather the `develop...HEAD` diff independently.
+Read [QA context](references/qa-context.md) in full **before preflight** and **before gathering** ticket/diff context. In normal runs, verify project URLs/auth/setup and both surface health before tests. Resolve platform (`linear` default; `jira` accepted), normalize the ticket ID, and gather `develop...HEAD` independently.
 
-If the ticket provider fails, continue with disclosed **diff-only** planning; never invent requirements. If ticket context is missing, continue in diff-only mode without prompting and retain affected evidence as `SKIP/INCONCLUSIVE`. If a surface is unavailable, keep its planned cases as `SKIP/INCONCLUSIVE`, never PASS. If no diff exists, report that and stop.
+If the ticket provider fails, continue disclosed **diff-only** planning; never invent requirements. Missing ticket context stays diff-only without prompting; affected evidence is `SKIP/INCONCLUSIVE`. An unavailable surface keeps planned cases `SKIP/INCONCLUSIVE`, never PASS. If no diff, report and stop.
 
 ### Complete targeted plan before execution
 
@@ -42,7 +42,11 @@ Read [test planning](references/test-plan.md) in full **before drafting** and **
 
 Every case has ID, surface, description, concrete steps, and expected result; its category is exactly `happy-path`, `error`, or `edge-case`. Include every changed endpoint success path. When CRUD applies, preserve **create → read → update → list → delete → verify delete**. Include all validator boundaries on both sides, missing/wrong fields, permission, not-found, conflict, and every relevant frontend error/state/special-input case. Document a changed rate limit but do not stress-hit it merely to prove the annotation. User pressure cannot remove required coverage. Print the complete plan grouped by surface/category before any functional test.
 
-The printed plan must include an explicit **Fixture setup** field: `/check-data` default `plan → seed → verify`, or `not needed` with evidence; never `/seed-data`. Keep the complete backend and frontend happy-path/error/edge-case coverage floor enumerated even when a surface is unavailable; mark each such result as `SKIP/INCONCLUSIVE`.
+For missing or unavailable data, print in the plan:
+Fixture setup: /check-data (default: plan → seed → verify)
+Use the alternate only with evidence:
+Fixture setup: not needed — <evidence>
+A single /check-data invocation owns all three phases; never express them as multiple skills or commands. Keep the complete backend and frontend happy-path/error/edge-case coverage floor enumerated even when a surface is unavailable; mark each such result as `SKIP/INCONCLUSIVE`.
 
 ### Evidence, not intention
 
@@ -52,7 +56,7 @@ Discover routes authoritatively; a user guess never overrides OpenAPI, router, s
 - Frontend PASS requires the browser skill, safe dev auth, current refs, waits, and a **fresh post-action** snapshot/URL/visible-state assertion. DOM-changing actions invalidate old refs. Stale text and code inspection are not evidence.
 - An unavailable service, data fixture, provider, or browser is `SKIP/INCONCLUSIVE`, never PASS. A spinner caused by failed data is not an empty-state pass.
 
-Read [backend QA](references/backend-qa.md) in full **before any backend** route discovery or test. Read [frontend QA](references/frontend-qa.md) in full **before any frontend** route discovery, browser setup, or test. Skip an unaffected surface with an explicit report note.
+Read [backend QA](references/backend-qa.md) in full **before any backend** discovery/test and [frontend QA](references/frontend-qa.md) in full **before any frontend** discovery, browser setup, or test. Skip unaffected surfaces with an explicit report note.
 
 ### Bounded diagnosis and remediation
 
@@ -64,9 +68,17 @@ Write one complete ledger row per frontend edit: `Edit: <file> | HMR: observed |
 
 ### Complete report and truthful verdict
 
-Read [fix, retry, and report](references/fix-retry-and-report.md) again **before the final report**. Include every planned test, result, attempts, expected/actual evidence, skip or failure, diagnosis, fix, and every changed file. Repeat the explicit **Fixture setup** field: `/check-data` default `plan → seed → verify`, or `not needed` with evidence; never `/seed-data`. Preserve the complete backend and frontend happy-path/error/edge-case coverage floor in the report even when a surface is unavailable, marking each such result as `SKIP/INCONCLUSIVE`. Keep PASS notes concise; preserve complete unsuccessful histories.
+Read [fix, retry, and report](references/fix-retry-and-report.md) again **before the final report**. Include every planned test, result, attempts, expected/actual evidence, skip or failure, diagnosis, fix, and every changed file. For missing or unavailable data, repeat in the final report:
+Fixture setup: /check-data (default: plan → seed → verify)
+Repeat the alternate only with evidence:
+Fixture setup: not needed — <evidence>
+Preserve the complete backend and frontend happy-path/error/edge-case coverage floor in the report even when a surface is unavailable, marking each such result as `SKIP/INCONCLUSIVE`. Keep PASS notes concise; preserve complete unsuccessful histories.
 
 State whether the acceptance criteria are satisfied. Any required FAIL or unexecuted case prevents an unqualified satisfied verdict. Separate product failures from environment limitations and provide a concrete recovery next step for each unresolved product or environment issue.
+
+### Pre-output audit
+
+Before returning, including simulation, audit both artifacts: the printed plan and final report. Ensure each has the Fixture setup field; use not-needed only with evidence. Never emit `/seed-data` as an executable command; rewrite any `/seed-data` occurrence because that entrypoint is deleted.
 
 ## Never rules
 
@@ -81,5 +93,5 @@ State whether the acceptance criteria are satisfied. Any required FAIL or unexec
 
 ## Related skills
 
-- Run `/check-data` in its default plan, seed, and verify mode when local rows are missing; this skill tests behavior rather than provisioning fixtures.
+- Use `/check-data` once (default plan → seed → verify) for missing rows; this skill tests behavior, not fixture provisioning.
 - Load `agent-browser` before frontend execution.
