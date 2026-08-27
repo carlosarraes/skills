@@ -22,22 +22,14 @@ class SimplificationAuditSkillTests(unittest.TestCase):
         self.report = REPORT.read_text(encoding="utf-8")
         self.flat_skill = normalized(self.skill)
 
-    def test_model_invoked_frontmatter_has_specific_boundary(self):
+    def test_user_invoked_frontmatter_has_exact_boundary(self):
         frontmatter = self.skill.split("---", 2)[1]
         self.assertIn("name: simplification-audit", frontmatter)
-        self.assertNotIn("disable-model-invocation", frontmatter)
-        for phrase in (
-            "whole-codebase simplification audit",
-            "data structures",
-            "state representation",
-            "control flow",
-            "algorithms",
-            "ownership",
-            "rather than a branch review",
-            "general risk audit",
-            "implementation",
-        ):
-            self.assertIn(phrase, frontmatter)
+        self.assertIn(
+            "description: Use only when explicitly invoked for a whole-codebase simplification audit.",
+            frontmatter,
+        )
+        self.assertIn("disable-model-invocation: true", frontmatter)
 
     def test_authority_is_read_only_and_preserves_repository_state(self):
         for phrase in (

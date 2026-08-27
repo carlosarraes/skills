@@ -1,6 +1,7 @@
 ---
 name: simplification-audit
-description: Use when the user wants a whole-codebase simplification audit of data structures, state representation, control flow, algorithms, or ownership, rather than a branch review, general risk audit, or implementation.
+description: Use only when explicitly invoked for a whole-codebase simplification audit.
+disable-model-invocation: true
 ---
 
 # Simplification Audit
