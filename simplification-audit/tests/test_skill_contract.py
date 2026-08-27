@@ -536,16 +536,31 @@ class SimplificationAuditSkillTests(unittest.TestCase):
         self.assertNotIn("general risk audit", cases["general-risk-audit-near-miss"])
         self.assertNotIn("not a simplification audit", cases["general-risk-audit-near-miss"])
 
+    def test_plan_only_routing_prompt_is_answer_neutral(self):
+        cases = {
+            case["id"]: normalized(case["prompt"])
+            for case in json.loads(ROUTING_CASES.read_text(encoding="utf-8"))
+        }
+        prompt = cases["check-data-plan-only"]
+        self.assertIn("plan", prompt)
+        self.assertIn("non-mutating", prompt)
+        self.assertIn("without changing the database", prompt)
+        self.assertNotIn("check-data", prompt)
+
     def test_root_routing_cases_cover_simplification_boundaries(self):
         cases = {
             case["id"]: case
             for case in json.loads(ROUTING_CASES.read_text(encoding="utf-8"))
         }
         expected = {
-            "simplification-audit-unlabeled-positive": "simplification-audit",
-            "simplification-audit-ambiguous-branch-fix": "clean-up",
-            "simplification-audit-multi-agent-branch-qa": "qa-team",
-            "simplification-audit-full-swarm-pr-review": "review-swarm",
+            "manual-carraes-reviewer": "NONE",
+            "manual-simplification-audit": "NONE",
+            "clean-up-simplification-near-miss": "clean-up",
+            "manual-qa-team": "NONE",
+            "manual-video-extract": "NONE",
+            "none-contract-request": "NONE",
+            "none-visual-walkthrough-request": "NONE",
+            "none-review-posting-request": "NONE",
             "simplification-audit-broad-risk-roadmap-none": "NONE",
         }
         for case_id, route in expected.items():

@@ -11,7 +11,7 @@
   },
   {
     "id": "check-data-plan-only",
-    "prompt": "Use check-data in plan-only mode to design the local QA rows without changing the database.",
+    "prompt": "Design the local QA rows for this branch in a non-mutating planning mode without changing the database.",
     "expected": "check-data"
   },
   {
@@ -105,9 +105,9 @@
     "expected": "NONE"
   },
   {
-    "id": "triage-incident-implementation-near-miss",
-    "prompt": "Investigate the production symptom, cite the evidence, and report whether it is a bug or expected behavior.",
-    "expected": "triage-incident"
+    "id": "triage-incident-fix-near-miss",
+    "prompt": "Implement the production bug fix in the affected service and add regression tests for the reported symptom.",
+    "expected": "exec-ticket"
   },
   {
     "id": "manual-carraes-reviewer",
@@ -142,6 +142,11 @@
   {
     "id": "none-review-posting-request",
     "prompt": "Post review comments on this pull request in my voice after inspecting the diff.",
+    "expected": "NONE"
+  },
+  {
+    "id": "simplification-audit-broad-risk-roadmap-none",
+    "prompt": "Audit the whole repository for bugs, security vulnerabilities, dependency risk, and roadmap priorities, then produce implementation plans.",
     "expected": "NONE"
   },
   {
