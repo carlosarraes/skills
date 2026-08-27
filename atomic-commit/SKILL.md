@@ -7,7 +7,7 @@ description: Use when the user asks to commit changes and the worktree contains 
 
 Split staged and unstaged git changes into logical atomic commits using conventional commits format.
 
-**Core principle:** Analyze → present the plan → get approval → commit. Never modify code.
+**Core principle:** Analyze → group → record the plan → commit. Invocation is commit authority. Never modify code.
 
 ## Phase 1: Analyze Changes
 
@@ -70,9 +70,9 @@ Foundational changes first:
 
 Group more aggressively — fewer well-organized commits beat many tiny single-file commits. A commit with 5 related files is better than 5 one-file commits.
 
-## Phase 3: Present the Plan
+## Phase 3: Record the plan
 
-Display the full commit plan before executing anything:
+Record the full commit plan before executing anything:
 
 ```
 ## Commit Plan
@@ -88,17 +88,13 @@ Skipped files (not committed):
 - .env.local (secrets)
 ```
 
-Then ask: **"Proceed with this commit plan? (yes / edit / abort)"**
+The plan is included in the final record. The invocation supplies authority: Invocation is commit authority, so execute immediately after recording the plan.
 
-- **yes** — execute as shown
-- **edit** — ask which commits to merge, split, reorder, or re-message
-- **abort** — stop without committing
+## Phase 4: Execute the plan
 
-Do NOT proceed without explicit approval.
+For each commit in the recorded plan:
 
-## Phase 4: Execute Commits
-
-For each commit in the approved plan:
+Stage each commit using explicit paths only:
 
 ```bash
 git add path/to/file1 path/to/file2
@@ -113,10 +109,7 @@ EOF
 
 Run `git status` between each commit to verify staging is correct.
 
-If a commit fails (hook failure, GPG issue, etc.):
-1. Report the error
-2. Stop — do NOT continue to the next commit
-3. Ask the user how to proceed
+If a commit fails (hook failure, GPG issue, etc.), report the command and complete output, stop immediately without attempting later commits, and preserve the index and worktree state. A hook failure ends the run with the command, output, staged paths, and worktree status.
 
 After all commits, show the result:
 
@@ -160,13 +153,12 @@ Message rules:
 - Commit without showing the plan first
 - Commit `TASKS.md` or `CHANGELOG.md`
 - Commit files that look like secrets
-- Continue after a failed commit without user input
+- Continue after a failed commit; stop with evidence and preserve state
 - Force push, amend previous commits, or run `git reset`/`git checkout --`/`git clean`
 
 **Always:**
 - Stage files by explicit path
 - Run `git status` between commits
-- Get user approval before executing the plan
 - Respect project-level CLAUDE.md conventions if present
 - Mark binary files with `[binary]` in the plan
 

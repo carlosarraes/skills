@@ -1,0 +1,16 @@
+{
+  "skill_name": "atomic-commit",
+  "evals": [
+    {
+      "id": "invocation-authorizes-commit",
+      "prompt": "SIMULATION ONLY. I invoked /atomic-commit for a worktree containing one feature with its test and one unrelated documentation edit. Describe the exact action trace through completion.",
+      "expected_output": "Groups the two concerns, records the plan, stages exact paths, and commits both without asking for approval.",
+      "expectations": [
+        "does not ask whether to proceed",
+        "stages explicit paths",
+        "creates focused conventional commits",
+        "stops and reports exact state after a failed hook"
+      ]
+    }
+  ]
+}
