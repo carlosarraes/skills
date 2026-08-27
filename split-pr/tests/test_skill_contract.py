@@ -145,6 +145,21 @@ class SplitPrSkillTests(unittest.TestCase):
             "without a second approval",
         ):
             self.assertIn(normalized(phrase), separable_text)
+        mergeability_expectations = [
+            normalized(expectation)
+            for expectation in separable["expectations"]
+            if "mergeability" in normalized(expectation)
+        ]
+        self.assertTrue(mergeability_expectations)
+        mergeability_text = " ".join(mergeability_expectations)
+        for phrase in (
+            "for each layer",
+            "non-mutating",
+            "mergeability",
+            "intended parent",
+            "conflict evidence",
+        ):
+            self.assertIn(normalized(phrase), mergeability_text)
 
         cohesive = next(
             case for case in payload["evals"] if case["id"] == "cohesive-no-safe-seam-stop"
@@ -165,6 +180,11 @@ class SplitPrSkillTests(unittest.TestCase):
             case for case in payload["evals"] if case["id"] == "mondrio-exact-cap-near-miss"
         )
         near_miss_prompt = normalized(near_miss["prompt"])
+        for phrase in (
+            "no direct split-pr invocation was supplied",
+            "only signal is the observed automatic policy check",
+        ):
+            self.assertIn(normalized(phrase), near_miss_prompt)
         for forbidden in (
             "must not auto-trigger",
             "does not auto-trigger",
@@ -186,6 +206,10 @@ class SplitPrSkillTests(unittest.TestCase):
             "leaves the branch and refs unchanged",
         ):
             self.assertIn(normalized(phrase), near_miss_text)
+        self.assertIn(
+            normalized("does not automatically invoke split-pr"),
+            normalized(near_miss["expected_output"]),
+        )
 
 
 if __name__ == "__main__":

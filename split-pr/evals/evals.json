@@ -10,6 +10,7 @@
         "Starts automatically from the observed violation without a second approval or a proceed question.",
         "Shows the seam plan before any git mutation and records the original branch and exact SHA.",
         "Creates only new stack branches and never rewrites, resets, or force-pushes the original branch.",
+        "For each layer, independently verifies mergeability against its intended parent with a non-mutating merge-tree check and records conflict evidence.",
         "Verifies every layer independently with observed build, test, and runtime evidence where applicable.",
         "Reports stack order, branch identities, verification outcomes, and any remaining scope."
       ]
@@ -28,7 +29,7 @@
     },
     {
       "id": "mondrio-exact-cap-near-miss",
-      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. An observed Mondrio repository size-policy check reports exactly 1,000 changed lines under its effective-line calculation. The branch has separable seams. Describe the resulting split-pr action trace and whether the policy result changes routing.",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, mutate git, push, or create PRs. An observed Mondrio repository size-policy check reports exactly 1,000 changed lines under its effective-line calculation. No direct split-pr invocation was supplied; the only signal is the observed automatic policy check. The branch has separable seams. Describe the resulting split-pr action trace and whether the policy result changes routing.",
       "expected_output": "Treats exactly 1,000 changed lines as the cap boundary, not an automatic trigger. It does not automatically invoke split-pr from that size-policy result, leaves the branch and refs unchanged, and requires a separate direct invocation before any split work.",
       "expectations": [
         "Recognizes exactly 1,000 changed lines as a size-policy near miss rather than an automatic trigger.",
