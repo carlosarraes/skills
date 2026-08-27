@@ -69,6 +69,30 @@ class CheckDataSkillTests(unittest.TestCase):
     def test_old_split_seed_entrypoint_is_not_instructed(self):
         self.assertNotIn("/seed-data", self.body)
 
+    def test_unreachable_database_stops_default_before_seed_and_verify(self):
+        self.assertIn(
+            "default execution stops before seeding and verification",
+            self.flat_body,
+        )
+
+    def test_new_plans_record_identity_and_select_the_current_candidate(self):
+        for phrase in (
+            "every newly generated plan records the branch name",
+            "exact head sha",
+            "schema identity",
+            "select the new versioned candidate for the current run",
+        ):
+            self.assertIn(phrase, self.flat_body)
+
+    def test_seed_mechanism_is_checked_for_destructive_or_non_idempotent_behavior(self):
+        for phrase in (
+            "before invoking the selected seed mechanism",
+            "destructive reset/drop/delete behavior",
+            "non-idempotent",
+            "do not invoke it",
+        ):
+            self.assertIn(phrase, self.flat_body)
+
     def test_behavior_cases_cover_default_and_plan_only_branches(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
         self.assertEqual(payload["skill_name"], "check-data")
