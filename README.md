@@ -23,6 +23,7 @@ Each step is optional — jump in wherever your ticket already is.
 | `carraes-reviewer` | Use only when explicitly invoked to review a PR or diff in Carlos Arraes's voice. |
 | `check-data` | Use when planning and loading schema-aware local database rows for branch or ticket QA, with optional plan-only mode. |
 | `clean-up` | Use when a completed branch needs a senior pre-PR audit for bugs, missed reuse, unnecessary complexity, or missing regression tests, with valid findings fixed. |
+| `create-verification-skill` | Use only when explicitly invoked to create a project-local verification skill for a real UI, CLI, service, desktop app, mobile app, or library. |
 | `exec-ticket` | Use when the user wants an agreed ticket plan implemented on the current branch with test-driven, minimal changes. |
 | `opening-prs` | Use when the user wants to open, create, prepare, or draft an informative pull request for a completed branch. |
 | `pr-sweep` | Use when open non-draft PRs need ongoing convergence to mergeability across CI, conflicts, size gates, bot feedback, and human review. |

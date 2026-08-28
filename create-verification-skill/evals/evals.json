@@ -1,0 +1,23 @@
+{
+  "skill_name": "create-verification-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a project-local verification skill for this CLI. I use Claude Code, Codex, and Pi. Drive the real add command and prove the JSON file it writes, without asking me for facts present in the repo.",
+      "expected_output": "A canonical .agents verification skill, required client links, a feature map, and an executed proof of the CLI side effect.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Make a control skill for this web app. Reuse its Playwright setup, isolate the server and database, verify a saved record from a second user-facing view, and keep screenshots after teardown.",
+      "expected_output": "A repository-specific browser verification skill whose proof survives cleanup and verifies persistence.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Create the verification skill for this desktop app, but the running instance belongs to me and cannot be isolated. Do not risk my session.",
+      "expected_output": "The skill records the isolation blocker and refuses to drive the shared instance rather than killing or mutating it.",
+      "files": []
+    }
+  ]
+}
