@@ -38,6 +38,19 @@
         "returns to the normal design process",
         "does not quietly implement the changed outcome"
       ]
+    },
+    {
+      "id": "persistent-migration-invariants",
+      "prompt": "SIMULATION ONLY: do not inspect a repository or mutate files. A settled plan adds idempotent payment-event handling with a stable event_id. Concurrent and interrupted deliveries can touch shared account state, every caller of the replaced helper is internal, and duplicate delivery has caused the same bug twice. Describe the exact /exec-ticket action trace.",
+      "expected_output": "Names the intended outcome and domain invariants before tactics, proves repeated and interrupted execution plus competing delivery, gives shared mutation one structural owner, migrates every controlled caller and deletes the legacy API in the same green change, and encodes the recurring lesson in an executable invariant. It builds reusable machinery only when observed repetition justifies it.",
+      "expectations": [
+        "states the observable outcome and domain invariants before implementation tactics",
+        "tests repeat, interrupted execution, and competing actors",
+        "serializes shared mutation structurally",
+        "migrates every controlled caller before deleting the obsolete API",
+        "encodes the recurring lesson in an executable invariant",
+        "builds reusable machinery only for observed repeated work"
+      ]
     }
   ]
 }

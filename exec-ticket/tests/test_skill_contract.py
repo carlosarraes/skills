@@ -112,7 +112,7 @@ class ExecTicketSkillTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, self.normalized_body)
 
-    def test_behavior_evals_cover_three_required_cases(self):
+    def test_behavior_evals_cover_operational_and_migration_cases(self):
         payload = json.loads(EVALS.read_text(encoding="utf-8"))
         self.assertEqual(payload["skill_name"], "exec-ticket")
         self.assertEqual(
@@ -121,6 +121,7 @@ class ExecTicketSkillTests(unittest.TestCase):
                 "settled-plan-without-contract-files",
                 "missing-ticket-provider-with-local-evidence",
                 "material-outcome-change-stops-design",
+                "persistent-migration-invariants",
             ],
         )
         for case in payload["evals"]:
@@ -129,11 +130,13 @@ class ExecTicketSkillTests(unittest.TestCase):
             self.assertIsInstance(case["expectations"], list)
             self.assertTrue(case["expectations"])
 
-        first, second, third = payload["evals"]
+        first, second, third, fourth = payload["evals"]
         self.assertIn("continues without approval artifacts", first["expected_output"])
         self.assertIn("continues without approval artifacts", second["expected_output"])
         self.assertIn("stops before writing tests or source", third["expected_output"])
         self.assertIn("decision required", third["expected_output"])
+        self.assertIn("interrupted execution", fourth["expected_output"])
+        self.assertIn("deletes the legacy API", fourth["expected_output"])
 
 
 if __name__ == "__main__":

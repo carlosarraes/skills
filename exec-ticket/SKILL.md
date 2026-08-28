@@ -48,8 +48,14 @@ rules or to invent a new user-visible outcome. If there is no plan or prior
 design, return to the normal design process; a genuinely trivial ticket may
 proceed after its one-line approach is confirmed.
 
+Before choosing tactics, state the observable outcome and the invariants that
+make it true. Name accepted and illegal domain states, the boundary that owns
+external validation, and the component that owns each shared mutation. These
+are implementation constraints, not a new user-visible design.
+
 **Complete when:** each requested behavior, non-goal, and available proof is
-named, and the source of authority for this run is clear.
+named, the outcome and invariants are explicit, and the source of authority for
+this run is clear.
 
 ## Phase 3: Record reuse decisions
 
@@ -69,6 +75,11 @@ existing helper; when none fits, record the searches and the selected next
 option. Do not create a repository file for these decisions. Do not begin RED
 until every responsibility has a decision.
 
+Build a reusable helper, script, or generator only when repeated mechanical
+work is already visible and the new owner removes that repetition. Keep a
+one-off transformation inline. A hypothetical future caller does not earn a
+new abstraction.
+
 **Complete when:** every responsibility has one evidence-backed decision and no
 selected tactic skips a compatible existing solution.
 
@@ -84,6 +95,25 @@ loop:
 - **REFACTOR:** refactor only while green: simplify the implementation and keep
   the diff focused; add no
   speculative abstraction or dependency.
+
+For behavior that changes durable or shared state, RED also proves the
+operational invariants that apply:
+
+- repeat the same stable operation identity and observe one intended effect;
+- interrupt after each externally visible write, resume, and observe the same
+  final state as an uninterrupted run; and
+- race competing actors when they can touch the same state, proving one
+  transaction, conditional write, queue, lock, or single owner serializes it.
+
+When the repository controls every caller of a replaced API, migrate the
+callers and delete the obsolete path in the same green change. Prove zero
+remaining references. Compatibility code requires a demonstrated external
+consumer or an explicit settled requirement.
+
+When the work exposes a recurring failure, encode the lesson at the narrowest
+executable point that prevents recurrence: a type, boundary check, behavior
+test, lint rule, helper, or runtime invariant. A reminder comment alone leaves
+the same failure available.
 
 If a discovery materially changes the requested user-visible outcome, stop before
 writing tests or source that encode the changed outcome. Report the discovery
