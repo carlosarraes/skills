@@ -1,0 +1,23 @@
+{
+  "skill_name": "maintain-verification-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Audit this repo's verifier unattended. Prefer its canonical .agents skill over a stale Cursor copy, exercise every feature, and leave product code alone.",
+      "expected_output": "The canonical target is selected without a question and every feature receives cited source and live coverage.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Maintain verify-admin specifically. This monorepo also has verify-storefront, so use my explicit target and repair only its broken browser recipe.",
+      "expected_output": "The named verifier wins, edits stay within it, and the repaired recipe is re-driven live.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Audit the verification map. Checkout behavior is broken in the running app even though its recipe matches source. Do not change application code during this pass.",
+      "expected_output": "The product regression is reported separately and the map is not rewritten to accept broken behavior.",
+      "files": []
+    }
+  ]
+}

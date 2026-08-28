@@ -42,18 +42,19 @@ class SkillQualityTests(unittest.TestCase):
     def test_first_party_descriptions_fit_the_routing_metadata_budget(self):
         result = load_module().check(ROOT)
 
-        self.assertEqual(result["inventory_count"], 15)
+        self.assertEqual(result["inventory_count"], 16)
         self.assertEqual(
             {skill["name"] for skill in result["skills"]},
             {
                 "atomic-commit", "carraes-reviewer", "check-data", "clean-up",
                 "create-verification-skill",
                 "exec-ticket", "opening-prs", "pr-sweep", "prep-ticket",
+                "maintain-verification-skill",
                 "qa-team", "qa-ticket", "simplification-audit", "split-pr",
                 "triage-incident", "video-extract",
             },
         )
-        self.assertLessEqual(result["description_characters"], 8_680)
+        self.assertLessEqual(result["description_characters"], 9_000)
         self.assertTrue(
             all(
                 skill["description"].startswith(
