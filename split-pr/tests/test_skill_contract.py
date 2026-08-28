@@ -95,6 +95,30 @@ class SplitPrSkillTests(unittest.TestCase):
             self.assertIn(normalized(phrase), verification)
         self.assertLess(verification.index("git merge-tree"), verification.index("repository build"))
 
+    def test_mergeability_rows_are_literal_audited_and_repeated_in_final_report(self):
+        row = (
+            "Mergeability: git merge-tree --write-tree <intended-parent> <layer-commit> "
+            "| exit: <status> | conflicts: <none-or-details> | output: <observed-output>"
+        )
+        verification_start = self.body.index("### Step 5: Verify every layer independently")
+        report_start = self.body.index("### Step 7: Report the result")
+        verification = normalized(self.body[verification_start:report_start])
+        report = normalized(self.body[report_start:])
+
+        self.assertIn(normalized(row), verification)
+        self.assertIn("before build/test/runtime evidence", verification)
+        for phrase in (
+            "would-run",
+            "unobserved",
+            "never claim execution",
+            "missing command, exit, conflict, or output field",
+            "makes report incomplete",
+            "must be corrected",
+        ):
+            self.assertIn(normalized(phrase), verification + " " + report)
+        self.assertIn(normalized(row), report)
+        self.assertIn("for every layer", report)
+
     def test_each_layer_is_verified_independently(self):
         for phrase in (
             "verify every layer independently",
@@ -160,6 +184,22 @@ class SplitPrSkillTests(unittest.TestCase):
             "conflict evidence",
         ):
             self.assertIn(normalized(phrase), mergeability_text)
+        row = (
+            "Mergeability: git merge-tree --write-tree <intended-parent> <layer-commit> "
+            "| exit: <status> | conflicts: <none-or-details> | output: <observed-output>"
+        )
+        separable_rubric = normalized(
+            " ".join([separable["expected_output"]] + separable["expectations"])
+        )
+        for phrase in (
+            row,
+            "one exact mergeability row for every layer in the final report",
+            "before build/test/runtime evidence",
+            "would-run/unobserved placeholders",
+            "never claims execution",
+            "missing command, exit, conflict, or output field",
+        ):
+            self.assertIn(normalized(phrase), separable_rubric)
 
         cohesive = next(
             case for case in payload["evals"] if case["id"] == "cohesive-no-safe-seam-stop"

@@ -146,6 +146,20 @@ changing the index, worktree, or refs:
 git merge-tree --write-tree <intended-parent> <layer-commit>
 ```
 
+Before build/test/runtime evidence for that layer, emit one per-layer row in
+this literal shape:
+
+```text
+Mergeability: git merge-tree --write-tree <intended-parent> <layer-commit> | exit: <status> | conflicts: <none-or-details> | output: <observed-output>
+```
+
+For `SIMULATION ONLY` runs, do not claim that the command ran. Keep the command
+and fields while using explicit would-run/unobserved placeholders:
+
+```text
+Mergeability: git merge-tree --write-tree <intended-parent> <layer-commit> | exit: <would-run: unobserved> | conflicts: <unobserved> | output: <unobserved: simulation only>
+```
+
 Use the base as the intended parent for the first layer and the preceding new
 stack branch for every later layer. Record the command, exit status, output, and
 whether any conflict was reported. `git merge-tree --write-tree` is a
@@ -198,11 +212,25 @@ Return one compact report with:
 - the original branch and exact SHA, plus confirmation that it was not rewritten,
   reset, or force-pushed;
 - each new branch, parent/base, commit SHA, files, and PR number;
+- one literal mergeability row for every layer before build/test/runtime evidence,
+  using the exact command, exit, conflicts, and output fields;
 - independent mergeability, build, test, and runtime verification with observed
   outcomes;
 - stack merge order and any retargeting needed after lower layers merge; and
 - remaining scope, failed layers, or a bounded no-safe-seam size-policy
   explanation when the stack could not be completed.
+
+For every layer, include this exact mergeability row in the final report before
+its build/test/runtime evidence:
+
+```text
+Mergeability: git merge-tree --write-tree <intended-parent> <layer-commit> | exit: <status> | conflicts: <none-or-details> | output: <observed-output>
+```
+
+Before outputting the report, audit every layer row. A missing command, exit,
+conflict, or output field makes report incomplete and must be corrected
+before returning it. In `SIMULATION ONLY` reports, use the explicit would-run and
+unobserved placeholders above and never claim execution.
 
 ## Constraints
 

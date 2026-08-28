@@ -11,6 +11,8 @@
         "Shows the seam plan before any git mutation and records the original branch and exact SHA.",
         "Creates only new stack branches and never rewrites, resets, or force-pushes the original branch.",
         "For each layer, independently verifies mergeability against its intended parent with a non-mutating merge-tree check and records conflict evidence.",
+        "Before build/test/runtime evidence, emits one per-layer row with this exact command and fields: Mergeability: git merge-tree --write-tree <intended-parent> <layer-commit> | exit: <status> | conflicts: <none-or-details> | output: <observed-output>.",
+        "Includes one exact mergeability row for every layer in the final report; the pre-output audit treats a missing command, exit, conflict, or output field as incomplete and corrects it; SIMULATION ONLY uses explicit would-run/unobserved placeholders and never claims execution.",
         "Verifies every layer independently with observed build, test, and runtime evidence where applicable.",
         "Reports stack order, branch identities, verification outcomes, and any remaining scope."
       ]
