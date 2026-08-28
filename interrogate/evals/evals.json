@@ -1,0 +1,23 @@
+{
+  "skill_name": "interrogate",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Interrogate this branch against its ticket. Use only subagent tools and models the current runtime exposes, disclose whether the reviewers are truly model-diverse, and do not apply findings.",
+      "expected_output": "At least two independent reviews and a verified categorized verdict with transparent diversity limits.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Tear apart this small auth diff. Trace every security claim to a reachable input and show me what you dismissed as reviewer noise.",
+      "expected_output": "Evidence-backed security findings and an explicit dismissed bucket without speculative warnings.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Run an adversarial review, but this runtime exposes only one permitted model family. I still want independent eyes and an honest agreement map.",
+      "expected_output": "Independent same-family reviews labeled as not model-diverse, followed by a synthesized agreement map.",
+      "files": []
+    }
+  ]
+}

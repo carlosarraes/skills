@@ -25,6 +25,7 @@ Each step is optional — jump in wherever your ticket already is.
 | `clean-up` | Use when a completed branch needs a senior pre-PR audit for bugs, missed reuse, unnecessary complexity, or missing regression tests, with valid findings fixed. |
 | `create-verification-skill` | Use only when explicitly invoked to create a project-local verification skill for a real UI, CLI, service, desktop app, mobile app, or library. |
 | `exec-ticket` | Use when the user wants an agreed ticket plan implemented on the current branch with test-driven, minimal changes. |
+| `interrogate` | Use only when explicitly invoked for an adversarial multi-reviewer challenge of a diff, branch, pull request, design, or selected code. |
 | `maintain-verification-skill` | Use only when explicitly invoked to audit and repair a project-local verification skill and its user-facing feature map. |
 | `opening-prs` | Use when the user wants to open, create, prepare, or draft an informative pull request for a completed branch. |
 | `pr-sweep` | Use when open non-draft PRs need ongoing convergence to mergeability across CI, conflicts, size gates, bot feedback, and human review. |
