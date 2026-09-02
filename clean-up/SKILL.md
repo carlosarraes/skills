@@ -5,7 +5,7 @@ description: Use when a completed branch needs a senior pre-PR audit for bugs, m
 
 # Clean-up: branch review + TDD refactor
 
-End-to-end pass that turns a "works on my machine" feature branch into something you'd defend in code review. Mirrors the workflow a senior engineer runs by hand: scope the diff, dispatch parallel review agents, triage the findings, fix each one test-first, lean on existing helpers, run `/simplify` on the cumulative diff, hand back to the human to push and PR.
+End-to-end pass that turns a "works on my machine" feature branch into something you'd defend in code review. Mirrors the workflow a senior engineer runs by hand: scope the diff, run focused review lenses, triage the findings, fix each one test-first, lean on existing helpers, review the cumulative result, and hand back to the human to push and PR.
 
 ## When to use this skill
 
@@ -57,9 +57,9 @@ git diff --stat <base>..<head>
 
 If the diff exceeds 2,000 changed lines, retain the full scope in the review ledger and partition it automatically into coherent slices by ownership and risk. Process the highest-risk slice first, then continue through the remaining slices without pausing for routine scope selection. Record every unprocessed file and finding as remaining scope for the final handoff.
 
-## Step 3: Dispatch parallel review agents
+## Step 3: Run the review lenses portably
 
-Spawn **four review agents in parallel** in a single message — they're independent and don't share state. Pass each agent the worktree path (or main repo path), the base→head range, and a focused prompt.
+Inspect the current runtime's actual subagent interface and available slots. When independent reviewers are available, launch the four lenses concurrently up to that limit. Pass each delegated reviewer the worktree path, the base→head range, and one focused prompt. The invocation prompt or runtime configuration owns model selection; this skill owns only the review contract.
 
 | Agent | Focus | What to look for |
 |---|---|---|
@@ -71,6 +71,8 @@ Spawn **four review agents in parallel** in a single message — they're indepen
 Each agent must return findings with: **severity (P0/P1/P2/P3), file:line, issue, why it matters, suggested fix**.
 
 Word cap each agent at ~600 words so the synthesis stays scannable.
+
+If subagents are unavailable or a delegated review fails, perform each missing lens directly against the same scope and schema. A missing runtime capability, quota, or provider balance does not block the audit. Record every lens as delegated or direct, including failed attempts, so the handoff states what actually ran. Do not search runtime installation directories or install another capability during clean-up.
 
 ## Step 4: Triage findings
 
@@ -107,7 +109,7 @@ If you can't write a test for a finding (e.g., it requires DB transaction infra 
 
 One commit per finding. Each commit must:
 - Be staged by explicit path (`git add path/to/file`), never `git add -A` or `git add .`
-- Use Conventional Commits format. Check the project's `CLAUDE.md` for the local convention; if absent, use `<type>(<scope>): <description> (TICKET-ID)` where type ∈ {feat, fix, refactor, docs, style, test, chore}.
+- Use Conventional Commits format. Check the repository's instruction files for the local convention; if absent, use `<type>(<scope>): <description> (TICKET-ID)` where type ∈ {feat, fix, refactor, docs, style, test, chore}.
 - Explain the **WHY** in the message body. The reviewer should understand the bug class without re-reading the diff.
 - Pass pre-commit hooks. If hooks reformat files, re-stage and commit again — do not bypass with `--no-verify`.
 - Never include unrelated changes. If you notice something else broken, file it as a follow-up; don't bundle.
@@ -119,37 +121,35 @@ Why one-per-finding: lets the human (and any review bot) re-review commit-by-com
 Before introducing a new helper, search the codebase for an analogous one:
 - Look in `<project>/shared/`, `<module>/utils.py`, sibling modules
 - Search for patterns like `merge_*`, `validate_*`, `_build_*_payload`
-- Read the project's `CLAUDE.md` — it often documents canonical helpers and pitfalls (e.g., PROJ-615 / REF-004 in this repo)
+- Read the repository's instruction files; they often document canonical helpers and pitfalls
 
 If 3+ inline duplicates exist, extracting to a single helper is justified. If only 1-2, KISS — leave the duplication. The "rule of three" is a sanity check, not a mandate.
 
 When the same helper would benefit other modules you didn't change in this run, file a follow-up ticket; don't expand scope mid-clean-up.
 
-## Step 8: When to invoke /find-skills
+## Step 8: Review the cumulative diff
 
-Some findings need capabilities the agent doesn't have. If you hit one of these, run `/find-skills` to discover whether an installable skill addresses it:
-- "We need a typed code-review pass" → could match a code-review skill
-- "We need to wire a CI lint" → could match a CI/lint skill
-- "We need to scaffold a typed mock" → could match a testing skill
-
-Run `/find-skills` BEFORE writing custom logic for the missing capability. If a relevant skill exists, install and invoke it. If not, fall back to the manual approach.
-
-## Step 9: Final pass — invoke /simplify
-
-After all per-finding commits, invoke `/simplify` on the cumulative diff:
+After all per-finding commits, inspect the cumulative diff:
 ```bash
 git diff <base>..HEAD
 ```
 
-`/simplify` runs three more parallel agents (reuse, quality, efficiency) over the full delta. It catches things the per-finding lens misses — patterns that emerge only when looking at the change as a whole (e.g., "you added a helper here and an inline version of the same logic over there").
+The final-pass contract is three lenses over the full delta:
 
-Apply only the in-scope `/simplify` recommendations (P0/P1 + small P2). File the rest as follow-ups.
+- **Reuse:** duplicated helpers, missed existing abstractions, or two implementations of the same decision.
+- **Clarity:** unnecessary nesting, indirection, parameter spread, or structure that hides the changed behavior.
+- **Efficiency:** repeated work, sequential independent operations, unbounded state, or avoidable hot-path cost.
 
-## Step 10: Stop and hand back
+An already-exposed runtime capability may execute this contract whether it is packaged as a skill, command, agent, or plugin. Treat the behavior as the interface; do not require a particular file layout or invocation syntax. If no suitable capability is exposed or its invocation fails, perform the same contract directly. Keep the pass read-only until its findings have been triaged through Step 4.
+
+Apply only in-scope recommendations (P0/P1 + small P2). File the rest as follow-ups.
+
+## Step 9: Stop and hand back
 
 The skill must not push, must not open a pull request, and must not merge. End by:
 - Printing the commit log: `git log --oneline <base>..HEAD`
 - Printing the test status (last `pytest` / `npm test` summary)
+- Listing each review lens as delegated or direct and any failed capability attempts
 - Listing skipped findings, filed follow-up tickets, and remaining or unprocessed scope (if any)
 - Saying which branch the user should `git switch` to in order to review
 

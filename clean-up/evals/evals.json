@@ -23,6 +23,18 @@
         "Do not ask the user to select a candidate during the run and do not silently choose one.",
         "Preserve the no-edit, no-commit, no-push, and no-pull-request boundary."
       ]
+    },
+    {
+      "id": "runtime-capability-fallback",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, or mutate git. The branch and base are unambiguous. There is no installed simplification skill, and one reviewer fails because its provider has no credits. Describe how clean-up continues and what the final handoff records.",
+      "expected_output": "Do not stop and do not search installation or configuration directories. Perform the missing review directly with the same scope and finding schema, then perform the cumulative reuse, clarity, and efficiency contract directly if no exposed capability can do it. Triage any findings normally and record which lenses were delegated or direct plus the failed attempt.",
+      "expectations": [
+        "Treat capability packaging and provider credit failure as a disclosed fallback, not a blocker.",
+        "Perform the missing review directly against the same scope and finding schema.",
+        "Perform the cumulative reuse, clarity, and efficiency contract without requiring a named skill.",
+        "Do not stop, do not search runtime installation directories, and do not install another capability.",
+        "Report every lens as delegated or direct and include the failed attempt."
+      ]
     }
   ]
 }

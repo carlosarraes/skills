@@ -50,7 +50,7 @@ class CleanUpSkillTests(unittest.TestCase):
 
     def test_pr_resolution_handles_all_candidates_instead_of_first_match(self):
         start = self.body.index("## Step 2: Identify the diff")
-        end = self.body.index("## Step 3: Dispatch parallel review agents")
+        end = self.body.index("## Step 3: Run the review lenses portably")
         resolution = normalized(self.body[start:end])
 
         for phrase in (
@@ -88,10 +88,30 @@ class CleanUpSkillTests(unittest.TestCase):
             "GREEN",
             "TDD",
             "one focused commit per finding",
-            "final pass",
-            "/simplify",
+            "cumulative diff",
         ):
             self.assertIn(normalized(phrase), self.flat_body)
+
+    def test_review_and_final_pass_are_runtime_portable(self):
+        for phrase in (
+            "current runtime's actual subagent interface",
+            "perform each missing lens directly",
+            "skill, command, agent, or plugin",
+            "perform the same contract directly",
+            "delegated or direct",
+        ):
+            self.assertIn(normalized(phrase), self.flat_body)
+
+        for forbidden in (
+            "/simplify",
+            "/find-skills",
+            "plugin cache",
+            "luna",
+            "terra",
+            "deepseek",
+            "glm",
+        ):
+            self.assertNotIn(normalized(forbidden), self.flat_body)
 
     def test_handoff_uses_opening_prs_and_keeps_no_push_no_pr_boundary(self):
         self.assertIn("opening-prs", self.flat_body)
@@ -107,7 +127,11 @@ class CleanUpSkillTests(unittest.TestCase):
         self.assertEqual(payload["skill_name"], "clean-up")
         self.assertEqual(
             {case["id"] for case in payload["evals"]},
-            {"large-diff-risk-first", "ambiguous-target-candidate-facts"},
+            {
+                "large-diff-risk-first",
+                "ambiguous-target-candidate-facts",
+                "runtime-capability-fallback",
+            },
         )
 
         for case in payload["evals"]:
@@ -140,6 +164,26 @@ class CleanUpSkillTests(unittest.TestCase):
         )
         self.assertIn("candidate facts", ambiguous_text)
         self.assertIn("do not ask the user to select", ambiguous_text)
+
+        fallback = next(
+            case
+            for case in payload["evals"]
+            if case["id"] == "runtime-capability-fallback"
+        )
+        fallback_text = normalized(
+            " ".join(
+                [fallback["prompt"], fallback["expected_output"]]
+                + fallback["expectations"]
+            )
+        )
+        for phrase in (
+            "no installed simplification skill",
+            "one reviewer fails",
+            "perform the missing review directly",
+            "do not stop",
+            "do not search",
+        ):
+            self.assertIn(normalized(phrase), fallback_text)
 
 
 if __name__ == "__main__":
