@@ -4,48 +4,21 @@ Carlos's portable development workflow for Claude Code, Codex, Pi, and OMP.
 
 ## Workflow
 
-This is a toolbox, not a mode. Start at the first step the work still needs and
-skip anything that does not apply.
+Start at the first step the work still needs. Most tickets do not need every
+skill.
 
-1. **Intake**: use Matt Pocock's external `triage` for a reported bug, or
-   `triage-incident` when a production symptom needs an evidence-backed verdict.
-2. **Prepare**: `prep-ticket`; let external `codebase-design` or
-   `domain-modeling` join only when the module boundary or domain shape is part
-   of the problem.
-3. **Build**: `exec-ticket` with the installed TDD owner. It now carries the
-   useful pstack rules for observable outcomes, idempotency, shared-state
-   ownership, caller migration, and executable regression protection.
-4. **Prove**: create a repo-local real-app harness once with
-   `create-verification-skill`, refresh it periodically with
-   `maintain-verification-skill`, and use `check-data` → `qa-ticket` for the
-   current branch.
-5. **Review**: `clean-up`; add externally maintained `blast-radius` for
-   beyond-diff risk, or invoke `interrogate` for an expensive adversarial pass.
-6. **Ship**: `atomic-commit` → `opening-prs` [`gitflow`] → `pr-sweep`.
+```text
+prep-ticket → exec-ticket → qa-ticket → clean-up
+            → atomic-commit → opening-prs → pr-sweep
+```
 
-`split-pr` may trigger automatically for Mondrio above 1,000 changed lines.
-`qa-team`, `carraes-reviewer`, `simplification-audit`, `video-extract`, and the
-three ported pstack skills are explicit tools, not routine steps.
+- Use `check-data` when QA needs local records.
+- Use `blast-radius` for a known risk outside the diff.
+- Use `interrogate` when independent reviewers should search for unknown risks.
+- Use the verification skills to create or maintain reusable real-app checks.
 
-### Pstack decisions
-
-- **Maintained externally**: `blast-radius`, `show-me-your-work`, and `unslop`.
-- **Ported here**: `create-verification-skill`,
-  `maintain-verification-skill`, and `interrogate`.
-- **Adopted externally**: `typescript-best-practices`.
-- **Adapted, not installed as fragments**: the 14 approved architecture and
-  execution principles. Existing owners apply them when relevant; there is no
-  auto-invoked principle router or `poteto-mode`.
-- **Removed**: `no-comments`. The existing cleanup and review stack covers the
-  useful behavior without its unavailable named-agent dependency.
-
-The adapted principles live at their natural decision points:
-
-| Owner | Principle responsibility |
-| --- | --- |
-| `prep-ticket` and external `codebase-design` | Foundations, domain shape, boundary and type discipline |
-| `exec-ticket` | Outcomes, idempotency, shared state, caller migration, executable lessons, and justified leverage |
-| `clean-up` and `interrogate` | Reader load, subtraction, first-principles challenges, and integrated architecture review |
+See [WORKFLOW.md](WORKFLOW.md) for entry points, optional steps, and high-risk
+workflows.
 
 ## Skills
 
