@@ -1,6 +1,7 @@
 ---
 name: triage-incident
-description: Use when a production or staging symptom, alert, or stakeholder report needs a read-only evidence-backed bug-versus-expected-behavior verdict.
+description: Use only when explicitly invoked to give a read-only evidence-backed bug-versus-expected-behavior verdict on a production or staging symptom, alert, or stakeholder report.
+disable-model-invocation: true
 ---
 
 # Triage Incident
