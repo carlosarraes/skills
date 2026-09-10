@@ -5,7 +5,7 @@ description: Use when open non-draft PRs need ongoing convergence to mergeabilit
 
 # PR Sweep
 
-Drive selected feature PRs to mergeability with one coordinated recurring sweep. It ends only when **all selected PRs are `DONE` simultaneously**; quiet, `WAITING`, or no-dispatch cycles are nonterminal.
+Drive selected feature PRs to mergeability with one coordinated recurring sweep. It ends only when **all selected PRs are `DONE` simultaneously**; quiet, `WAITING`, `READY`, or no-dispatch cycles are nonterminal. Carlos is the hard gate on every merge: a PR merges only on his `Merge` answer to a `lam` request for its current head.
 
 ## When to use
 
@@ -24,17 +24,18 @@ Run these steps in order:
 
 1. Read sweep state, establish scope, and mark eligible quiet PRs.
 2. For every non-quiet PR, collect current CI, mergeability, unresolved threads, latest reviews, issue comments, and the latest Greptile summary in parallel.
-3. Classify findings by form and current review state, then assign each PR `DONE`, `WAITING`, or `NEEDS FIX`.
+3. Classify findings by form and current review state, then assign each PR `DONE`, `READY`, `WAITING`, or `NEEDS FIX`.
 4. Dispatch every selected `NEEDS FIX` PR immediately when its policy branch permits a safe fix; the explicit list or authored-PR default is authority inside the selected scope. Approval state is recorded for reporting and reviewer re-request only, never for permission or routing.
 5. Use exactly **one fix agent per PR per cycle**, in an independent worktree, with the complete finding set. Allow at most **one commit push per PR per cycle**, using a normal push. Non-push API actions may remain separate. A valid safe bot or human fix is in scope; after a push on an approved PR, report that approval is invalidated.
-6. Persist and prune state. If the cycle is nonterminal, re-arm the loop **before** composing its report. Then report status and next ETA.
-7. On later cycles, re-fetch the new head. Converge blocking reviewers only after new-head CI is green.
+6. For every `READY` PR, push or reuse its `lam` merge ask, then wait on all open asks bounded by the cycle interval; merge only on a `Merge` answer for the current head.
+7. Persist and prune state. If the cycle is nonterminal, re-arm the loop **before** composing its report. Then report status and next ETA.
+8. On later cycles, re-fetch the new head. Converge blocking reviewers only after new-head CI is green.
 
 ### State and quiet optimization
 
-State is keyed by PR URL with `updated_at`, `head_sha`, `ci_conclusion`, and `last_comment_at`; missing state is `{}`. Explicit-list runs still use it. Each cycle updates swept PRs and prunes closed entries.
+State is keyed by PR URL with `updated_at`, `head_sha`, `ci_conclusion`, `last_comment_at`, and optional `merge_ask` `{id, head_sha, answer}`; missing state is `{}`. Explicit-list runs still use it. Each cycle updates swept PRs and prunes closed entries.
 
-A PR is quiet only when listing `updatedAt` matches stored `updated_at` **and** stored CI is terminal-good (`success` or `skipped`). Pending or failing CI must be fetched even when metadata is unchanged. Quiet skips per-PR collection; it preserves the previous disposition and is never evidence of `DONE`.
+A PR is quiet only when listing `updatedAt` matches stored `updated_at`, stored CI is terminal-good (`success` or `skipped`), **and** its `merge_ask` key exists and is not an open ask. Pending or failing CI must be fetched even when metadata is unchanged. Quiet skips per-PR collection; it preserves the previous disposition and is never evidence of `DONE`.
 
 ### Current-state model
 
@@ -48,8 +49,9 @@ Only the **latest run per check name** and **latest verdict per reviewer** count
 
 | Disposition | Exact predicate |
 |---|---|
-| `DONE` | Latest CI is green; PR is mergeable; no unresolved thread or unaddressed summary-only finding remains; every blocking human review was turned around/re-requested or entirely filed as follow-ups. |
-| `WAITING` | Feedback is clean and current checks are only in progress/running. Dispatch nothing, but recheck next cycle. |
+| `DONE` | Merged after Carlos answered `Merge` on the current head's `lam` ask, or held after he answered `Hold`/dismissed it. Nothing else is `DONE`. |
+| `READY` | Fresh refresh shows green CI, `MERGEABLE`/`CLEAN`, `reviewDecision` `APPROVED`, and no open thread or summary-only finding. Ask Carlos; never merge on your own. |
+| `WAITING` | Feedback is clean and the only open item is running CI/bot processing, an outstanding review or approval, or an unanswered merge ask. Dispatch nothing, but recheck next cycle. |
 | `NEEDS FIX` | Any current failure, conflict, unresolved thread, summary-only finding, or unaddressed review finding remains. |
 
 All selected PRs must be `DONE` to stop.
@@ -67,6 +69,7 @@ Read the selected reference in full **before** the action it governs. Each is co
 - On any size gate failure, read [Size gate](references/size-gate.md) before labeling, commenting, editing code, or recommending a split. Validate repository-specific policy against the current workflow first.
 - On any conflict, read [conflict resolution](references/conflict-resolution.md) before resolution, staging, rebase continuation, or push.
 - On a later cycle after fixes, read [review convergence](references/review-convergence.md) and require new-head green CI before re-requesting a blocking reviewer or posting the handoff.
+- Before pushing, waiting on, or acting on a merge ask for any `READY` PR, read [merge gate](references/merge-gate.md). It defines the READY predicate, the exact `lam` request, the wait loop, and what each answer permits.
 - Before scheduling a wakeup or choosing an interval, read [cadence](references/cadence.md). Its timing is environment-sensitive; validate the available scheduler and current CI/bot latency.
 
 ## Non-negotiable boundaries
@@ -78,11 +81,12 @@ Read the selected reference in full **before** the action it governs. Each is co
 - Investigate both sides and history before resolving a conflict. STOP on substantive/large/ambiguous conflicts or risk to user-added work; do not stage, continue, or push.
 - STOP and surface changes over roughly 100 LOC, architecture/product decisions, or material expansion beyond the existing diff. Blocking review status does not waive this boundary.
 - Follow-up tickets preserve the reviewer’s wording, PR link, and origin ticket. Follow-up decisions do not change PR code.
+- A merge runs only after a `Merge` answer on the `lam` ask for that exact head SHA. Blanket instructions ("merge when green", "keep them moving"), GitHub approvals, and auto-merge settings never substitute for that answer.
 
 ## Liveness and reports
 
-Every nonterminal cycle re-arms, including quiet, all-`WAITING`, no-dispatch, STOP, and user-adjudication cycles. Schedule before writing the report. The sole no-wakeup case is a fresh terminal refresh where all selected PRs are `DONE`.
+Every nonterminal cycle re-arms, including quiet, all-`WAITING`, `READY` with an unanswered or timed-out merge ask, no-dispatch, STOP, and user-adjudication cycles. Schedule before writing the report. The sole no-wakeup case is a fresh terminal refresh where all selected PRs are `DONE`.
 
-Keep each iteration report under 300 words. Per PR, show disposition (`quiet — skipped` when applicable), Greptile score if present, fixes/follow-ups, review state and approval invalidation, size decisions, STOPs, and next wakeup ETA or `DONE`. Persist state even when no work dispatched.
+Keep each iteration report under 300 words. Per PR, show disposition (`quiet — skipped` when applicable), Greptile score if present, fixes/follow-ups, review state and approval invalidation, merge ask ID and answer, size decisions, STOPs, and next wakeup ETA or `DONE`. Persist state even when no work dispatched.
 
-The final report lists per-PR commits, bot/human thread replies and resolutions, follow-up links, re-request status, deferrals, stacked-PR retargets, STOPs, and every size override or split recommendation. A STOP report includes affected files, both sides’ intent/commits when relevant, and a concrete decision path back into the loop.
+The final report lists per-PR commits, merge outcome (merged SHA or held), bot/human thread replies and resolutions, follow-up links, re-request status, deferrals, stacked-PR retargets, STOPs, and every size override or split recommendation. A STOP report includes affected files, both sides’ intent/commits when relevant, and a concrete decision path back into the loop.

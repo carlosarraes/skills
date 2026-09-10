@@ -20,12 +20,13 @@ Read `~/.local/state/pr-sweep/state.json` before per-PR calls. Treat a missing f
     "updated_at": "2026-07-12T17:05:00Z",
     "head_sha": "abc123",
     "ci_conclusion": "success",
-    "last_comment_at": "2026-07-12T17:00:00Z"
+    "last_comment_at": "2026-07-12T17:00:00Z",
+    "merge_ask": { "id": "lam-item-id", "head_sha": "abc123", "answer": null }
   }
 }
 ```
 
-A PR is quiet only when listing `updatedAt` equals stored `updated_at` and stored CI is terminal-good (`success` or `skipped`). Skip its per-PR calls but retain its previous disposition. Pending/failing CI is never quiet based on metadata alone because check completion does not bump `updatedAt`. Explicit-list runs still use state. After every cycle, persist current facts for every swept PR and prune keys no longer open.
+A PR is quiet only when listing `updatedAt` equals stored `updated_at`, stored CI is terminal-good (`success` or `skipped`), and its entry carries a `merge_ask` key that is `null` or answered. An entry without the key predates the merge gate: refresh it once and persist the key (`null` when no ask was needed). Skip its per-PR calls but retain its previous disposition. Pending/failing CI is never quiet based on metadata alone because check completion does not bump `updatedAt`. Explicit-list runs still use state. After every cycle, persist current facts for every swept PR and prune keys no longer open.
 
 ## Parallel collection per non-quiet PR
 
@@ -47,13 +48,13 @@ gh api "repos/<owner/repo>/commits/$sha/check-runs?per_page=100" --jq '.check_ru
 
 `success`, `neutral`, and `skipped` are non-failing. `in_progress`, `queued`, or running means `WAITING` when everything else is clean. Ignore an older failure when that check name's newest run is green.
 
-### Mergeability
+### Mergeability and review decision
 
 ```bash
-gh pr view <#> --repo <owner/repo> --json mergeable -q .mergeable
+gh pr view <#> --repo <owner/repo> --json mergeable,mergeStateStatus,reviewDecision
 ```
 
-`CONFLICTING` routes to conflict investigation; do not give a generic fixer authority to choose a side first.
+`CONFLICTING` routes to conflict investigation; do not give a generic fixer authority to choose a side first. `reviewDecision` feeds the `READY` predicate in the merge gate; `APPROVED` there is a gate input, never merge permission.
 
 ### Unresolved inline threads
 
@@ -142,8 +143,9 @@ Report the current score, but judge completion by underlying findings.
 
 ## Disposition decision
 
-- **DONE:** newest-per-name CI is green; mergeable; zero unresolved inline threads; no open summary-only finding; every latest blocking human verdict has been turned around/re-requested or all its findings were filed as follow-ups. A size override already present is not instantly DONE: wait/recheck the labeled-event check until its latest run is terminal-good.
-- **WAITING:** current feedback is clean and the only incomplete state is live CI/bot/review processing, including a pending size-override rerun. Dispatch nothing and re-arm.
+- **DONE:** merged after Carlos answered `Merge` on the current head's `lam` ask, or held after `Hold`/dismiss. See the merge gate.
+- **READY:** fresh refresh shows newest-per-name CI green; `MERGEABLE`/`CLEAN`; `reviewDecision` `APPROVED`; zero unresolved inline threads; no open summary-only finding. Route to the merge gate. A size override already present is not instantly READY: wait/recheck the labeled-event check until its latest run is terminal-good.
+- **WAITING:** current feedback is clean and the only incomplete state is live CI/bot/review processing (including a pending size-override rerun), an outstanding approval after turnaround/re-request, or an unanswered merge ask. Dispatch nothing and re-arm.
 - **NEEDS FIX:** any failure, conflict, unresolved thread, summary-only finding, unaddressed review finding, or STOP/user decision remains.
 
 Only all selected PRs simultaneously `DONE` terminates the sweep.

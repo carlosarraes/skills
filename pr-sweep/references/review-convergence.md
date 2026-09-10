@@ -41,4 +41,4 @@ Filed as follow-up:
 
 Do not reply directly to the old top-level review body.
 
-After mutation, perform a terminal refresh. Mark `DONE` only when green, mergeable, feedback-clean, and reviewer requested/turned around. Otherwise persist current state and re-arm.
+After mutation, perform a fresh refresh. The PR is `WAITING` while the re-requested reviewer has not approved, and `READY` once `reviewDecision` is `APPROVED`; then route to the merge gate. Persist current state and re-arm.

@@ -11,11 +11,12 @@ Schedule the next firing **before** composing the report on **every nonterminal 
 - no agent dispatched;
 - autonomous work running while another selected PR remains in progress;
 - a no-dispatch user checkpoint;
-- conflict/size/finding STOP requiring adjudication.
+- conflict/size/finding STOP requiring adjudication;
+- a `READY` PR whose merge ask is unanswered or timed out.
 
-The sole terminal condition is **all selected PRs are DONE** after a fresh refresh. Only then omit the wakeup. “No code left” and “nothing changed” do not terminate the loop.
+The sole terminal condition is **all selected PRs are DONE** after a fresh refresh, meaning each was merged on Carlos's `Merge` answer or held on his `Hold`. Only then omit the wakeup. “No code left”, “nothing changed”, and “everything is green and approved” do not terminate the loop.
 
-When `ScheduleWakeup` is the available mechanism, call it with the same loop prompt and scope before reporting; the audited default was roughly 600 seconds. Never merely promise a wakeup in prose.
+When `ScheduleWakeup` is the available mechanism, call it with the same loop prompt and scope before reporting; the audited default was roughly 600 seconds. Never merely promise a wakeup in prose. Bound the merge gate's `lam wait --timeout` by this same interval so the loop keeps cycling.
 
 The audited guardrails were no shorter than **5 minutes** and no longer than **20 minutes**, with 10 minutes the default. The time-sensitive rationale was that bot passes took 5–12 minutes, CI 5–7 minutes, and the then-current prompt cache had a 5-minute TTL: after a cache miss, 10 minutes amortized the next cycle while useful work completed. **Validate** current scheduler, cache, provider, and project latency before using these bounds; preserve liveness even when the timing changes.
 
@@ -31,6 +32,7 @@ Keep under 300 words. Include:
 |---|---|
 | each selected PR | `DONE` / `WAITING` / `NEEDS FIX`; mark `quiet — skipped` where applicable |
 | review | current Greptile score if present; threads/review turnaround |
+| merge | `lam` ask ID and answer; merged SHA or `held by Carlos` |
 | work | fixes, reruns, follow-ups, approval invalidation |
 | policy | size override/split or conflict STOP evidence |
 | liveness | next wakeup ETA, or `DONE` only for terminal refresh |
@@ -40,6 +42,7 @@ Keep under 300 words. Include:
 When all selected PRs are `DONE`, do not schedule again. List per PR:
 
 - commits added during the sweep;
+- merge outcome: merged SHA on Carlos's `Merge`, or held;
 - bot/human inline replies and resolutions;
 - follow-up links and provenance;
 - blocking-review re-request status and approval invalidation;
