@@ -65,6 +65,21 @@
     "expected": "triage-incident"
   },
   {
+    "id": "test-audit-authoring-positive",
+    "prompt": "I'm about to add tests for this new parser; check they're worth keeping before I write them.",
+    "expected": "test-audit"
+  },
+  {
+    "id": "test-audit-sweep-positive",
+    "prompt": "Audit this module's test files and remove tests that only restate the implementation or keep test-only exports alive.",
+    "expected": "test-audit"
+  },
+  {
+    "id": "test-audit-clean-up-near-miss",
+    "prompt": "Review this completed branch for bugs, missed reuse, complexity, and missing regression tests, then fix the valid findings test-first.",
+    "expected": "clean-up"
+  },
+  {
     "id": "opening-prs-commit-near-miss",
     "prompt": "Split my staged and unstaged work into clean conventional commits before we discuss a PR.",
     "expected": "atomic-commit"

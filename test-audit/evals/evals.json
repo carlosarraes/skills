@@ -1,0 +1,38 @@
+{
+  "skill_name": "test-audit",
+  "evals": [
+    {
+      "id": "authoring-gate-rejects-junk",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, or mutate git. I am about to add a test that copies the fixture list from the source module, asserts a mocked collaborator was called once, and requires a new export so the test can reach a private predicate. Describe what test-audit does before this test is added.",
+      "expected_output": "Runs the four authoring questions, matches the test against the junk patterns, and refuses to add it until it names the observable behavior or independent contract it protects and the credible regression that makes it fail. It prefers moving the test to the real boundary over adding a production-only export, and it does not restate the implementation.",
+      "expectations": [
+        "Ask the four authoring questions and require an answer before adding the test.",
+        "Match the candidate against every junk pattern, including copied fixtures and call-shape assertions against a mock.",
+        "Refuse a test-only production seam no production caller needs and move the proof to the real boundary.",
+        "Reject a test that duplicates stronger existing coverage instead of extending the owning suite."
+      ]
+    },
+    {
+      "id": "audit-candidate-requires-evidence",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, or mutate git. An audit candidate is an implementation-coupled test whose only non-test caller is a test-only export, and a stronger owner-boundary suite already covers the same contract. Describe the deletion decision and the evidence recorded before editing.",
+      "expected_output": "Records the full candidate evidence: exact test name and location, the failure it can detect, non-test callers of the covered seam, the stronger remaining owner-boundary proof, relevant history, the production or test-support deletion unlocked, and the risk with its focused validation command. It deletes the test and the test-only seam in one coherent owner-boundary batch, then runs the focused owner tests and the repository changed-path gate and reports production lines separately from test lines.",
+      "expectations": [
+        "Record every candidate evidence field before any edit and treat a missing field as not ready.",
+        "Delete the test and the test-only production seam together instead of preserving aliases.",
+        "Name the stronger remaining owner-boundary proof rather than assuming deletion is safe.",
+        "Run focused owner tests and the repository changed-path gate, and report production LOC separately from test LOC."
+      ]
+    },
+    {
+      "id": "campaign-preservation-mutation",
+      "prompt": "SIMULATION ONLY: do not run commands, inspect files, call agents, write files, or mutate git. A subsystem campaign has finished its lane cutover and an independent preservation review reports that one keeper restored a contract whose only prior proof was deleted, plus an assertion the production path never reaches. Describe the remaining campaign work.",
+      "expected_output": "Restores or rejects each reported gap with source evidence. For every restored contract it makes one deliberate mutation of the production owner, confirms the keeper goes red, then restores the source byte for byte. It rejects the unreachable assertion or repairs it, records baseline and final test and support line counts with production counted separately, and proves each baseline product defect with a failing control and a passing candidate on the same harness.",
+      "expectations": [
+        "Keep the per-lane ledger, lane plan, and keeper record through preservation review.",
+        "Prove each restored contract with one deliberate production mutation that turns the keeper red, then restore the source byte for byte.",
+        "Reject or repair an assertion the production path never reaches instead of counting it as coverage.",
+        "Report baseline and final line counts with production counted separately, and prove repaired defects with control and candidate runs."
+      ]
+    }
+  ]
+}

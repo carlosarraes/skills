@@ -13,6 +13,8 @@ prep-ticket → exec-ticket → qa-ticket → clean-up
 ```
 
 - Use `check-data` when QA needs local records.
+- Use `test-audit` when writing, changing, or reviewing tests, or when
+  pruning one subsystem's test surface.
 - Use `blast-radius` for a known risk outside the diff.
 - Use `interrogate` when independent reviewers should search for unknown risks.
 - Use the verification skills to create or maintain reusable real-app checks.
@@ -40,6 +42,7 @@ workflows.
 | `qa-ticket` | Use when the current ticket branch needs executable acceptance or smoke testing against a local backend or frontend, including fix-and-retry. |
 | `simplification-audit` | Use only when explicitly invoked for a whole-codebase simplification audit. |
 | `split-pr` | Use when directly invoked to split an oversized PR or branch, or when enforced repository size limits are exceeded; trigger automatically for Mondrio over 1,000 changed lines. |
+| `test-audit` | Use when writing, changing, reviewing, or sweeping tests — an authoring gate for new tests plus an audit workflow for low-value, implementation-coupled, or duplicative tests and the test-only production seams they demand. |
 | `triage-incident` | Use only when explicitly invoked to give a read-only evidence-backed bug-versus-expected-behavior verdict on a production or staging symptom, alert, or stakeholder report. |
 | `video-extract` | Use only when explicitly invoked to extract clean transcripts from YouTube videos. |
 <!-- SKILL-CATALOG:END -->
