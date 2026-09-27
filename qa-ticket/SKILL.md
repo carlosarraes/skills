@@ -40,6 +40,8 @@ If the ticket provider fails, continue disclosed **diff-only** planning; never i
 
 Read [test planning](references/test-plan.md) in full **before drafting** and **before printing** the plan. Scope comes from the ticket plus diff and excludes unchanged modules, infrastructure, generated/style churn, and unrelated authentication.
 
+If `docs/ai/feature-map.md` exists at the repository root, read it before planning the QA path: it lists each feature's routes, entry points and test handles.
+
 Every case has ID, surface, description, concrete steps, and expected result; its category is exactly `happy-path`, `error`, or `edge-case`. Include every changed endpoint success path. When CRUD applies, preserve **create → read → update → list → delete → verify delete**. Include all validator boundaries on both sides, missing/wrong fields, permission, not-found, conflict, and every relevant frontend error/state/special-input case. Document a changed rate limit but do not stress-hit it merely to prove the annotation. User pressure cannot remove required coverage. Print the complete plan grouped by surface/category before any functional test.
 
 For missing or unavailable data, print in the plan:
