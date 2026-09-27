@@ -42,6 +42,10 @@ Include this conditional section only to name consequential adjacent work delibe
 
 Include applicable reviewer or repository checklist items, completed truthfully. Preserve required items from repository instructions and remove unused items.
 
+## Merge danger
+
+Always include. Two filled lines: `**Door:** two-way` or `**Door:** one-way`, and `**Blast radius:**` naming what breaks, and for whom, if the change is wrong. See [merge danger](merge-danger.md).
+
 ## Completion check
 
 Before submission, ensure there are no placeholders, comments, or examples; remove every unused optional section; verification is observed; UI changes have UI evidence; applicable risk, compatibility, data, and infrastructure notes are concrete; and the prose is concise and reviewer-oriented.

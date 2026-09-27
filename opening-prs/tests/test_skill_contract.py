@@ -9,6 +9,7 @@ SKILL = ROOT / "SKILL.md"
 FALLBACK = ROOT / "references" / "fallback-pr-body.md"
 EVALS = ROOT / "evals" / "evals.json"
 FACTS = ROOT / "references" / "gitflow-facts.md"
+MERGE_DANGER = ROOT / "references" / "merge-danger.md"
 
 
 def normalized(text):
@@ -168,6 +169,28 @@ class OpeningPrsSkillTests(unittest.TestCase):
             "bt run watch <id>",
         ):
             self.assertIn(normalized(phrase), facts)
+
+    def test_every_brief_states_its_door_and_blast_radius(self):
+        for phrase in (
+            "merge danger",
+            "**door:**",
+            "**blast radius:**",
+            "never leave a placeholder",
+            "references/merge-danger.md",
+        ):
+            self.assertIn(phrase, self.flat)
+        self.assertIn(normalized("## Merge danger"), normalized(FALLBACK.read_text(encoding="utf-8")))
+
+    def test_merge_danger_reference_teaches_both_doors_by_example(self):
+        guide = normalized(MERGE_DANGER.read_text(encoding="utf-8"))
+        for phrase in (
+            "**door:** two-way",
+            "**door:** one-way",
+            "**blast radius:**",
+            "blast-radius",
+            "when in doubt, one-way",
+        ):
+            self.assertIn(phrase, guide)
 
     def test_fallback_is_loaded_only_when_repository_has_no_template(self):
         self.assertIn("[fallback pr body](references/fallback-pr-body.md)", self.body.lower())

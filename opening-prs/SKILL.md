@@ -31,6 +31,8 @@ Select the smallest repository-defined checks covering the highest-risk behavior
 
 Use the repository template as the schema, filling every applicable section and removing comments, examples, placeholders, and unused optional sections. Never output an illustrative or fill-in-the-blank draft: if facts are unavailable, say the draft is incomplete rather than showing placeholders. Read the [fallback PR body](references/fallback-pr-body.md) only when no canonical template exists. Explain customer/user value, implementation, rationale, risks, compatibility, data/infra effects, and exact verification. Use Mermaid only for at least three material interactions or transitions. For Gitflow, draft one reviewer brief per twin and keep each brief tied to its own range and evidence. Do not include runtime-specific attribution.
 
+Close every brief with a `## Merge danger` section of two filled lines, `**Door:** two-way` or `**Door:** one-way`, and `**Blast radius:**` with one phrase naming what breaks, and for whom, if the change is wrong. Keep the section even when the repository template lacks it. Decide the door from what a revert cannot undo, and phrase a non-trivial backend blast radius from `blast-radius`; read the [merge danger guide](references/merge-danger.md) for the rules and a two-way and a one-way example. Never leave a placeholder or a deferral in either line.
+
 **Complete when:** A cold reviewer can understand value, load-bearing changes, impact, and observed verification without reconstructing the diff.
 
 ## 5. Preview and create
@@ -72,3 +74,4 @@ For an existing pushed twin, use reuse, fast-forward, or cherry-pick only; never
 | Drafting around a dirty worktree or changing commits | Stop immediately and hand commit preparation to `atomic-commit`; never create, amend, split, or rewrite commits. |
 | Publishing before preview | Preview forge, base, title, body, verification, and missing evidence, then use the invocation-authorized normal non-force push and forge creation. |
 | Leaving generic placeholders in the body | Fill or remove every applicable template section with concise, reviewer-oriented evidence. |
+| Calling a change two-way because it is small | Decide the door from what a revert leaves behind: an email, a data rewrite, or a billing call is one-way at any size. |
