@@ -36,6 +36,7 @@ workflows.
 | `interrogate` | Use only when explicitly invoked for an adversarial multi-reviewer challenge of a diff, branch, pull request, design, or selected code. |
 | `maintain-verification-skill` | Use only when explicitly invoked to audit and repair a project-local verification skill and its user-facing feature map. |
 | `opening-prs` | Use when the user wants to open, create, prepare, or draft an informative pull request for a completed branch. |
+| `optimise-github-actions` | Use when GitHub Actions CI is slow or expensive, over its minutes quota, or needs a cost and speed audit of workflows, jobs, caches, path filters, or runners. |
 | `pr-sweep` | Use when open non-draft PRs need ongoing convergence to mergeability across CI, conflicts, size gates, bot feedback, and human review. |
 | `prep-ticket` | Use when preparing to implement a Linear or Jira ticket by gathering context, blockers, related work, code entry points, and unanswered questions. |
 | `qa-team` | Use only when explicitly invoked for a comprehensive multi-agent QA code review. |

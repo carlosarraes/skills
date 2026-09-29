@@ -65,6 +65,11 @@
     "expected": "triage-incident"
   },
   {
+    "id": "optimise-github-actions-positive",
+    "prompt": "Our GitHub Actions bill doubled this month; figure out which workflows burn the minutes and cut them.",
+    "expected": "optimise-github-actions"
+  },
+  {
     "id": "test-audit-authoring-positive",
     "prompt": "I'm about to add tests for this new parser; check they're worth keeping before I write them.",
     "expected": "test-audit"
